@@ -45,16 +45,21 @@ skips it.
 3. Copy `adafruit_nau88l21.mpy` from the matching Adafruit library bundle into `CIRCUITPY/lib`.
 4. Power-cycle. To change presets later, power on holding TOP and save a new `config.json`.
 
-## Preset editor
+## Website (docs/)
 
-`docs/index.html` is a web editor for `config.json`: preset slots like the red LEDs, autotune
-with plain-language sliders, an effect chain you add to and reorder, sample slots, and an
-Advanced mode with every raw parameter. **Try it on your computer** runs the selected preset
-live on your computer's mic (or a built-in sample singer) through `docs/ting-dsp.js`, a Web Audio
-approximation of the firmware: autotune matches the firmware's algorithm, the other effects are
-close to CircuitPython's but not identical. Space acts as a full squeeze. It opens and saves `config.json` (Chrome and Edge can
-save straight to the CIRCUITPY drive; other browsers download the file). It is one self-contained
-page, served by GitHub Pages from the `docs/` folder.
+One static site, deployed by Cloudflare from `docs/` (see `wrangler.jsonc`):
+
+- `index.html`: how it works, the button guide and record mode.
+- `install.html`: back up the Ting, flash CircuitPython, then install fx-mic-mod in one click
+  (it copies the files in `docs/firmware/` to CIRCUITPY), plus a serial console and restore steps.
+  Adapted from this project's Ting Flash Bench.
+- `editor.html`: the preset editor. Simple mode uses sliders and switches, Advanced mode shows every
+  raw parameter. **Try it on your computer** plays the selected preset live through your computer's
+  mic (or a sample singer) using `ting-dsp.js`, a Web Audio approximation of the firmware. Saves
+  `config.json` straight to CIRCUITPY in Chrome and Edge, or downloads it elsewhere.
+
+`docs/firmware/` must match `firmware/`. A test fails if they drift, so copy the files over after
+changing the firmware.
 
 ## Presets
 

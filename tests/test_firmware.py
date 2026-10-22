@@ -95,6 +95,18 @@ class LoaderTests(unittest.TestCase):
             self.cl.create_effects({"list": [{"effect": "autotune"}]})
 
 
+class SiteCopyTests(unittest.TestCase):
+    def test_site_serves_the_current_firmware(self):
+        # docs/firmware/ is what the install page copies to the Ting.
+        site = os.path.join(os.path.dirname(HERE), "docs", "firmware")
+        for name in os.listdir(site):
+            with open(os.path.join(site, name), "rb") as a, open(os.path.join(FIRMWARE, name), "rb") as b:
+                self.assertEqual(a.read(), b.read(), "docs/firmware/%s is stale: copy it from firmware/" % name)
+        self.assertEqual(
+            sorted(os.listdir(site)),
+            sorted(n for n in os.listdir(FIRMWARE) if n.endswith((".py", ".json"))))
+
+
 class DeviceScenarioTests(unittest.TestCase):
     def test_autotune_preset_then_record_two_takes(self):
         root, out, s = run("record")

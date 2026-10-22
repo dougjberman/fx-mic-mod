@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ting Preset Editor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="site-nav.css">
+<style>
+/* Layout: a pedalboard. Preset slots run across the top like the mic's red LEDs; the
+   selected preset's chain reads top to bottom, autotune pinned first; samples sit below. */
+:root{
+  --bg:#e9e7e2; --panel:#f6f5f2; --panel-2:#efede8; --ink:#1d1c1a; --muted:#6c6862; --line:#d3d0c9;
+  --accent:#e2541c; --accent-ink:#ffffff; --accent-soft:#fbe3d8;
+  --led-r:#ff2d2d; --led-off:#b9b6b0; --track:#d9d6cf; --knob:#ffffff; --seg-on:#ffffff;
+  --ok:#2f7d4f; --warn:#b8730f; --bad:#c23a2b;
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#171615; --panel:#211f1d; --panel-2:#1b1a18; --ink:#ece9e3; --muted:#a29d95; --line:#38342f;
+  --accent:#ff6a33; --accent-ink:#1a0d06; --accent-soft:#3a2117;
+  --led-off:#4a4642; --track:#3a3632; --knob:#ece9e3; --seg-on:#45403b;
+  --ok:#5cc489; --warn:#e6a23c; --bad:#ff7a6b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#171615; --panel:#211f1d; --panel-2:#1b1a18; --ink:#ece9e3; --muted:#a29d95; --line:#38342f;
+  --accent:#ff6a33; --accent-ink:#1a0d06; --accent-soft:#3a2117;
+  --led-off:#4a4642; --track:#3a3632; --knob:#ece9e3; --seg-on:#45403b;
+  --ok:#5cc489; --warn:#e6a23c; --bad:#ff7a6b; color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 56px}
+.wrap{max-width:1080px;margin:0 auto;display:grid;gap:20px}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(24px,4vw,34px);letter-spacing:-.02em;margin:0;text-wrap:balance}
+h1 span{color:var(--accent)}
+h2{font-family:var(--f-display);font-size:12px;text-transform:uppercase;letter-spacing:.1em;margin:0;color:var(--muted);font-weight:700}
+h3{font-family:var(--f-display);font-size:17px;margin:0;font-weight:700}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+button,select,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:var(--accent)}
+
+header.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
+.title{display:grid;gap:2px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:7px 14px;cursor:pointer;font-weight:600;font-size:14px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:default}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.spread{justify-content:space-between}
+
+/* segmented control */
+.seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;border-radius:999px;padding:5px 12px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--seg-on);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.18)}
+
+/* switch */
+.switch{position:relative;display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;user-select:none}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch .track{width:40px;height:24px;border-radius:999px;background:var(--track);position:relative;transition:background .15s;flex:none}
+.switch .track::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--knob);box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .15s}
+.switch input:checked + .track{background:var(--accent)}
+.switch input:checked + .track::after{transform:translateX(16px)}
+.switch input:focus-visible + .track{outline:2px solid var(--accent);outline-offset:2px}
+
+/* slider */
+.slider{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr) 74px;gap:12px;align-items:center}
+.slider label{font-size:14px;font-weight:600}
+.slider .ends{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;margin-top:-2px}
+.slider .val{font-family:var(--f-mono);font-size:13px;text-align:right;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0}
+@media (max-width:560px){.slider{grid-template-columns:minmax(0,1fr) 64px}.slider label{grid-column:1/-1}}
+
+/* preset slots, styled after the red LEDs */
+.slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:640px){.slots{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.slot{display:grid;gap:4px;text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:12px 14px;cursor:pointer;min-width:0}
+.slot[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.slot .top{display:flex;align-items:center;gap:8px}
+.led{width:9px;height:9px;border-radius:50%;background:var(--led-off);flex:none}
+.slot[aria-pressed="true"] .led{background:var(--led-r);box-shadow:0 0 8px var(--led-r)}
+.slot .num{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.slot .name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot .chain{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot.add{place-content:center;justify-items:center;color:var(--muted);border-style:dashed;background:transparent}
+
+/* effect cards */
+.chain{display:grid;gap:12px}
+.fx{border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.fx.off .fx-body{opacity:.5}
+.fx-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 16px;background:var(--panel-2);border-bottom:1px solid var(--line)}
+.fx-head .grow{flex:1 1 160px;min-width:0}
+.fx-head .what{font-size:13px;color:var(--muted)}
+.fx-body{padding:14px 16px;display:grid;gap:12px}
+.fx.tune{border-color:var(--accent)}
+.fx.tune .fx-head{background:var(--accent-soft)}
+.pin{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 8px}
+.icon-btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;width:30px;height:30px;cursor:pointer;display:inline-grid;place-items:center;font-size:14px;color:var(--muted)}
+.icon-btn:hover{color:var(--ink);border-color:var(--muted)}
+.icon-btn:disabled{opacity:.35;cursor:default}
+.keys{display:flex;flex-wrap:wrap;gap:4px}
+.keys button{min-width:38px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;font-family:var(--f-mono);font-size:13px}
+.keys button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.field{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr);gap:12px;align-items:center}
+@media (max-width:560px){.field{grid-template-columns:1fr}}
+.field > label{font-size:14px;font-weight:600}
+.squeeze{display:grid;gap:8px;padding:10px 12px;border-radius:10px;background:var(--panel-2);border:1px dashed var(--line)}
+.badge{font-family:var(--f-mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+.adv{display:none}
+body.advanced .adv{display:grid}
+body.advanced span.adv, body.advanced .row.adv, body.advanced label.switch.adv{display:flex}
+textarea.json{width:100%;min-height:90px;font-family:var(--f-mono);font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);padding:8px;resize:vertical}
+input.text,select.text{border:1px solid var(--line);border-radius:8px;background:var(--panel-2);padding:6px 10px;min-width:0}
+input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;border-bottom:1px dashed var(--line);background:transparent;padding:2px 0;min-width:0;width:100%}
+
+/* add effect menu */
+.addmenu{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.addmenu button{text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:10px 12px;cursor:pointer;display:grid;gap:2px}
+.addmenu button:hover{border-color:var(--accent)}
+.addmenu b{font-size:14px}
+.addmenu span{font-size:12.5px;color:var(--muted)}
+
+/* load meter */
+.meter{display:grid;gap:6px}
+.bar{height:10px;border-radius:999px;background:var(--track);overflow:hidden}
+.bar > i{display:block;height:100%;background:var(--ok);border-radius:999px;transition:width .2s}
+.bar.warn > i{background:var(--warn)}
+.bar.bad > i{background:var(--bad)}
+
+/* samples */
+.samples{display:grid;gap:10px}
+.sample{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 14px;align-items:start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.sample .wled{width:9px;height:9px;border-radius:50%;background:#fff;border:1px solid var(--line);margin-top:8px}
+.sample .body{display:grid;gap:8px;min-width:0}
+
+.notice{border-radius:10px;padding:10px 14px;font-size:14px;border:1px solid var(--line);background:var(--panel-2)}
+.notice.bad{border-color:var(--bad);color:var(--bad)}
+.notice.ok{border-color:var(--ok);color:var(--ok)}
+.steps{margin:0;padding-left:20px;display:grid;gap:4px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:20;max-width:calc(100vw - 32px)}
+/* try-it bar */
+.tryit{position:sticky;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:5;display:grid;gap:12px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.tryit .readout{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.tryit .readout b{color:var(--ink);font-family:var(--f-mono);font-weight:500}
+.talk{border:2px solid var(--accent);background:transparent;color:var(--accent);border-radius:999px;padding:8px 18px;font-weight:700;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+.talk[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.tryit .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}
+@media (max-width:760px){.tryit{position:static}.tryit .grid2{grid-template-columns:1fr}}
+/* how-to strip */
+.howto{display:grid;gap:12px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;background:var(--panel);padding:16px 18px}
+.howto ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:820px){.howto ol{grid-template-columns:1fr}}
+.howto li{display:grid;gap:4px;align-content:start;font-size:14px;color:var(--muted)}
+.howto li b{color:var(--ink);font-size:15px}
+.howto .n{font-family:var(--f-mono);font-size:12px;color:var(--accent)}
+pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-size:12.5px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<nav class="site-nav" aria-label="Site">
+  <a class="brand" href="index.html"><i aria-hidden="true"></i>fx-mic-mod</a>
+  <ul>
+    <li><a class="tab" href="index.html">How it works</a></li>
+    <li><a class="tab" href="install.html">Install</a></li>
+    <li><a class="tab" href="editor.html" aria-current="page">Preset editor</a></li>
+    <li><a class="tab" href="https://github.com/franklin-fernman/fx-mic-mod" target="_blank" rel="noopener">GitHub</a></li>
+  </ul>
+</nav>
+<div class="wrap">
+  <header class="top">
+    <div class="title">
+      <h1>Ting <span>Preset</span> Editor</h1>
+      <p class="muted small">For the fx-mic-mod firmware on the EP-2350. Edits <span class="mono">config.json</span>.</p>
+    </div>
+    <div class="actions">
+      <div class="seg" role="group" aria-label="Editor mode">
+        <button id="mode-simple" aria-pressed="true">Simple</button>
+        <button id="mode-adv" aria-pressed="false">Advanced</button>
+      </div>
+      <label class="btn ghost" for="file-open">Open config.json</label>
+      <input id="file-open" type="file" accept=".json,application/json" hidden>
+      <button class="btn" id="btn-copy">Copy</button>
+      <button class="btn" id="btn-download">Download</button>
+      <button class="btn primary" id="btn-save">Save to Ting</button>
+    </div>
+  </header>
+
+  <section class="howto" id="howto" aria-label="How to use this page">
+    <div class="row spread">
+      <h2>How to use this page</h2>
+      <button class="btn small ghost" id="howto-hide">Hide</button>
+    </div>
+    <ol>
+      <li><span class="n">1 · DESIGN</span><b>Pick a preset and build its chain</b>Each card below is one press of the orange button. Start from a template or add effects. Autotune always runs first.</li>
+      <li><span class="n">2 · LISTEN</span><b>Try it with your computer's mic</b>Click Use my mic and wear headphones. Every change you make plays right away.</li>
+      <li><span class="n">3 · SAVE</span><b>Put it on the Ting</b>Hold orange while you power on the Ting, plug it in, then click Save to Ting and pick CIRCUITPY. Power it off and on to play.</li>
+    </ol>
+    <p class="small muted">This page only changes your presets (<span class="mono">config.json</span>). If your Ting doesn't have fx-mic-mod yet, follow the <a href="install.html">install guide</a> first.</p>
+  </section>
+  <button class="btn small ghost" id="howto-show" style="justify-self:start" hidden>How to use this page</button>
+
+  <div id="notice" class="notice" hidden></div>
+
+  <section class="panel tryit" id="tryit" aria-label="Try it">
+    <div class="row spread">
+      <div class="row"><h2>Try it on your computer</h2><span class="small muted" id="try-status">Use headphones, or the speakers will feed back into the mic.</span></div>
+      <div class="row">
+        <button class="btn primary" id="try-mic">Use my mic</button>
+        <button class="btn" id="try-singer">Play sample singer</button>
+        <button class="btn ghost" id="try-stop" hidden>Stop</button>
+      </div>
+    </div>
+    <div id="try-controls" class="grid2" hidden>
+      <div class="row">
+        <button class="talk" id="try-talk" aria-pressed="true" title="Like squeezing the handle on the mic. Space bar works too.">Mic open</button>
+        <span class="small muted">Space = squeeze</span>
+      </div>
+      <div id="try-squeeze-slot"></div>
+      <div id="try-level-slot"></div>
+      <div class="readout" id="try-readout"></div>
+    </div>
+  </section>
+
+  <section class="panel" style="display:grid;gap:14px">
+    <div class="row spread">
+      <h2>Presets · orange button</h2>
+      <div class="row small muted"><span class="adv">Pack name</span><input id="pack-name" class="text mono adv" maxlength="16" aria-label="Pack name"></div>
+    </div>
+    <div class="slots" id="slots"></div>
+    <p class="small muted">The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic.</p>
+  </section>
+
+  <section id="editor" style="display:grid;gap:14px"></section>
+
+  <section class="panel" style="display:grid;gap:12px">
+    <div class="row spread"><h2>Samples · white and grey buttons</h2></div>
+    <p class="small muted">White picks a slot, grey plays it. To record a slot on the mic, step the orange button past preset 4 into Record mode, pick the slot with white, and hold the handle while you talk (up to 4 seconds).</p>
+    <div class="samples" id="samples"></div>
+  </section>
+
+  <section class="panel adv" style="gap:10px">
+    <div class="row spread"><h2>config.json</h2><button class="btn small" id="btn-copy2">Copy</button></div>
+    <pre class="out" id="json-out"></pre>
+  </section>
+
+  <section class="panel" style="display:grid;gap:10px">
+    <h2>Getting it onto the mic</h2>
+    <ol class="steps small">
+      <li>Turn the mic off. Plug it into your computer, then <b>hold the orange button while you turn it on</b>. That's edit mode, where your computer can save files to it. (No fx-mic-mod on it yet? Use the <a href="install.html">install guide</a>.)</li>
+      <li>Click <b>Save to Ting</b> and pick the <span class="mono">CIRCUITPY</span> drive. In browsers without folder access (Safari, Firefox), click <b>Download</b> and drag <span class="mono">config.json</span> onto the drive.</li>
+      <li>Turn the mic off and on again normally to play, and to record samples.</li>
+    </ol>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="ting-dsp.js"></script>
+<script>
+"use strict";
+/* ------------------------------------------------------------------ *
+ * Effect catalogue. Mirrors firmware/config_loader.py (EFFECTS) and
+ * CONFIG_FORMAT.md. `simple` params show in Simple mode; the rest only
+ * in Advanced. `squeeze` params may be driven by the handle.
+ * cost / ramPerMs are rough estimates for the load meter, not measurements.
+ * ------------------------------------------------------------------ */
+const NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const P = (o) => Object.assign({kind:"num", simple:false, squeeze:true}, o);
+
+const EFFECTS = {
+  filter: {label:"Tone filter", what:"Cut lows to thin the voice, or highs to muffle it.", cost:3,
+    params:{ filter:{kind:"biquad", simple:true}, mix:P({label:"Amount",min:0,max:1,step:.01,def:1,simple:true}) }},
+  distortion: {label:"Distortion", what:"Grit, from warm overdrive to broken radio.", cost:4,
+    params:{
+      drive:P({label:"Grit",min:0,max:1,step:.01,def:.6,simple:true,ends:["Clean","Broken"]}),
+      mode:{kind:"enum",label:"Character",options:[["overdrive","Overdrive"],["clip","Clip"],["lofi","Lo-fi"],["wavefold","Wavefold"]],def:"overdrive",simple:true},
+      pre_gain:P({label:"Input gain",min:-20,max:40,step:1,def:12,unit:"dB"}),
+      post_gain:P({label:"Output gain",min:-40,max:20,step:1,def:-8,unit:"dB",simple:true}),
+      soft_clip:{kind:"bool",label:"Soft clip",def:true},
+      mix:P({label:"Amount",min:0,max:1,step:.01,def:1,simple:true}) }},
+  pitch_shift: {label:"Pitch shift", what:"Move the voice up or down. Monsters and chipmunks.", cost:15,
+    params:{
+      semitones:P({label:"Pitch",min:-12,max:12,step:1,def:-5,unit:"st",simple:true,ends:["Lower","Higher"]}),
+      mix:P({label:"Amount",min:0,max:1,step:.01,def:1,simple:true}),
+      window:P({kind:"int",label:"Window",min:256,max:2048,step:128,def:1024,squeeze:false,unit:"smp"}),
+      overlap:P({kind:"int",label:"Overlap",min:32,max:512,step:32,def:128,squeeze:false,unit:"smp"}) }},
+  granular_pitch_shift: {label:"Grain shift", what:"Grainy, shimmery pitch shift, up to two octaves.", cost:15,
+    params:{
+      semitones:P({label:"Pitch",min:-24,max:24,step:1,def:8,unit:"st",simple:true,ends:["Lower","Higher"]}),
+      mix:P({label:"Amount",min:0,max:1,step:.01,def:1,simple:true}),
+      density:P({kind:"int",label:"Density",min:1,max:8,step:1,def:3,squeeze:false}),
+      grain_size:P({kind:"int",label:"Grain size",min:128,max:2048,step:128,def:512,squeeze:false,unit:"smp"}),
+      spread:P({kind:"float",label:"Spread",min:0,max:1,step:.01,def:0,squeeze:false}) }},
+  chorus: {label:"Chorus", what:"Several of you at once, slightly out of step.", cost:8, ram:"max_delay_ms",
+    params:{
+      voices:P({label:"Voices",min:1,max:5,step:1,def:3,simple:true}),
+      delay_ms:P({label:"Spread",min:1,max:50,step:1,def:25,unit:"ms",simple:true}),
+      mix:P({label:"Amount",min:0,max:1,step:.01,def:.5,simple:true}),
+      max_delay_ms:P({kind:"int",label:"Max delay",min:10,max:500,step:10,def:50,squeeze:false,unit:"ms"}) }},
+  phaser: {label:"Phaser", what:"A swooshing, jet-plane sweep.", cost:8,
+    params:{
+      frequency:P({label:"Center",min:100,max:5000,step:10,def:1000,unit:"Hz",simple:true,log:true}),
+      feedback:P({label:"Intensity",min:0,max:.95,step:.01,def:.7,simple:true}),
+      mix:P({label:"Amount",min:0,max:1,step:.01,def:.5,simple:true}),
+      stages:P({kind:"int",label:"Stages",min:2,max:12,step:2,def:6,squeeze:false}) }},
+  echo: {label:"Echo", what:"Repeats of your voice. Short for slap-back, long for canyons.", cost:5, ram:"max_delay_ms",
+    params:{
+      delay_ms:P({label:"Time",min:20,max:1500,step:10,def:250,unit:"ms",simple:true}),
+      decay:P({label:"Repeats",min:0,max:.95,step:.01,def:.5,simple:true,ends:["One","Many"]}),
+      mix:P({label:"Amount",min:0,max:1,step:.01,def:.3,simple:true}),
+      freq_shift:{kind:"bool",label:"Tape-style pitch bend",def:false},
+      max_delay_ms:P({kind:"int",label:"Max delay",min:50,max:2000,step:50,def:500,squeeze:false,unit:"ms"}) }},
+  multi_tap_delay: {label:"Multi-tap delay", what:"Rhythmic echoes at set points in the delay.", cost:8, ram:"max_delay_ms",
+    params:{
+      delay_ms:P({label:"Time",min:20,max:1500,step:10,def:500,unit:"ms",simple:true}),
+      decay:P({label:"Repeats",min:0,max:.95,step:.01,def:.6,simple:true}),
+      mix:P({label:"Amount",min:0,max:1,step:.01,def:.3,simple:true}),
+      taps:{kind:"json",label:"Taps",def:[[0.333,0.6],[0.666,0.8],1]},
+      max_delay_ms:P({kind:"int",label:"Max delay",min:50,max:2000,step:50,def:750,squeeze:false,unit:"ms"}) }},
+  freeverb: {label:"Reverb", what:"Put the voice in a room, a hall or a cathedral.", cost:20,
+    params:{
+      roomsize:P({label:"Size",min:0,max:1,step:.01,def:.6,simple:true,ends:["Closet","Cathedral"]}),
+      damp:P({label:"Darkness",min:0,max:1,step:.01,def:.5,simple:true,ends:["Bright","Dark"]}),
+      mix:P({label:"Amount",min:0,max:1,step:.01,def:.35,simple:true}) }},
+};
+const ALIASES = {reverb:"freeverb", delay:"echo", multitap_delay:"multi_tap_delay", multitapdelay:"multi_tap_delay",
+  pitchshift:"pitch_shift", granularpitchshift:"granular_pitch_shift", auto_tune:"autotune"};
+const AUTOTUNE_COST = 30;
+const FILTER_MODES = [["high_pass","Thin (cut lows)"],["low_pass","Muffle (cut highs)"],["band_pass","Telephone (band)"],["notch","Notch"]];
+const PLAYMODES = [["oneshot","Tap to play"],["hold","Hold to play"],["startstop","Tap start / stop"]];
+
+const STARTERS = [
+  {name:"Hard tune", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"freeverb",roomsize:.4,damp:.6,mix:.25}]},
+  {name:"Squeeze tune", list:[{effect:"autotune",key:"C",scale:"major",speed:"$handle",humanize:.3,mix:1},{effect:"filter",filter:{mode:"high_pass",frequency:150,Q:.7071},mix:1},{effect:"echo",max_delay_ms:400,delay_ms:140,decay:.3,mix:.25}]},
+  {name:"Stadium tune", list:[{effect:"autotune",key:"A",scale:"minor",speed:.7,humanize:.2,mix:1},{effect:"chorus",max_delay_ms:50,delay_ms:20,voices:2,mix:.35},{effect:"freeverb",roomsize:.85,damp:.4,mix:.45}]},
+  {name:"Radio", list:[{effect:"filter",filter:{mode:"band_pass",frequency:1500,Q:1.2},mix:1},{effect:"distortion",drive:.5,pre_gain:12,post_gain:-10,mode:"clip",soft_clip:true,mix:1}]},
+  {name:"Chipmunk space", list:[{effect:"filter",filter:{mode:"high_pass",frequency:200,Q:.7071},mix:1},{effect:"granular_pitch_shift",semitones:8,density:3},{effect:"echo",max_delay_ms:1200,delay_ms:750,decay:.45,mix:.35,freq_shift:true},{effect:"freeverb",roomsize:.75,damp:.55,mix:.6}]},
+  {name:"Squeeze monster", list:[{effect:"pitch_shift",semitones:{block:"math",operation:"constrained_lerp",a:-12,b:12,c:"$handle"},mix:1,window:1024,overlap:128},{effect:"distortion",drive:.6,pre_gain:12,post_gain:-8,mode:"overdrive",soft_clip:true,mix:1},{effect:"filter",filter:{mode:"low_pass",frequency:3500,Q:.7071},mix:1}]},
+];
+const DEFAULT_CONFIG = {name:"FXMICMOD", presets:[STARTERS[0],STARTERS[1],STARTERS[4],STARTERS[5]].map(clone),
+  samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"hold"},{file:"4.wav",playmode:"startstop"}]};
+
+/* ------------------------------ state ------------------------------ */
+function clone(v){ return JSON.parse(JSON.stringify(v)); }
+function normName(n){
+  if (typeof n !== "string") return null;
+  let out=""; for (let i=0;i<n.length;i++){ const c=n[i]; if (c>="A"&&c<="Z"&&i&&!(n[i-1]>="A"&&n[i-1]<="Z")) out+="_"; out+=c; }
+  const k = out.toLowerCase().replace(/[ -]/g,"_");
+  return ALIASES[k] || k;
+}
+let config = clone(DEFAULT_CONFIG);
+let selected = 0;
+let addOpen = false;
+
+function normalizeConfig(c){
+  if (!c || typeof c !== "object" || Array.isArray(c)) throw new Error("The file isn't a ting config: it should be a JSON object with presets.");
+  const out = {name: typeof c.name === "string" ? c.name : "PACK", presets:[], samples:[]};
+  for (const k of Object.keys(c)) if (!["name","presets","samples"].includes(k)) out[k] = c[k];
+  (Array.isArray(c.presets) ? c.presets : []).slice(0,4).forEach(p => {
+    const list = Array.isArray(p && p.list) ? p.list.map(fx => Object.assign({}, fx, {effect: normName(fx.effect) || fx.effect})) : [];
+    // autotune always heads the chain
+    const tunes = list.filter(fx => fx.effect === "autotune"), rest = list.filter(fx => fx.effect !== "autotune");
+    out.presets.push(Object.assign({}, p, {list: tunes.slice(0,1).concat(rest)}));
+  });
+  (Array.isArray(c.samples) ? c.samples : []).slice(0,4).forEach(s => out.samples.push(Object.assign({playmode:"oneshot"}, s)));
+  while (out.samples.length < 4) out.samples.push({file:(out.samples.length+1)+".wav", playmode:"oneshot"});
+  return out;
+}
+
+function serialize(){
+  const out = {name: config.name || "PACK", presets: [], samples: []};
+  for (const k of Object.keys(config)) if (!["name","presets","samples"].includes(k)) out[k] = config[k];
+  config.presets.forEach(p => {
+    const q = {}; if (p.name) q.name = p.name; if (p.comment) q.comment = p.comment;
+    if (p.blocks && Object.keys(p.blocks).length) q.blocks = p.blocks;
+    for (const k of Object.keys(p)) if (!["name","comment","blocks","list"].includes(k)) q[k] = p[k];
+    q.list = p.list; out.presets.push(q);
+  });
+  config.samples.forEach(s => {
+    const q = {file: s.file, playmode: s.playmode || "oneshot"};
+    if (s.blocks && Object.keys(s.blocks).length) q.blocks = s.blocks;
+    if (s.effects && s.effects.length) q.effects = s.effects;
+    for (const k of Object.keys(s)) if (!(k in q) && !["blocks","effects"].includes(k)) q[k] = s[k];
+    out.samples.push(q);
+  });
+  return out;
+}
+function formatJSON(v){
+  // compact one-line effects, like Adafruit's demo file
+  return JSON.stringify(v, null, 2).replace(/\{\n\s+"effect"[\s\S]*?\n\s+\}(?=,?\n)/g, m => {
+    try { return JSON.stringify(JSON.parse(m)).replace(/,"/g,', "').replace(/":/g,'": '); } catch(e){ return m; }
+  }) + "\n";
+}
+
+/* ----------------------------- helpers ----------------------------- */
+const $ = (sel, root=document) => root.querySelector(sel);
+function h(tag, attrs, ...kids){
+  const el = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs||{})){
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "html") el.innerHTML = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return el;
+}
+let uid = 0; const nid = (p) => p + "-" + (++uid);
+function fmtVal(v, meta){
+  if (typeof v !== "number") return "";
+  const u = meta.unit ? " " + meta.unit : "";
+  if (meta.unit === "st") return (v>0?"+":"") + v + " st";
+  if (meta.max <= 1 && !meta.unit) return Math.round(v*100) + "%";
+  return (Math.round(v*100)/100) + u;
+}
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true, 2600); }
+function notice(msg, kind){ const n=$("#notice"); if(!msg){ n.hidden=true; return; } n.className="notice "+(kind||""); n.textContent=msg; n.hidden=false; }
+function isHandleLerp(v){ return v && typeof v==="object" && v.block==="math" && v.operation==="constrained_lerp" && v.c==="$handle" && typeof v.a==="number" && typeof v.b==="number"; }
+
+function sliderEl(meta, value, onInput){
+  const id = nid("s");
+  const toPos = (v) => meta.log ? Math.log(v/meta.min)/Math.log(meta.max/meta.min)*1000 : v;
+  const fromPos = (p) => { if (!meta.log) return +p; const v = meta.min*Math.pow(meta.max/meta.min, p/1000); return Math.round(v/meta.step)*meta.step; };
+  const val = h("span",{class:"val"}, fmtVal(value, meta));
+  const input = h("input",{type:"range", id, min: meta.log?0:meta.min, max: meta.log?1000:meta.max, step: meta.log?1:meta.step, value: toPos(value),
+    oninput:(e)=>{ const v = fromPos(e.target.value); val.textContent = fmtVal(v, meta); onInput(v); }});
+  const mid = h("div",{}, input, meta.ends ? h("div",{class:"ends"}, h("span",{},meta.ends[0]), h("span",{},meta.ends[1])) : null);
+  return h("div",{class:"slider"}, h("label",{for:id}, meta.label), mid, val);
+}
+
+/* --------------------------- rendering ----------------------------- */
+function chainSummary(p){
+  const names = p.list.filter(fx=>fx.enabled!==false).map(fx => fx.effect==="autotune" ? "Autotune" : (EFFECTS[fx.effect]?EFFECTS[fx.effect].label:fx.effect));
+  return names.length ? names.join(" → ") : "No effects";
+}
+function renderSlots(){
+  const root = $("#slots"); root.replaceChildren();
+  config.presets.forEach((p,i) => root.append(h("button",{class:"slot","aria-pressed":String(i===selected), onclick:()=>{selected=i; addOpen=false; render(); tryPreset();}},
+    h("div",{class:"top"}, h("span",{class:"led"}), h("span",{class:"num"}, "PRESET "+(i+1))),
+    h("span",{class:"name"}, p.name || "Untitled"),
+    h("span",{class:"chain"}, chainSummary(p)))));
+  if (config.presets.length < 4) root.append(h("button",{class:"slot add", onclick:()=>{ config.presets.push(clone(STARTERS[0])); selected=config.presets.length-1; changed(); }}, "+ Add preset"));
+}
+
+function renderEditor(){
+  const root = $("#editor"); root.replaceChildren();
+  const p = config.presets[selected];
+  if (!p){ root.append(h("div",{class:"panel muted"},"No presets yet. Add one above.")); return; }
+
+  const head = h("div",{class:"panel", style:"display:grid;gap:12px"},
+    h("div",{class:"row spread"},
+      h("div",{style:"flex:1 1 240px;min-width:0"}, h("input",{class:"name", id:"preset-name", value:p.name||"", placeholder:"Preset name", "aria-label":"Preset name", maxlength:"40",
+        oninput:(e)=>{ p.name=e.target.value; changedQuiet(); renderSlots(); }})),
+      h("div",{class:"row"},
+        h("label",{class:"small muted", for:"starter"}, "Start from"),
+        h("select",{class:"text", id:"starter", onchange:(e)=>{ if(e.target.value==="") return; const s=clone(STARTERS[+e.target.value]); config.presets[selected]=s; changed(); }},
+          h("option",{value:""},"Choose…"), STARTERS.map((s,i)=>h("option",{value:i}, s.name))),
+        h("button",{class:"icon-btn", title:"Move preset left", "aria-label":"Move preset left", disabled:selected===0||null, onclick:()=>movePreset(-1)}, "←"),
+        h("button",{class:"icon-btn", title:"Move preset right", "aria-label":"Move preset right", disabled:selected===config.presets.length-1||null, onclick:()=>movePreset(1)}, "→"),
+        h("button",{class:"btn small ghost", onclick:()=>{ config.presets.splice(selected,1); selected=Math.max(0,selected-1); changed(); }}, "Delete preset"))),
+    loadMeter(p));
+  root.append(head);
+
+  const chain = h("div",{class:"chain"});
+  const tuneIdx = p.list.findIndex(fx=>fx.effect==="autotune");
+  chain.append(tuneIdx>=0 ? autotuneCard(p, p.list[tuneIdx]) : h("div",{class:"fx tune"},
+    h("div",{class:"fx-head"}, h("div",{class:"grow"}, h("h3",{},"Autotune"), h("div",{class:"what"},"Snaps your voice to the nearest note. Always runs first.")),
+      h("button",{class:"btn small primary", onclick:()=>{ p.list.unshift({effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1}); changed(); }}, "Add autotune"))));
+  p.list.forEach((fx,i) => { if (fx.effect!=="autotune") chain.append(effectCard(p.list, i, p)); });
+  root.append(chain);
+  root.append(addEffectBlock(p.list, false));
+
+  root.append(h("div",{class:"panel adv", style:"gap:8px"},
+    h("h2",{},"Shared blocks (LFOs, math)"),
+    h("p",{class:"small muted"},'Name a block here and use it as "$name" in any parameter. "$handle" is always the handle travel, 0 at rest to 1 squeezed.'),
+    jsonArea(p.blocks||{}, (v)=>{ p.blocks=v; })));
+}
+
+function movePreset(d){ const j=selected+d; const a=config.presets; [a[selected],a[j]]=[a[j],a[selected]]; selected=j; changed(); }
+
+function loadMeter(p){
+  let cost=0, ramKB=0;
+  p.list.forEach(fx => { if (fx.enabled===false) return; if (fx.effect==="autotune"){ cost+=AUTOTUNE_COST; return; }
+    const e=EFFECTS[fx.effect]; if(!e) return; cost+=e.cost; if (e.ram){ const ms = typeof fx.max_delay_ms==="number"?fx.max_delay_ms:e.params.max_delay_ms.def; ramKB += ms*32/1000; } });
+  const pct = Math.min(100, cost);
+  const cls = cost>90?"bad":cost>70?"warn":"";
+  return h("div",{class:"meter"},
+    h("div",{class:"row spread small"}, h("span",{}, h("b",{},"Estimated load "), h("span",{class:"mono"}, cost+"%")),
+      h("span",{class:"muted"}, ramKB ? "Delay memory "+Math.round(ramKB)+" KB · " : "", "Estimate, not measured on the mic yet")),
+    h("div",{class:"bar "+cls}, h("i",{style:"width:"+pct+"%"})),
+    cost>90 ? h("p",{class:"small", style:"color:var(--bad)"},"This chain may be too heavy and stutter. Try removing an effect.") : null);
+}
+
+function fxHead(title, what, list, i, fx, extra){
+  const id = nid("en");
+  const n = list.length;
+  const isFirstMovable = i===0 || (list[i-1] && list[i-1].effect==="autotune");
+  return h("div",{class:"fx-head"},
+    h("label",{class:"switch", for:id, title:"Turn this effect on or off"},
+      h("input",{type:"checkbox", id, checked:fx.enabled!==false||null, onchange:(e)=>{ if(e.target.checked) delete fx.enabled; else fx.enabled=false; changed(); }}),
+      h("span",{class:"track"})),
+    h("div",{class:"grow"}, h("h3",{}, title), h("div",{class:"what"}, what)),
+    extra || null,
+    i===null ? null : h("button",{class:"icon-btn", title:"Move up", "aria-label":"Move "+title+" up", disabled:isFirstMovable||null, onclick:()=>{ [list[i-1],list[i]]=[list[i],list[i-1]]; changed(); }}, "↑"),
+    i===null ? null : h("button",{class:"icon-btn", title:"Move down", "aria-label":"Move "+title+" down", disabled:i===n-1||null, onclick:()=>{ [list[i+1],list[i]]=[list[i],list[i+1]]; changed(); }}, "↓"),
+    h("button",{class:"icon-btn", title:"Remove", "aria-label":"Remove "+title, onclick:()=>{ list.splice(i===null?list.indexOf(fx):i,1); changed(); }}, "✕"));
+}
+
+function autotuneCard(p, fx){
+  const body = h("div",{class:"fx-body"});
+  // key
+  const keyRow = h("div",{class:"keys", role:"group", "aria-label":"Key"});
+  const curKey = (fx.key||"C").toUpperCase().replace("DB","C#").replace("EB","D#").replace("GB","F#").replace("AB","G#").replace("BB","A#");
+  NOTES.forEach(nm => keyRow.append(h("button",{"aria-pressed":String(nm===curKey), onclick:()=>{ fx.key=nm; changed(); }}, nm)));
+  const scale = fx.scale||"chromatic";
+  const scaleSeg = h("div",{class:"seg", role:"group", "aria-label":"Scale"},
+    [["chromatic","Every note"],["major","Major"],["minor","Minor"]].map(([v,l])=>h("button",{"aria-pressed":String(scale===v), onclick:()=>{ fx.scale=v; changed(); }}, l)));
+  body.append(h("div",{class:"field"}, h("label",{}, "Scale"), scaleSeg));
+  if (scale!=="chromatic") body.append(h("div",{class:"field"}, h("label",{}, "Key"), keyRow));
+  else body.append(h("p",{class:"small muted"},"Every note snaps to the nearest semitone, so the key doesn't matter. Pick Major or Minor to stay in a key."));
+
+  // speed: number or "$handle"
+  const sq = fx.speed === "$handle";
+  const sqId = nid("sq");
+  body.append(h("div",{class:"row"},
+    h("label",{class:"switch", for:sqId}, h("input",{type:"checkbox", id:sqId, checked:sq||null, onchange:(e)=>{ fx.speed = e.target.checked ? "$handle" : 1; changed(); }}), h("span",{class:"track"}),
+      h("span",{}, "Squeeze controls the speed")),
+    sq ? h("span",{class:"small muted"},"Light squeeze is natural, full squeeze is a hard snap.") : null));
+  if (!sq){
+    const sp = typeof fx.speed==="number" ? fx.speed : 1;
+    body.append(sliderEl({label:"Speed",min:0,max:1,step:.01,ends:["Natural","Robot"]}, sp, v=>{ fx.speed=v; changedQuiet(); }));
+  }
+  const hu = typeof fx.humanize==="number" ? fx.humanize : 0;
+  body.append(sliderEl({label:"Humanize",min:0,max:1,step:.01,ends:["Exact","Keep vibrato"]}, hu, v=>{ fx.humanize=v; changedQuiet(); }));
+  const mx = typeof fx.mix==="number" ? fx.mix : 1;
+  body.append(sliderEl({label:"Amount",min:0,max:1,step:.01}, mx, v=>{ fx.mix=v; changedQuiet(); }));
+  const adv = h("div",{class:"adv", style:"gap:12px"});
+  adv.append(sliderEl({label:"Grain size",min:128,max:1024,step:128,unit:"smp"}, typeof fx.grain_size==="number"?fx.grain_size:512, v=>{ fx.grain_size=v; changedQuiet(); }));
+  adv.append(sliderEl({label:"Grain density",min:1,max:8,step:1}, typeof fx.density==="number"?fx.density:2, v=>{ fx.density=v; changedQuiet(); }));
+  adv.append(h("p",{class:"small muted"},"Bigger grains sound smoother on low voices but add delay. 512 adds about 32 ms."));
+  body.append(adv);
+
+  const list = p.list;
+  return h("div",{class:"fx tune"+(fx.enabled===false?" off":"")},
+    fxHead("Autotune", "Snaps your voice to the nearest note.", list, null, fx, h("span",{class:"pin"},"Always first")), body);
+}
+
+function effectCard(list, i, owner){
+  const fx = list[i];
+  const def = EFFECTS[fx.effect];
+  if (!def){
+    return h("div",{class:"fx"}, fxHead(fx.effect||"Unknown effect", "This editor doesn't know this effect. It is kept as is.", list, i, fx),
+      h("div",{class:"fx-body"}, jsonArea(fx, v=>{ list[i]=v; })));
+  }
+  const body = h("div",{class:"fx-body"});
+  for (const [name, meta] of Object.entries(def.params)){
+    const wrap = paramControl(fx, name, meta);
+    if (!meta.simple) wrap.classList.add("adv");
+    body.append(wrap);
+  }
+  // unknown keys on a known effect: keep, show in advanced
+  const extra = Object.keys(fx).filter(k=>!["effect","enabled"].includes(k) && !(k in def.params));
+  if (extra.length) body.append(h("p",{class:"small", style:"color:var(--warn)"}, "Unrecognised settings kept as is: "+extra.join(", ")));
+  return h("div",{class:"fx"+(fx.enabled===false?" off":"")}, fxHead(def.label, def.what, list, i, fx), body);
+}
+
+function paramControl(fx, name, meta){
+  const box = h("div",{style:"display:grid;gap:8px"});
+  let v = fx[name];
+  if (meta.kind==="enum"){
+    const cur = typeof v==="string" ? v.toLowerCase() : meta.def;
+    box.append(h("div",{class:"field"}, h("label",{}, meta.label),
+      h("div",{class:"seg", role:"group", "aria-label":meta.label}, meta.options.map(([val,l])=>h("button",{"aria-pressed":String(cur===val), onclick:()=>{ fx[name]=val; changed(); }}, l)))));
+    return box;
+  }
+  if (meta.kind==="bool"){
+    const id=nid("b");
+    box.append(h("label",{class:"switch", for:id}, h("input",{type:"checkbox", id, checked:(v===undefined?meta.def:v)||null, onchange:(e)=>{ fx[name]=e.target.checked; changedQuiet(); }}), h("span",{class:"track"}), h("span",{}, meta.label)));
+    return box;
+  }
+  if (meta.kind==="json"){
+    box.append(h("div",{class:"field"}, h("label",{}, meta.label), jsonArea(v===undefined?meta.def:v, val=>{ fx[name]=val; })));
+    return box;
+  }
+  if (meta.kind==="biquad") return biquadControl(fx, name);
+
+  // numeric: plain number, handle sweep, or some other block
+  if (v===undefined) v = meta.def;
+  if (typeof v === "number"){
+    box.append(sliderEl(meta, v, nv=>{ fx[name]=nv; if (name==="delay_ms" && typeof fx.max_delay_ms==="number" && nv>fx.max_delay_ms) fx.max_delay_ms=Math.ceil(nv/50)*50; else if (name==="delay_ms" && fx.max_delay_ms===undefined) fx.max_delay_ms=Math.max(EFFECTS[fx.effect].params.max_delay_ms.def, Math.ceil(nv/50)*50); changedQuiet(); }));
+    if (meta.squeeze){
+      const id=nid("sq");
+      box.append(h("label",{class:"switch small adv", for:id, style:"margin-left:2px"}, h("input",{type:"checkbox", id, onchange:()=>{ fx[name]={block:"math",operation:"constrained_lerp",a:meta.min<0?meta.min:v,b:meta.min<0?meta.max:Math.min(meta.max, v===meta.max?meta.min:meta.max),c:"$handle"}; changed(); }}), h("span",{class:"track"}), h("span",{class:"muted"}, "Squeeze controls "+meta.label.toLowerCase())));
+    }
+    return box;
+  }
+  if (isHandleLerp(v)){
+    const sqbox = h("div",{class:"squeeze"},
+      h("div",{class:"row spread"}, h("b",{class:"small"}, meta.label+" follows the squeeze"),
+        h("button",{class:"btn small ghost", onclick:()=>{ fx[name]=v.a; changed(); }}, "Use a fixed value")),
+      sliderEl(Object.assign({}, meta, {label:"At rest", ends:null}), v.a, nv=>{ v.a=nv; changedQuiet(); }),
+      sliderEl(Object.assign({}, meta, {label:"Squeezed", ends:null}), v.b, nv=>{ v.b=nv; changedQuiet(); }));
+    box.append(sqbox);
+    return box;
+  }
+  // LFO or other block: advanced JSON
+  box.append(h("div",{class:"field"}, h("label",{}, meta.label), h("div",{style:"display:grid;gap:6px;min-width:0"},
+    h("span",{class:"badge"}, typeof v==="string" ? "Uses "+v : (v&&v.block==="lfo"?"Moved by an LFO":"Moved by a block")),
+    h("div",{class:"adv"}, jsonArea(v, val=>{ fx[name]=val; })),
+    h("button",{class:"btn small ghost", style:"justify-self:start", onclick:()=>{ fx[name]=meta.def; changed(); }}, "Use a fixed value"))));
+  box.classList.remove("adv");
+  return box;
+}
+
+function biquadControl(fx, name){
+  const box = h("div",{style:"display:grid;gap:10px"});
+  let f = fx[name];
+  if (Array.isArray(f)){
+    box.append(h("p",{class:"small muted"},"This filter stacks several stages. Edit it in Advanced mode."), h("div",{class:"adv"}, jsonArea(f, v=>{ fx[name]=v; })));
+    return box;
+  }
+  if (!f || typeof f!=="object") f = fx[name] = {mode:"high_pass", frequency:200, Q:0.7071};
+  const mode = String(f.mode||"low_pass").toLowerCase();
+  box.append(h("div",{class:"field"}, h("label",{},"Type"),
+    h("div",{class:"seg", role:"group", "aria-label":"Filter type"}, FILTER_MODES.map(([v,l])=>h("button",{"aria-pressed":String(mode===v), onclick:()=>{ f.mode=v; changed(); }}, l)))));
+  if (typeof f.frequency==="number")
+    box.append(sliderEl({label:"Frequency",min:50,max:8000,step:10,unit:"Hz",log:true}, f.frequency, v=>{ f.frequency=v; changedQuiet(); }));
+  else box.append(h("div",{class:"row"}, h("span",{class:"badge"},"Frequency is moved by a block"), h("button",{class:"btn small ghost", onclick:()=>{ f.frequency=1000; changed(); }}, "Use a fixed value")));
+  const q = h("div",{class:"adv"});
+  if (typeof f.Q==="number" || f.Q===undefined) q.append(sliderEl({label:"Resonance (Q)",min:.3,max:10,step:.01,log:true}, typeof f.Q==="number"?f.Q:0.7071, v=>{ f.Q=Math.round(v*1000)/1000; changedQuiet(); }));
+  box.append(q);
+  return box;
+}
+
+function jsonArea(value, onValid){
+  const ta = h("textarea",{class:"json", spellcheck:"false", "aria-label":"JSON"});
+  ta.value = JSON.stringify(value, null, 2);
+  const err = h("p",{class:"small", style:"color:var(--bad)", hidden:true});
+  ta.addEventListener("input", ()=>{ try { const v = JSON.parse(ta.value); err.hidden=true; onValid(v); changedQuiet(); } catch(e){ err.textContent="Not valid JSON yet: "+e.message; err.hidden=false; } });
+  ta.addEventListener("change", ()=>{ if (err.hidden) render(); });
+  return h("div",{style:"display:grid;gap:4px;min-width:0"}, ta, err);
+}
+
+function addEffectBlock(list, forSample){
+  const wrap = h("div",{style:"display:grid;gap:10px"});
+  wrap.append(h("button",{class:"btn", style:"justify-self:start", "aria-expanded":String(addOpen===list), onclick:()=>{ addOpen = addOpen===list?false:list; render(); }}, addOpen===list ? "Close" : "+ Add effect"));
+  if (addOpen===list){
+    const menu = h("div",{class:"addmenu"});
+    for (const [key, def] of Object.entries(EFFECTS)){
+      menu.append(h("button",{onclick:()=>{
+        const fx = {effect:key};
+        for (const [pn, meta] of Object.entries(def.params)) if (meta.def!==undefined) fx[pn] = clone(meta.def);
+        if (key==="filter") fx.filter = {mode:"high_pass", frequency:200, Q:0.7071};
+        list.push(fx); addOpen=false; changed(); }}, h("b",{}, def.label), h("span",{}, def.what)));
+    }
+    wrap.append(menu);
+  }
+  return wrap;
+}
+
+function renderSamples(){
+  const root = $("#samples"); root.replaceChildren();
+  config.samples.forEach((s, i) => {
+    s.effects = s.effects || [];
+    const body = h("div",{class:"body"},
+      h("div",{class:"row spread"},
+        h("div",{class:"row"}, h("b",{}, "Slot "+(i+1)), h("input",{class:"text mono", id:"sample-file-"+i, value:s.file, "aria-label":"Slot "+(i+1)+" file name", size:"10",
+          oninput:(e)=>{ s.file=e.target.value.trim()||((i+1)+".wav"); changedQuiet(); }})),
+        h("div",{class:"seg", role:"group", "aria-label":"Slot "+(i+1)+" playback"}, PLAYMODES.map(([v,l])=>h("button",{"aria-pressed":String((s.playmode||"oneshot")===v), onclick:()=>{ s.playmode=v; changed(); }}, l)))));
+    if (s.effects.length){
+      const chain = h("div",{class:"chain"});
+      s.effects.forEach((fx, j) => chain.append(effectCard(s.effects, j, s)));
+      body.append(chain);
+    }
+    body.append(addEffectBlock(s.effects, true));
+    root.append(h("div",{class:"sample"}, h("span",{class:"wled"}), body));
+  });
+}
+
+function render(){
+  $("#pack-name").value = config.name || "";
+  renderSlots(); renderEditor(); renderSamples(); renderJSON();
+}
+function renderJSON(){ $("#json-out").textContent = formatJSON(serialize()); }
+function changed(){ save(); render(); tryPreset(); }
+function changedQuiet(){ save(); renderJSON(); renderSlotsLight(); tryPreset(); }
+function renderSlotsLight(){ renderSlots(); const m=$("#editor .meter"); if (m && config.presets[selected]) m.replaceWith(loadMeter(config.presets[selected])); }
+
+/* ---------------------------- storage ------------------------------ */
+const KEY = "ting-preset-editor-draft";
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(serialize())); } catch(e){} }
+function restore(){ try { const t = localStorage.getItem(KEY); if (t) return normalizeConfig(JSON.parse(t)); } catch(e){} return null; }
+
+/* ---------------------------- file I/O ----------------------------- */
+function adoptText(text, source){
+  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Opened "+source); }
+  catch(e){ notice("Couldn't open "+source+": "+e.message, "bad"); }
+}
+$("#file-open").addEventListener("change", async (e)=>{ const f=e.target.files[0]; if(!f) return; adoptText(await f.text(), f.name); e.target.value=""; });
+document.addEventListener("dragover", e=>e.preventDefault());
+document.addEventListener("drop", async e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if (f) adoptText(await f.text(), f.name); });
+document.addEventListener("paste", e=>{ const t=e.clipboardData && e.clipboardData.getData("text"); if (t && t.trim().startsWith("{") && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLInputElement)) adoptText(t, "pasted text"); });
+
+function copyText(){
+  const text = formatJSON(serialize());
+  const fallback = ()=>{ document.body.classList.add("advanced"); setMode(true); const pre=$("#json-out"); const r=document.createRange(); r.selectNodeContents(pre); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); toast("Selected. Press Ctrl+C or Cmd+C to copy."); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=>toast("Copied config.json"), fallback); else fallback();
+}
+$("#btn-copy").addEventListener("click", copyText);
+$("#btn-copy2").addEventListener("click", copyText);
+$("#btn-download").addEventListener("click", ()=>{
+  const blob = new Blob([formatJSON(serialize())], {type:"application/json"});
+  const a = h("a",{href:URL.createObjectURL(blob), download:"config.json"}); document.body.append(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  toast("Downloaded config.json");
+});
+
+const canPickFolder = "showDirectoryPicker" in window;
+if (!canPickFolder) $("#btn-save").title = "Your browser can't write to drives. Use Download, then drag the file onto CIRCUITPY.";
+$("#btn-save").addEventListener("click", async ()=>{
+  if (!canPickFolder){ notice("This browser can't save straight to the mic. Click Download, then drag config.json onto the CIRCUITPY drive. Chrome and Edge can save directly.", ""); return; }
+  let dir;
+  try { dir = await window.showDirectoryPicker({id:"circuitpy", mode:"readwrite"}); }
+  catch(e){ if (e.name!=="AbortError") notice("Couldn't open the folder picker here: "+e.message+". Use Download instead.", "bad"); return; }
+  try {
+    let isTing = false;
+    try { await dir.getFileHandle("code.py"); isTing = true; } catch(e){}
+    if (!isTing){ notice("That folder has no code.py, so it doesn't look like the mic's CIRCUITPY drive. Pick CIRCUITPY and try again.", "bad"); return; }
+    const fh = await dir.getFileHandle("config.json", {create:true});
+    const w = await fh.createWritable();
+    await w.write(formatJSON(serialize())); await w.close();
+    notice("Saved config.json to the mic. Turn it off and on again to use the new presets.", "ok");
+  } catch(e){
+    notice("The mic didn't accept the file. It's probably in play mode, where your computer can only read it. Turn the mic off, hold the orange button while you turn it on, then save again.", "bad");
+  }
+});
+
+/* ------------------------------ mode ------------------------------- */
+function setMode(adv){
+  document.body.classList.toggle("advanced", adv);
+  $("#mode-simple").setAttribute("aria-pressed", String(!adv));
+  $("#mode-adv").setAttribute("aria-pressed", String(adv));
+  try { localStorage.setItem(KEY+"-mode", adv?"adv":"simple"); } catch(e){}
+}
+$("#mode-simple").addEventListener("click", ()=>setMode(false));
+$("#mode-adv").addEventListener("click", ()=>setMode(true));
+$("#pack-name").addEventListener("input", e=>{ config.name = e.target.value.toUpperCase().replace(/[^A-Z0-9_ -]/g,""); e.target.value=config.name; changedQuiet(); });
+
+/* ------------------------- try it (Web Audio) ------------------------ *
+ * Runs the selected preset on the computer mic through ting-dsp.js, at the
+ * mic's 16 kHz where the browser allows it. Space or the button acts as the
+ * handle: open/closed gates the mic, the Squeeze slider is "$handle".
+ * ------------------------------------------------------------------- */
+const tryState = {ctx:null, engine:null, src:null, stream:null, running:false, open:true, squeeze:0, held:false, level:0.5, timer:0};
+function trySend(msg){ if (tryState.engine) tryState.engine.set(msg); }
+function tryG(){ return {power:true, gate:tryState.open || tryState.held, handle:tryState.held ? 1 : tryState.squeeze, level:tryState.level}; }
+function tryPreset(){
+  if (!tryState.engine) return;
+  clearTimeout(tryState.timer);
+  tryState.timer = setTimeout(()=>{ const p = serialize().presets[selected]; trySend({preset: p || null}); }, 60);
+}
+async function tryEnsure(){
+  if (tryState.ctx) return;
+  if (typeof makeTingEngine !== "function") throw new Error("The audio engine (ting-dsp.js) didn't load.");
+  let ctx;
+  try { ctx = new AudioContext({latencyHint:"interactive", sampleRate:16000}); }
+  catch(e){ ctx = new AudioContext({latencyHint:"interactive"}); }
+  tryState.ctx = ctx;
+  tryState.engine = await makeTingEngine(ctx);
+  tryState.engine.onInfo = tryInfo;
+  tryState.engine.node.connect(ctx.destination);
+  trySend({g:tryG()});
+  trySend({preset: serialize().presets[selected] || null});
+}
+function tryStopSource(){
+  if (tryState.src){ try { tryState.src.stop && tryState.src.stop(); } catch(e){} tryState.src.disconnect(); tryState.src = null; }
+  if (tryState.stream){ tryState.stream.getTracks().forEach(t=>t.stop()); tryState.stream = null; }
+}
+async function tryStart(kind){
+  try { await tryEnsure(); } catch(e){ tryStatus("Couldn't start audio: "+e.message, true); return; }
+  await tryState.ctx.resume();
+  tryStopSource();
+  if (kind === "mic"){
+    try {
+      tryState.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+    } catch(e){
+      tryStatus("The browser didn't allow the microphone ("+e.name+"). Check the mic permission for this site, or play the sample singer instead.", true);
+      return;
+    }
+    tryState.src = tryState.ctx.createMediaStreamSource(tryState.stream);
+    tryStatus("Listening. Use headphones so the speakers don't feed back.");
+  } else {
+    const b = makeSampleSinger(tryState.ctx.sampleRate);
+    tryState.src = tryState.ctx.createBufferSource(); tryState.src.buffer = b; tryState.src.loop = true; tryState.src.start();
+    tryStatus("Looping a slightly off-pitch singer through the preset.");
+  }
+  tryState.src.connect(tryState.engine.node);
+  tryState.running = true; tryRender();
+}
+function tryStop(){ tryStopSource(); tryState.running = false; tryRender(); tryStatus("Stopped."); }
+function tryStatus(t, bad){ const el=$("#try-status"); el.textContent=t; el.style.color = bad ? "var(--bad)" : ""; }
+function tryRender(){
+  $("#try-controls").hidden = !tryState.running;
+  $("#try-stop").hidden = !tryState.running;
+  $("#try-talk").setAttribute("aria-pressed", String(tryState.open || tryState.held));
+  $("#try-talk").textContent = tryState.held ? "Squeezed" : tryState.open ? "Mic open" : "Mic closed";
+}
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+function noteName(midi){ const m = Math.round(midi); return NOTE_NAMES[((m%12)+12)%12] + (Math.floor(m/12)-1); }
+let tryPeak = 0;
+function tryInfo(info){
+  const ro = $("#try-readout"); if (!ro) return;
+  const parts = [];
+  const p = config.presets[selected];
+  parts.push(h("span",{}, "Preset ", h("b",{}, (selected+1)+" · "+((p&&p.name)||"Untitled"))));
+  if (info.error) parts.push(h("span",{style:"color:var(--bad)"}, "Won't run on the mic: "+info.error));
+  if (info.midi != null){
+    parts.push(h("span",{}, "You sang ", h("b",{}, noteName(info.midi)+" "+(((info.midi-Math.round(info.midi))*100)>=0?"+":"")+Math.round((info.midi-Math.round(info.midi))*100)+"¢")));
+    if (info.autotune) parts.push(h("span",{}, "Autotune moved it ", h("b",{}, (info.correction>=0?"+":"")+info.correction.toFixed(2)+" st")));
+  } else parts.push(h("span",{}, "No note heard"));
+  ro.replaceChildren(...parts);
+}
+$("#try-mic").addEventListener("click", ()=>tryStart("mic"));
+$("#try-singer").addEventListener("click", ()=>tryStart("singer"));
+$("#try-stop").addEventListener("click", tryStop);
+$("#try-talk").addEventListener("click", ()=>{ tryState.open = !tryState.open; trySend({g:tryG()}); tryRender(); });
+function isTyping(t){ return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t && t.isContentEditable); }
+document.addEventListener("keydown", e=>{ if (e.code==="Space" && tryState.running && !isTyping(e.target) && !(e.target instanceof HTMLButtonElement)){ e.preventDefault(); if (!tryState.held){ tryState.held=true; trySend({g:tryG()}); tryRender(); } } });
+document.addEventListener("keyup", e=>{ if (e.code==="Space" && tryState.held){ tryState.held=false; trySend({g:tryG()}); tryRender(); } });
+$("#try-squeeze-slot").append(sliderEl({label:"Squeeze",min:0,max:1,step:.01,ends:["Rest","Full"]}, 0, v=>{ tryState.squeeze=v; trySend({g:tryG()}); }));
+$("#try-level-slot").append(sliderEl({label:"Volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }));
+
+function setHowto(show){ $("#howto").hidden=!show; $("#howto-show").hidden=show; try { localStorage.setItem(KEY+"-howto", show?"1":"0"); } catch(e){} }
+$("#howto-hide").addEventListener("click", ()=>setHowto(false));
+$("#howto-show").addEventListener("click", ()=>setHowto(true));
+try { if (localStorage.getItem(KEY+"-howto")==="0") setHowto(false); } catch(e){}
+
+/* ------------------------------ boot ------------------------------- */
+config = restore() || normalizeConfig(DEFAULT_CONFIG);
+try { setMode(localStorage.getItem(KEY+"-mode")==="adv"); } catch(e){ setMode(false); }
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Install fx-mic-mod</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="site-nav.css">
+<style>
+/* Layout: sticky step rail on the left, one column of numbered bench steps on the right; collapses to a single column on phones.
+   Adapted from this project's Ting Flash Bench, in the fx-mic-mod site palette. */
+:root {
+  --bg: #e9e7e2;
+  --panel: #f6f5f2;
+  --ink: #1d1c1a;
+  --muted: #6c6862;
+  --line: #d3d0c9;
+  --orange: #e2541c;
+  --accent: #e2541c;
+  --green: #2f7d4f;
+  --led: #ff2d2d;
+  --warn-bg: #fbe3d8;
+  --ok-bg: #e3efe5;
+  --code-bg: #e4e1db;
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171615; --panel: #211f1d; --ink: #ece9e3; --muted: #a29d95; --line: #38342f;
+    --orange: #ff6a33; --accent: #ff6a33; --green: #5cc489; --led: #ff4d55; --warn-bg: #3a2117; --ok-bg: #1c2e22; --code-bg: #2a2724;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171615; --panel: #211f1d; --ink: #ece9e3; --muted: #a29d95; --line: #38342f;
+  --orange: #ff6a33; --accent: #ff6a33; --green: #5cc489; --led: #ff4d55; --warn-bg: #3a2117; --ok-bg: #1c2e22; --code-bg: #2a2724;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+a { color: var(--orange); }
+a:focus-visible, button:focus-visible, input:focus-visible, label:focus-within { outline: 2px solid var(--orange); outline-offset: 2px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 40px; }
+header.top { max-width: 1120px; margin: 0 auto 28px; display: grid; gap: 14px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--f-display); font-weight: 800; font-size: clamp(34px, 6vw, 58px); line-height: .95; margin: 0; letter-spacing: -.02em; text-wrap: balance; }
+h1 span { color: var(--orange); }
+.lede { max-width: 66ch; margin: 0; color: var(--muted); font-size: 16px; }
+.leds { display: flex; gap: 6px; align-items: center; }
+.leds i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: block; }
+.leds i.on-w { background: var(--ink); }
+.leds i.on-r { background: var(--led); box-shadow: 0 0 8px var(--led); }
+
+nav.rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; display: grid; gap: 18px; }
+nav.rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav.rail a { display: grid; grid-template-columns: 26px 1fr 14px; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 14px; }
+nav.rail a:hover { background: var(--panel); }
+nav.rail .n { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+nav.rail .dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--line); }
+nav.rail a.done .dot { background: var(--green); border-color: var(--green); }
+.support { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 8px; font-size: 13px; }
+.support div { display: flex; justify-content: space-between; gap: 8px; }
+.chip { font-family: var(--f-mono); font-size: 11px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap; }
+.chip.ok { background: var(--ok-bg); color: var(--green); border-color: transparent; }
+.chip.no { background: var(--warn-bg); color: var(--orange); border-color: transparent; }
+
+main { display: grid; gap: 22px; min-width: 0; }
+section.step { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 24px clamp(16px, 3vw, 30px); display: grid; gap: 14px; min-width: 0; }
+.step-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.step-num { font-family: var(--f-mono); font-size: 13px; color: var(--orange); font-weight: 600; }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: 25px; line-height: 1.15; margin: 0; flex: 1; text-wrap: balance; }
+.mark { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; }
+h3 { font-size: 13px; font-family: var(--f-mono); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 6px 0 0; font-weight: 600; }
+p { margin: 0; max-width: 70ch; }
+ol.how, ul.how { margin: 0; padding-left: 22px; display: grid; gap: 6px; max-width: 72ch; }
+code, kbd { font-family: var(--f-mono); font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+kbd { border: 1px solid var(--line); }
+pre { font-family: var(--f-mono); font-size: 12.5px; background: var(--code-bg); border-radius: 8px; padding: 14px; margin: 0; overflow-x: auto; line-height: 1.5; }
+.note { border-left: 3px solid var(--orange); background: var(--warn-bg); padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 14px; max-width: 76ch; }
+.note.calm { border-color: var(--green); background: var(--ok-bg); }
+.note b { font-weight: 600; }
+.tool { border: 1px dashed var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+button, .filebtn {
+  font: 600 14px var(--f-body); border-radius: 7px; padding: 9px 15px; cursor: pointer;
+  border: 1px solid var(--ink); background: var(--ink); color: var(--panel);
+}
+button.ghost, .filebtn { background: transparent; color: var(--ink); }
+button.go { background: var(--orange); border-color: var(--orange); color: #fff; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.filebtn { display: inline-flex; align-items: center; position: relative; }
+.filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.status { font-family: var(--f-mono); font-size: 12.5px; color: var(--muted); min-height: 1.2em; overflow-wrap: anywhere; }
+.status.ok { color: var(--green); }
+.status.bad { color: var(--orange); }
+main, .step, .step > * { min-width: 0; }
+.how a, .how code { overflow-wrap: anywhere; }
+.tablebox { max-width: 100%; overflow-x: auto; max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+td, th { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-family: var(--f-mono); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); position: sticky; top: 0; background: var(--panel); }
+td.num { font-variant-numeric: tabular-nums; text-align: right; font-family: var(--f-mono); }
+.gesture { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.gesture div { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 6px; align-content: start; }
+.gesture b { font-family: var(--f-mono); font-size: 12px; color: var(--orange); }
+.gesture svg { width: 100%; max-width: 120px; height: auto; }
+.console { background: #11130f; color: #d9e6d2; height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.console-input { display: flex; gap: 8px; }
+.console-input input { flex: 1; min-width: 0; font: 13px var(--f-mono); padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+details { border-top: 1px solid var(--line); padding-top: 10px; }
+summary { cursor: pointer; font-weight: 600; }
+.uncertain { display: grid; gap: 10px; }
+.uncertain li { max-width: 76ch; }
+.tag { font-family: var(--f-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; padding: 1px 6px; border-radius: 4px; background: var(--warn-bg); color: var(--orange); margin-right: 6px; }
+footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+
+@media (max-width: 820px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  nav.rail { position: static; }
+  nav.rail ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gesture { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<nav class="site-nav" aria-label="Site">
+  <a class="brand" href="index.html"><i aria-hidden="true"></i>fx-mic-mod</a>
+  <ul>
+    <li><a class="tab" href="index.html">How it works</a></li>
+    <li><a class="tab" href="install.html" aria-current="page">Install</a></li>
+    <li><a class="tab" href="editor.html">Preset editor</a></li>
+    <li><a class="tab" href="https://github.com/franklin-fernman/fx-mic-mod" target="_blank" rel="noopener">GitHub</a></li>
+  </ul>
+</nav>
+
+<header class="top">
+  <div class="row" style="justify-content: space-between;">
+    <span class="eyebrow">EP–2350 Ting · RP2350 · CircuitPython 10.3.1</span>
+    <span class="leds" aria-hidden="true"><i class="on-w"></i><i></i><i></i><i></i><i class="on-r"></i><i></i><i></i><i></i></span>
+  </div>
+  <h1>Install <span>fx-mic-mod</span></h1>
+  <p class="lede">Back up the samples and settings on your Ting, swap Teenage Engineering's firmware for CircuitPython, install fx-mic-mod in one click, and get back to stock whenever you want. Each step runs in the browser while the Ting is plugged in, with a drag-and-drop route if the browser won't allow it. You only do this once. After that, presets are changed in the <a href="editor.html">preset editor</a>.</p>
+  <div class="note" id="frameNote" hidden>
+    <b>Drive and serial access are blocked in this view.</b> Chrome and Edge only let a page touch USB drives and serial ports when it runs as its own tab, and this page is running inside a frame. Every step still works by drag and drop. For one-click flashing, save the standalone copy and open it in Chrome or Edge on your computer.
+    <div class="row" style="margin-top: 10px;"><button class="go" id="saveStandalone">Save standalone flasher (.html)</button><span class="status" id="standaloneStatus"></span></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="rail" aria-label="Steps">
+    <ol id="railList">
+      <li><a href="#prep"><span class="n">00</span>Before you start<span class="dot"></span></a></li>
+      <li><a href="#backup"><span class="n">01</span>Back up the disk<span class="dot"></span></a></li>
+      <li><a href="#stock"><span class="n">02</span>Save stock firmware<span class="dot"></span></a></li>
+      <li><a href="#boot"><span class="n">03</span>Enter boot mode<span class="dot"></span></a></li>
+      <li><a href="#flash"><span class="n">04</span>Flash CircuitPython<span class="dot"></span></a></li>
+      <li><a href="#install"><span class="n">05</span>Install fx-mic-mod<span class="dot"></span></a></li>
+      <li><a href="#console"><span class="n">06</span>Serial console<span class="dot"></span></a></li>
+      <li><a href="#restore"><span class="n">07</span>Restore stock<span class="dot"></span></a></li>
+      <li><a href="#unknowns"><span class="n">!!</span>Unverified details<span class="dot"></span></a></li>
+    </ol>
+    <div class="support" aria-live="polite">
+      <div><span>Drive access</span><span class="chip" id="chipFs">checking</span></div>
+      <div><span>Serial port</span><span class="chip" id="chipSerial">checking</span></div>
+      <div><span>Backup saved</span><span class="chip" id="chipBackup">not yet</span></div>
+    </div>
+  </nav>
+
+  <main>
+    <!-- 00 -->
+    <section class="step" id="prep" data-step="prep">
+      <div class="step-head"><span class="step-num">00</span><h2>Before you start</h2><label class="mark"><input type="checkbox" data-done="prep"> Done</label></div>
+      <ul class="how">
+        <li>A desktop computer with <b>Chrome or Edge</b> for the one-click tools. Safari and Firefox can still follow the drag-and-drop route.</li>
+        <li>A USB-C cable that carries data. Many charge-only cables power the Ting but never show a drive.</li>
+        <li>A rubber band or clip. Boot mode needs the handle squeezed all the way in for the whole flash, and that's hard to do by hand.</li>
+        <li>Take off the lower lid to reach the USB-C port and the small reset button above it.</li>
+      </ul>
+      <div class="note calm">The Ting has no charging circuit, so USB only powers it and won't charge AA batteries. On USB it stays off until you squeeze the handle all the way in.</div>
+    </section>
+
+    <!-- 01 -->
+    <section class="step" id="backup" data-step="backup">
+      <div class="step-head"><span class="step-num">01</span><h2>Back up the Ting's disk</h2><label class="mark"><input type="checkbox" data-done="backup"> Done</label></div>
+      <p>Flashing CircuitPython erases everything on the device's own drive: your samples <code>1.wav</code> to <code>4.wav</code>, <code>config.json</code>, and any other files. Copy them off first.</p>
+      <ol class="how">
+        <li>Plug in the Ting and squeeze the handle to power it on.</li>
+        <li>A drive called <b>TING DISK</b> appears. Some firmware versions and the official manual call it <b>FX-MIC DISK</b>.</li>
+        <li>Pick that drive below. The page reads every file and saves them as one zip.</li>
+      </ol>
+      <div class="tool">
+        <div class="row">
+          <button class="go" id="backupPick">Pick TING DISK and back up</button>
+          <label class="filebtn">Or choose the folder manually<input type="file" id="backupInput" webkitdirectory multiple></label>
+        </div>
+        <div class="status" id="backupStatus">No files read yet.</div>
+        <div class="tablebox" id="backupTableBox" hidden><table><thead><tr><th>File</th><th style="text-align:right">Size</th></tr></thead><tbody id="backupTable"></tbody></table></div>
+        <div class="row"><button id="backupSave" disabled>Save backup zip</button></div>
+      </div>
+      <details><summary>Doing it by hand</summary><p style="margin-top: 8px;">Open the drive in Finder or File Explorer and copy every file into a folder on your computer named something like <code>ting-backup-2026-10-22</code>. Include hidden files if you have edited config files with a text editor.</p></details>
+    </section>
+
+    <!-- 02 -->
+    <section class="step" id="stock" data-step="stock">
+      <div class="step-head"><span class="step-num">02</span><h2>Keep a copy of the stock firmware</h2><label class="mark"><input type="checkbox" data-done="stock"> Done</label></div>
+      <p>Teenage Engineering publishes every firmware release as a zip with a <code>.uf2</code> inside. That file is your way back to the original mic, so download it now while you're thinking about it.</p>
+      <div class="tablebox"><table>
+        <thead><tr><th>Version</th><th>Date</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://teenage.engineering/_software/ep-2350/ep-2350_firmware_1_1_2.zip" target="_blank" rel="noopener">1.1.2</a></td><td>2026-09-07</td><td>Latest. Fixes JSON parsing regressions since 1.0.9</td></tr>
+          <tr><td><a href="https://teenage.engineering/_software/ep-2350/ep-2350_firmware_1_1_1.zip" target="_blank" rel="noopener">1.1.1</a></td><td>2026-08-25</td><td>Smoother start-up click</td></tr>
+          <tr><td><a href="https://teenage.engineering/_software/ep-2350/ep-2350_firmware_1_0_8.zip" target="_blank" rel="noopener">1.0.8</a></td><td>2025-12-05</td><td>Removed flutter in the noise floor</td></tr>
+        </tbody>
+      </table></div>
+      <p>All versions live on the <a href="https://teenage.engineering/downloads/ep-2350" target="_blank" rel="noopener">EP–2350 downloads page</a>.</p>
+      <details>
+        <summary>Optional: full flash dump with picotool</summary>
+        <div style="display: grid; gap: 8px; margin-top: 8px;">
+          <p>If you want a byte-for-byte image of the chip (firmware plus the disk), Raspberry Pi's <code>picotool</code> can read the RP2350's flash while the Ting is in boot mode (step 03):</p>
+          <pre>picotool info -a
+picotool save -a ting-full-flash.bin</pre>
+          <p><span class="tag">Unverified</span>Nobody has published a picotool dump of a Ting yet. TE changed the boot-mode USB IDs in firmware 1.0.5, so picotool may not recognise the device, and the chip could have reads locked. The official .uf2 above is the dependable restore path.</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- 03 -->
+    <section class="step" id="boot" data-step="boot">
+      <div class="step-head"><span class="step-num">03</span><h2>Put the Ting in boot mode</h2><label class="mark"><input type="checkbox" data-done="boot"> Done</label></div>
+      <div class="gesture">
+        <div>
+          <b>1 · Squeeze</b>
+          <svg viewBox="0 0 120 70" role="img" aria-label="Handle pressed fully into the body">
+            <rect x="8" y="22" width="78" height="26" rx="13" fill="none" stroke="currentColor" stroke-width="2"/>
+            <rect x="88" y="27" width="24" height="16" rx="5" fill="var(--orange)"/>
+            <path d="M100 12 L100 22 M94 17 L100 23 L106 17" fill="none" stroke="var(--orange)" stroke-width="2"/>
+          </svg>
+          <span>Hold the handle all the way in. Strap it with a rubber band.</span>
+        </div>
+        <div>
+          <b>2 · Double-click reset</b>
+          <svg viewBox="0 0 120 70" role="img" aria-label="Reset button just above the USB-C port">
+            <rect x="30" y="8" width="60" height="56" rx="8" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle cx="60" cy="28" r="6" fill="currentColor"/>
+            <rect x="48" y="44" width="24" height="9" rx="4.5" fill="none" stroke="currentColor" stroke-width="2"/>
+            <text x="96" y="31" font-size="9" fill="var(--orange)" font-family="monospace">×2</text>
+          </svg>
+          <span>The small dark button just above the USB-C port. The timing is fussy, so try a few times.</span>
+        </div>
+        <div>
+          <b>3 · Look for the drive</b>
+          <svg viewBox="0 0 120 70" role="img" aria-label="All LEDs off and a boot drive on the computer">
+            <circle cx="20" cy="18" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="20" cy="32" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="20" cy="46" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="44" y="20" width="66" height="30" rx="4" fill="none" stroke="var(--green)" stroke-width="2"/>
+            <text x="50" y="39" font-size="9" fill="var(--green)" font-family="monospace">TING BOOT</text>
+          </svg>
+          <span>All LEDs go dark and a drive named <b>TING BOOT</b> (or <b>FX MIC BOOT</b>) appears with <code>INDEX.HTM</code> and <code>INFO_UF2.TXT</code>.</span>
+        </div>
+      </div>
+      <div class="note"><b>Keep the handle squeezed</b> until the flash is finished and the device has restarted. Releasing it mid-copy cuts power to the chip.</div>
+    </section>
+
+    <!-- 04 -->
+    <section class="step" id="flash" data-step="flash">
+      <div class="step-head"><span class="step-num">04</span><h2>Flash CircuitPython</h2><label class="mark"><input type="checkbox" data-done="flash"> Done</label></div>
+      <p>Download the Ting's CircuitPython build. The board has had official builds since 10.3, so pick the stable one:</p>
+      <ul class="how">
+        <li><a href="https://downloads.circuitpython.org/bin/teenage_engineering_ep2350/en_US/adafruit-circuitpython-teenage_engineering_ep2350-en_US-10.3.1.uf2" target="_blank" rel="noopener">adafruit-circuitpython-teenage_engineering_ep2350-en_US-10.3.1.uf2</a> (stable, recommended)</li>
+        <li>Other versions and languages: <a href="https://circuitpython.org/board/teenage_engineering_ep2350/" target="_blank" rel="noopener">circuitpython.org/board/teenage_engineering_ep2350</a></li>
+      </ul>
+      <div class="tool">
+        <div class="row">
+          <label class="filebtn">1. Choose the .uf2 file<input type="file" id="uf2Input" accept=".uf2"></label>
+          <button class="go" id="uf2Flash" disabled>2. Pick TING BOOT and flash</button>
+        </div>
+        <div class="status" id="uf2Status">No firmware chosen.</div>
+        <pre id="infoUf2" hidden></pre>
+      </div>
+      <p>The drive disappears as soon as the copy finishes, the Ting restarts, and a new drive named <b>CIRCUITPY</b> mounts. Your computer may complain that the drive was removed without ejecting. That's expected.</p>
+      <details><summary>Doing it by hand</summary><p style="margin-top: 8px;">Drag the <code>.uf2</code> file onto the TING BOOT drive in Finder or File Explorer, keep squeezing, and wait for CIRCUITPY to appear.</p></details>
+    </section>
+
+    <!-- 05 -->
+    <section class="step" id="install" data-step="install">
+      <div class="step-head"><span class="step-num">05</span><h2>Install fx-mic-mod</h2><label class="mark"><input type="checkbox" data-done="install"> Done</label></div>
+      <p>This copies the fx-mic-mod files to CIRCUITPY: <code>code.py</code> and its modules (<code>autotune.py</code>, <code>recorder.py</code>, <code>config_loader.py</code>), <code>boot.py</code>, and a starter <code>config.json</code> with four presets.</p>
+      <p>It also needs Adafruit's driver for the Ting's audio chip, <code>adafruit_nau88l21.mpy</code>. Download the <b>10.x</b> library bundle from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>, unzip it, and choose its <code>lib</code> folder below. Only the driver is copied from it. You can skip this if the driver is already on the drive.</p>
+      <div class="tool">
+        <div class="row">
+          <label class="filebtn">1. Choose the bundle's lib folder<input type="file" id="libInput" webkitdirectory multiple></label>
+          <button class="go" id="installBtn">2. Pick CIRCUITPY and install</button>
+        </div>
+        <label class="mark" style="color: var(--ink);"><input type="checkbox" id="keepConfig" checked> Keep my presets if CIRCUITPY already has a config.json</label>
+        <label class="mark" style="color: var(--ink);"><input type="checkbox" id="keepOld" checked> Rename the existing code.py to code_prev.py first</label>
+        <div class="status" id="codeStatus">No driver chosen yet. That's fine if it's already in CIRCUITPY/lib.</div>
+        <pre id="bootOut" hidden></pre>
+      </div>
+      <div class="note"><b>After installing, turn the Ting off and on again.</b> From then on, a normal power-on lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
+      <details><summary>Installing by hand</summary>
+        <div style="display: grid; gap: 10px; margin-top: 10px;">
+          <p>Download these files and copy them to the root of CIRCUITPY, with <code>code.py</code> last:</p>
+          <ul class="how">
+            <li><a href="firmware/config_loader.py" download>config_loader.py</a>, <a href="firmware/autotune.py" download>autotune.py</a>, <a href="firmware/recorder.py" download>recorder.py</a></li>
+            <li><a href="firmware/config.json" download>config.json</a> (starter presets; skip it to keep yours)</li>
+            <li><a href="firmware/boot.py" download>boot.py</a></li>
+            <li><a href="firmware/code.py" download>code.py</a></li>
+          </ul>
+          <p>Then copy <code>adafruit_nau88l21.mpy</code> from the bundle's <code>lib</code> folder into <code>CIRCUITPY/lib</code>.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Hardware smoke test (code.py)</summary>
+        <div style="display: grid; gap: 10px; margin-top: 10px;">
+          <p>If something seems wrong, this small test checks the buttons, LEDs, handle and volume knob on their own. Squeezing the handle fills the white LEDs from the bottom, the top, middle and bottom buttons light red LEDs 1 to 3, and red LED 4 comes on past half volume. Every change prints to the serial console. Save it over <code>code.py</code> to run it, and reinstall fx-mic-mod afterwards.</p>
+          <div class="row"><button class="ghost" id="copySmoke">Copy code</button><button class="ghost" id="saveSmoke" hidden>Save as code.py</button><span class="status" id="smokeStatus"></span></div>
+          <pre id="smokeCode"></pre>
+        </div>
+      </details>
+    </section>
+
+    <!-- 06 -->
+    <section class="step" id="console" data-step="console">
+      <div class="step-head"><span class="step-num">06</span><h2>Watch it run on the serial console</h2><label class="mark"><input type="checkbox" data-done="console"> Done</label></div>
+      <p>CircuitPython prints <code>print()</code> output and errors over USB serial. Connect to see what the effects code is doing, stop it with <kbd>Ctrl-C</kbd>, or reload with <kbd>Ctrl-D</kbd>.</p>
+      <div class="tool">
+        <div class="row">
+          <button class="go" id="serialConnect">Connect</button>
+          <button class="ghost" id="serialStop" disabled>Stop (Ctrl-C)</button>
+          <button class="ghost" id="serialReload" disabled>Reload (Ctrl-D)</button>
+          <button class="ghost" id="serialPins" disabled>List board pins</button>
+          <button class="ghost" id="serialBoot" disabled>Reboot to boot mode</button>
+          <button class="ghost" id="serialDisconnect" disabled>Disconnect</button>
+        </div>
+        <pre class="console" id="serialOut" aria-live="polite">Not connected. Pick the port named CircuitPython or "USB Serial" when the browser asks.
+</pre>
+        <form class="console-input" id="serialForm"><input id="serialLine" placeholder="Type a REPL line, e.g. print(board.board_id)" autocomplete="off" disabled><button id="serialSend" disabled>Send</button></form>
+      </div>
+      <details><summary>Without a browser serial port</summary><p style="margin-top: 8px;">Use the <a href="https://codewith.mu/" target="_blank" rel="noopener">Mu editor</a>'s Serial button, or <code>screen /dev/tty.usbmodem* 115200</code> on macOS, or PuTTY on Windows with the COM port from Device Manager.</p></details>
+    </section>
+
+    <!-- 07 -->
+    <section class="step" id="restore" data-step="restore">
+      <div class="step-head"><span class="step-num">07</span><h2>Go back to stock</h2><label class="mark"><input type="checkbox" data-done="restore"> Done</label></div>
+      <ol class="how">
+        <li>Unzip the TE firmware from step 02 so you have its <code>.uf2</code>.</li>
+        <li>Enter boot mode as in step 03. If the double-click doesn't bring up TING BOOT while CircuitPython is installed, squeeze the handle and use <b>Reboot to boot mode</b> in the step 06 console instead.</li>
+        <li>Flash that <code>.uf2</code> with the step 04 tool or by dragging it onto TING BOOT. The white LED turns on when the stock firmware starts.</li>
+        <li>When TING DISK appears again, copy your backed-up files back with the tool below or by hand.</li>
+      </ol>
+      <div class="tool">
+        <div class="row">
+          <label class="filebtn">Choose backup folder (unzipped)<input type="file" id="restoreInput" webkitdirectory multiple></label>
+          <button class="go" id="restoreBtn" disabled>Pick TING DISK and copy back</button>
+        </div>
+        <div class="status" id="restoreStatus">No backup folder chosen.</div>
+      </div>
+      <p>If the stock firmware freezes on a bad <code>config.json</code>, hold the white and grey buttons while it starts to get the disk back, then fix the file.</p>
+    </section>
+
+    <!-- !! -->
+    <section class="step" id="unknowns" data-step="unknowns">
+      <div class="step-head"><span class="step-num">!!</span><h2>Details we couldn't verify</h2></div>
+      <ul class="how uncertain">
+        <li><span class="tag">Drive names</span>Adafruit's guide says TING BOOT and TING DISK. TE's manual says FX-MIC BOOT and fx-mic disk, and their install notes accept either. TE changed the boot-mode name in 1.0.5, so expect either depending on your firmware.</li>
+        <li><span class="tag">Factory samples</span>We don't know whether reflashing stock firmware brings back the factory sounds by itself. TE's 1.0.7 notes say factory samples are no longer loaded after sleep, which suggests they live in firmware, but keep your backup either way.</li>
+        <li><span class="tag">Writing the .uf2</span>Chrome writes files through a temporary <code>.crswap</code> copy and then renames it. UF2 boot drives usually accept this because they read the data blocks and ignore the name, but this hasn't been tested on a Ting. If the device doesn't restart within a minute, drag the file instead.</li>
+        <li><span class="tag">Boot mode after flashing</span>TE's double-click gesture is likely handled by the RP2350's built-in boot ROM, so it should survive the switch to CircuitPython, but we haven't confirmed it. The console's Reboot to boot mode button is the backup route, and needs the handle squeezed so the Ting stays powered through the reset.</li>
+        <li><span class="tag">Full dump</span>The picotool flash dump in step 02 is untested on this device.</li>
+        <li><span class="tag">Standalone file</span>The saved .html copy should get drive and serial access when opened from disk in Chrome or Edge, since browsers treat local files as a secure context. If a button still reports it's blocked, serve the folder with <code>python3 -m http.server</code> and open <code>http://localhost:8000</code>.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <span>Sources: <a href="https://learn.adafruit.com/hacking-the-teenage-engineering-ep-2350-ting" target="_blank" rel="noopener">Adafruit, Hacking the EP-2350 Ting</a> · <a href="https://adafruit.github.io/TE_EP2350_Config_Tool/" target="_blank" rel="noopener">Adafruit config tool</a> · <a href="https://teenage.engineering/guides/ep-2350" target="_blank" rel="noopener">TE EP–2350 guide</a> · <a href="https://teenage.engineering/downloads/ep-2350" target="_blank" rel="noopener">TE downloads</a> · <a href="https://circuitpython.org/board/teenage_engineering_ep2350/" target="_blank" rel="noopener">circuitpython.org board page</a></span>
+  <span>Modifying the firmware is at your own risk and may affect your warranty.</span>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(() => {
+  const PAGE_SNAPSHOT = "<!doctype html>\n" + document.documentElement.outerHTML;
+  const $ = (id) => document.getElementById(id);
+  const inArtifact = !!(window.claude && window.claude.use);
+  const SKIP = /^(\.Trashes|\.fseventsd|\.Spotlight-V100|System Volume Information|\.TemporaryItems|\._.*|\.DS_Store)$/;
+
+  const SMOKE = `# Ting hardware smoke test for CircuitPython (EP-2350)
+# Squeeze the handle: white LEDs fill from the bottom.
+# Top / middle / bottom buttons: red LEDs 1 / 2 / 3.  Volume past half: red LED 4.
+#
+# board.POWER_HOLD (GP2) is driven high by CircuitPython at boot.
+# This file never touches it: driving it low powers the unit off.
+import time
+import board
+import digitalio
+import analogio
+
+HANDLE_REST = 32370      # approx. reading with the handle released
+HANDLE_SQUEEZED = 29850  # approx. reading fully squeezed
+
+
+def led(pin):
+    p = digitalio.DigitalInOut(pin)
+    p.switch_to_output(value=False)
+    return p
+
+
+def button(pin):
+    p = digitalio.DigitalInOut(pin)
+    p.switch_to_input(pull=digitalio.Pull.UP)
+    return p
+
+
+whites = [led(p) for p in (board.LED_WHITE1, board.LED_WHITE2, board.LED_WHITE3, board.LED_WHITE4)]
+reds = [led(p) for p in (board.LED_RED1, board.LED_RED2, board.LED_RED3, board.LED_RED4)]
+buttons = [button(p) for p in (board.BUTTON_TOP, board.BUTTON_MIDDLE, board.BUTTON_BOTTOM)]
+handle = analogio.AnalogIn(board.HANDLE_POSITION)
+volume = analogio.AnalogIn(board.VOLUME)
+
+print("Ting smoke test running")
+for p in whites + reds:
+    p.value = True
+    time.sleep(0.08)
+    p.value = False
+
+last = None
+while True:
+    squeeze = (HANDLE_REST - handle.value) / (HANDLE_REST - HANDLE_SQUEEZED)
+    squeeze = max(0.0, min(1.0, squeeze))
+    lit = round(squeeze * 4)
+    for i, p in enumerate(whites):
+        p.value = i >= 4 - lit  # LED 1 is the top, so fill from LED 4 upward
+    pressed = [not b.value for b in buttons]  # pressed pulls the pin low
+    for i, is_down in enumerate(pressed):
+        reds[i].value = is_down
+    loud = volume.value > 32768
+    reds[3].value = loud
+
+    state = (lit, tuple(pressed), loud)
+    if state != last:
+        print("squeeze %3d%%  buttons top/mid/bot %s  volume>half %s"
+              % (squeeze * 100, pressed, loud))
+        last = state
+    time.sleep(0.02)
+`;
+  $("smokeCode").textContent = SMOKE;
+
+  // ---------- progress ----------
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem("ting-bench:" + k)); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem("ting-bench:" + k, JSON.stringify(v)); } catch (e) {} }
+  };
+  const done = store.get("done") || {};
+  function paintRail() {
+    document.querySelectorAll("#railList a").forEach(a => {
+      a.classList.toggle("done", !!done[a.getAttribute("href").slice(1)]);
+    });
+  }
+  document.querySelectorAll("[data-done]").forEach(cb => {
+    cb.checked = !!done[cb.dataset.done];
+    cb.addEventListener("change", () => { done[cb.dataset.done] = cb.checked; store.set("done", done); paintRail(); });
+  });
+  function markDone(k) {
+    done[k] = true; store.set("done", done); paintRail();
+    const cb = document.querySelector(`[data-done="${k}"]`); if (cb) cb.checked = true;
+  }
+  paintRail();
+  if (done.backup) setChip("chipBackup", "yes", true);
+
+  // ---------- helpers ----------
+  function setChip(id, text, ok) { const c = $(id); c.textContent = text; c.className = "chip " + (ok ? "ok" : "no"); }
+  function status(id, text, kind) { const s = $(id); s.textContent = text; s.className = "status" + (kind ? " " + kind : ""); }
+  function fmtBytes(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(2) + " MB"; }
+  function today() { return new Date().toISOString().slice(0, 10); }
+
+  let blocked = false;
+  function showBlocked() {
+    blocked = true;
+    $("frameNote").hidden = false;
+    setChip("chipFs", "blocked here", false);
+  }
+  function isBlockError(e) {
+    return e && (e.name === "SecurityError" || e.name === "NotAllowedError" && /cross.origin|sub.?frame|permissions policy/i.test(e.message || ""));
+  }
+
+  const hasFs = "showDirectoryPicker" in window;
+  const hasSerial = "serial" in navigator;
+  let framed = false; try { framed = window.top !== window.self; } catch (e) { framed = true; }
+  if (!hasFs) setChip("chipFs", "not in this browser", false);
+  else if (framed) { setChip("chipFs", "blocked here", false); showBlocked(); }
+  else setChip("chipFs", "ready", true);
+  if (!hasSerial) setChip("chipSerial", "not in this browser", false);
+  else if (framed) setChip("chipSerial", "blocked here", false);
+  else setChip("chipSerial", "ready", true);
+  if (framed) $("frameNote").hidden = false;
+
+  async function pickDir(mode, statusId) {
+    if (!hasFs) { status(statusId, "This browser can't open drives. Use Chrome or Edge on a computer, or follow the manual steps.", "bad"); return null; }
+    try { return await window.showDirectoryPicker({ mode }); }
+    catch (e) {
+      if (e.name === "AbortError") { status(statusId, "Cancelled."); return null; }
+      if (isBlockError(e) || framed) { showBlocked(); status(statusId, "Drive access is blocked in this view. Save the standalone flasher above, or use the manual steps.", "bad"); return null; }
+      status(statusId, "Couldn't open the drive: " + e.message, "bad"); return null;
+    }
+  }
+
+  async function walk(dir, prefix, out) {
+    for await (const [name, h] of dir.entries()) {
+      if (SKIP.test(name)) continue;
+      if (h.kind === "file") out.push({ path: prefix + name, file: await h.getFile() });
+      else await walk(h, prefix + name + "/", out);
+    }
+    return out;
+  }
+
+  async function writeFile(root, path, data) {
+    const parts = path.split("/").filter(Boolean);
+    let dir = root;
+    for (const p of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(p, { create: true });
+    const fh = await dir.getFileHandle(parts[parts.length - 1], { create: true });
+    const w = await fh.createWritable();
+    await w.write(data);
+    await w.close();
+  }
+
+  async function tryRead(dir, name) {
+    try { return await (await (await dir.getFileHandle(name)).getFile()).text(); } catch (e) { return null; }
+  }
+
+  async function offerFile(filename, data, statusId) {
+    if (inArtifact) {
+      try {
+        const dl = await window.claude.use("downloads");
+        if (!dl) throw { code: "unavailable" };
+        await dl.save({ filename, data });
+        status(statusId, "Saved " + filename + ".", "ok"); return true;
+      } catch (e) {
+        status(statusId, e.code === "declined" ? "Save cancelled." : "Saving isn't available in this view (" + (e.code || e.message) + ").", "bad"); return false;
+      }
+    }
+    const blob = data instanceof Blob ? data : new Blob([data]);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    status(statusId, "Saved " + filename + ".", "ok"); return true;
+  }
+
+  // ---------- standalone ----------
+  $("saveStandalone").addEventListener("click", () => offerFile("ting-flash-bench.html", PAGE_SNAPSHOT, "standaloneStatus"));
+
+  // ---------- 01 backup ----------
+  let backupFiles = [];
+  function showBackup(files, sourceName) {
+    backupFiles = files;
+    const tb = $("backupTable"); tb.textContent = "";
+    let total = 0;
+    files.sort((a, b) => a.path.localeCompare(b.path)).forEach(f => {
+      total += f.file.size;
+      const tr = document.createElement("tr");
+      const a = document.createElement("td"); a.textContent = f.path;
+      const b = document.createElement("td"); b.className = "num"; b.textContent = fmtBytes(f.file.size);
+      tr.append(a, b); tb.append(tr);
+    });
+    $("backupTableBox").hidden = files.length === 0;
+    $("backupSave").disabled = files.length === 0;
+    status("backupStatus", files.length ? `Read ${files.length} files (${fmtBytes(total)}) from ${sourceName}.` : "That folder is empty. Check you picked the Ting's drive.", files.length ? "ok" : "bad");
+  }
+  $("backupPick").addEventListener("click", async () => {
+    const dir = await pickDir("read", "backupStatus"); if (!dir) return;
+    status("backupStatus", "Reading " + dir.name + "…");
+    try { showBackup(await walk(dir, "", []), dir.name); }
+    catch (e) { status("backupStatus", "Couldn't read the drive: " + e.message, "bad"); }
+  });
+  $("backupInput").addEventListener("change", (ev) => {
+    const list = Array.from(ev.target.files);
+    if (!list.length) return;
+    const root = list[0].webkitRelativePath.split("/")[0];
+    const files = list
+      .map(f => ({ path: f.webkitRelativePath.split("/").slice(1).join("/") || f.name, file: f }))
+      .filter(f => !f.path.split("/").some(seg => SKIP.test(seg)));
+    showBackup(files, root);
+  });
+  $("backupSave").addEventListener("click", async () => {
+    if (!window.JSZip) { status("backupStatus", "The zip library didn't load. Check your connection, or copy the files by hand.", "bad"); return; }
+    status("backupStatus", "Building zip…");
+    const zip = new JSZip();
+    const manifest = [`Ting disk backup, ${new Date().toISOString()}`, ""];
+    for (const f of backupFiles) { zip.file(f.path, f.file); manifest.push(`${f.path}\t${f.file.size}`); }
+    zip.file("BACKUP-MANIFEST.txt", manifest.join("\n"));
+    const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
+    if (await offerFile(`ting-disk-backup-${today()}.zip`, blob, "backupStatus")) {
+      store.set("backupAt", Date.now()); setChip("chipBackup", "yes", true); markDone("backup");
+    }
+  });
+
+  // ---------- 04 flash ----------
+  const FAMILIES = { 0xe48bff56: "RP2040", 0xe48bff57: "RP2350 (absolute)", 0xe48bff58: "RP2350 data", 0xe48bff59: "RP2350 Arm secure", 0xe48bff5a: "RP2350 RISC-V", 0xe48bff5b: "RP2350 Arm non-secure" };
+  let uf2 = null;
+  $("uf2Input").addEventListener("change", async (ev) => {
+    const f = ev.target.files[0]; uf2 = null; $("uf2Flash").disabled = true;
+    if (!f) return;
+    const buf = new Uint8Array(await f.arrayBuffer());
+    if (buf.length < 512 || buf.length % 512) { status("uf2Status", f.name + " isn't a UF2 file (size isn't a multiple of 512 bytes). If you downloaded a zip, unzip it first.", "bad"); return; }
+    const dv = new DataView(buf.buffer);
+    if (dv.getUint32(0, true) !== 0x0A324655 || dv.getUint32(4, true) !== 0x9E5D5157) { status("uf2Status", f.name + " doesn't have UF2 headers. If you downloaded a zip, unzip it first.", "bad"); return; }
+    const flags = dv.getUint32(8, true);
+    const fam = (flags & 0x2000) ? dv.getUint32(28, true) : null;
+    const famName = fam === null ? "no family ID" : (FAMILIES[fam] || "unknown family 0x" + fam.toString(16));
+    const blocks = buf.length / 512;
+    if (fam === 0xe48bff56) { status("uf2Status", `${f.name} is built for the RP2040, not the Ting's RP2350. Download the teenage_engineering_ep2350 build.`, "bad"); return; }
+    uf2 = f;
+    $("uf2Flash").disabled = false;
+    status("uf2Status", `${f.name} · ${fmtBytes(f.size)} · ${blocks} blocks · ${famName}. Put the Ting in boot mode, then pick its drive.`, "ok");
+  });
+  $("uf2Flash").addEventListener("click", async () => {
+    if (!uf2) return;
+    const dir = await pickDir("readwrite", "uf2Status"); if (!dir) return;
+    const info = await tryRead(dir, "INFO_UF2.TXT");
+    if (info === null) { status("uf2Status", `"${dir.name}" has no INFO_UF2.TXT, so it isn't the boot drive. Redo step 03 and pick TING BOOT.`, "bad"); return; }
+    $("infoUf2").hidden = false; $("infoUf2").textContent = "INFO_UF2.TXT on " + dir.name + "\n" + info.trim();
+    status("uf2Status", "Writing " + uf2.name + "… keep squeezing the handle.");
+    try {
+      await writeFile(dir, uf2.name, uf2);
+      status("uf2Status", "Copied. The Ting should restart and mount CIRCUITPY (or TING DISK for stock firmware) within a few seconds.", "ok");
+      markDone("flash");
+    } catch (e) {
+      // The bootloader often reboots before the browser finishes closing the file.
+      status("uf2Status", "The browser lost the drive during the write (" + e.name + "). That usually means the Ting rebooted after flashing. If CIRCUITPY doesn't appear within a minute, drag the file onto TING BOOT instead.", "bad");
+    }
+  });
+
+  // ---------- 05 install ----------
+  // The fx-mic-mod files are served next to this page in firmware/. code.py goes last,
+  // so CircuitPython's auto-reload starts it with everything else already in place.
+  const FIRMWARE = ["config_loader.py", "autotune.py", "recorder.py", "config.json", "boot.py", "code.py"];
+  const DRIVER = "adafruit_nau88l21.mpy";
+  let driverFile = null;
+  $("libInput").addEventListener("change", (ev) => {
+    const list = Array.from(ev.target.files);
+    driverFile = list.find(f => f.name === DRIVER) || null;
+    if (driverFile) status("codeStatus", `Found ${DRIVER} (${fmtBytes(driverFile.size)}). Now pick CIRCUITPY.`, "ok");
+    else status("codeStatus", `That folder has no ${DRIVER}. Choose the lib folder inside the unzipped 10.x bundle.`, "bad");
+  });
+  async function hasFile(dir, path) {
+    try {
+      const parts = path.split("/"); let d = dir;
+      for (const p of parts.slice(0, -1)) d = await d.getDirectoryHandle(p);
+      await d.getFileHandle(parts[parts.length - 1]); return true;
+    } catch (e) { return false; }
+  }
+  $("installBtn").addEventListener("click", async () => {
+    let files;
+    try {
+      files = await Promise.all(FIRMWARE.map(async (name) => {
+        const r = await fetch("firmware/" + name, { cache: "no-store" });
+        if (!r.ok) throw new Error(name + " (" + r.status + ")");
+        return { name, data: await r.blob() };
+      }));
+    } catch (e) {
+      status("codeStatus", "Couldn't load the firmware files from this site: " + e.message + ". Use the hand install below.", "bad"); return;
+    }
+    const dir = await pickDir("readwrite", "codeStatus"); if (!dir) return;
+    const bootOut = await tryRead(dir, "boot_out.txt");
+    if (bootOut === null) { status("codeStatus", `"${dir.name}" has no boot_out.txt, so it doesn't look like CIRCUITPY. Pick the drive that appeared after flashing.`, "bad"); return; }
+    $("bootOut").hidden = false; $("bootOut").textContent = "boot_out.txt\n" + bootOut.trim();
+    const m = /CircuitPython (\d+)\./.exec(bootOut);
+    if (m && m[1] !== "10") { status("codeStatus", `This Ting runs CircuitPython ${m[1]}. fx-mic-mod and the driver bundle need 10.x. Flash 10.x in step 04 first.`, "bad"); return; }
+    const haveDriver = await hasFile(dir, "lib/" + DRIVER);
+    if (!driverFile && !haveDriver) { status("codeStatus", `CIRCUITPY has no lib/${DRIVER}. Choose the bundle's lib folder first (step 1 above).`, "bad"); return; }
+    const keepConfig = $("keepConfig").checked && await hasFile(dir, "config.json");
+    try {
+      let n = 0; const total = files.length + (driverFile ? 1 : 0);
+      if (driverFile) { await writeFile(dir, "lib/" + DRIVER, driverFile); status("codeStatus", `Copying… ${++n}/${total}`); }
+      for (const f of files) {
+        if (f.name === "config.json" && keepConfig) { n++; continue; }
+        if (f.name === "code.py" && $("keepOld").checked) {
+          const old = await tryRead(dir, "code.py");
+          if (old !== null) await writeFile(dir, "code_prev.py", old);
+        }
+        await writeFile(dir, f.name, f.data);
+        status("codeStatus", `Copying… ${++n}/${total}`);
+      }
+      status("codeStatus", "Installed" + (keepConfig ? " (your config.json was kept)" : "") + ". Turn the Ting off and on again to finish. Open the serial console below to watch it start.", "ok");
+      markDone("install");
+    } catch (e) {
+      status("codeStatus", "The Ting didn't accept the files (" + e.message + "). If fx-mic-mod is already installed, the drive is read-only: turn the Ting off, hold the orange button while you power it on, and try again. If CIRCUITPY is full, delete old files from lib/ first.", "bad");
+    }
+  });
+
+  $("copySmoke").addEventListener("click", () => {
+    navigator.clipboard.writeText(SMOKE).then(
+      () => status("smokeStatus", "Copied. Paste it into CIRCUITPY/code.py.", "ok"),
+      () => { const r = document.createRange(); r.selectNodeContents($("smokeCode")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); status("smokeStatus", "Selected. Press Ctrl-C or Cmd-C to copy."); }
+    );
+  });
+  if (!inArtifact) { $("saveSmoke").hidden = false; $("saveSmoke").addEventListener("click", () => offerFile("code.py", SMOKE, "smokeStatus")); }
+
+  // ---------- 06 serial ----------
+  let port = null, reader = null, writer = null;
+  const out = $("serialOut");
+  function log(t) { out.textContent += t; if (out.textContent.length > 60000) out.textContent = out.textContent.slice(-40000); out.scrollTop = out.scrollHeight; }
+  function serialUi(on) {
+    ["serialStop", "serialReload", "serialPins", "serialBoot", "serialDisconnect", "serialLine", "serialSend"].forEach(id => $(id).disabled = !on);
+    $("serialConnect").disabled = on;
+  }
+  async function send(t) { if (writer) await writer.write(new TextEncoder().encode(t)); }
+  $("serialConnect").addEventListener("click", async () => {
+    if (!hasSerial) { log("\nThis browser has no Web Serial. Use Chrome or Edge, or Mu / screen / PuTTY.\n"); return; }
+    try {
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
+    } catch (e) {
+      if (e.name === "NotFoundError") { log("\nNo port chosen.\n"); return; }
+      if (e.name === "SecurityError" || framed) { setChip("chipSerial", "blocked here", false); showBlocked(); log("\nSerial access is blocked in this view. Save the standalone flasher and open it in Chrome or Edge.\n"); return; }
+      log("\nCouldn't open the port: " + e.message + "\n"); return;
+    }
+    writer = port.writable.getWriter();
+    serialUi(true); out.textContent = ""; log("Connected.\n"); markDone("console");
+    const dec = new TextDecoder();
+    try {
+      while (port.readable) {
+        reader = port.readable.getReader();
+        try {
+          for (;;) { const { value, done } = await reader.read(); if (done) break; log(dec.decode(value, { stream: true })); }
+        } finally { reader.releaseLock(); reader = null; }
+      }
+    } catch (e) { log("\n[disconnected: " + e.message + "]\n"); }
+    serialUi(false);
+  });
+  $("serialStop").addEventListener("click", () => send("\x03"));
+  $("serialReload").addEventListener("click", () => send("\x04"));
+  $("serialPins").addEventListener("click", () => send("\x03\r\nimport board; print(sorted(dir(board)))\r\n"));
+  // Keep the handle squeezed: the reset releases POWER_HOLD until the boot ROM takes over.
+  $("serialBoot").addEventListener("click", () => send("\x03\r\nimport microcontroller; microcontroller.on_next_reset(microcontroller.RunMode.BOOTLOADER); microcontroller.reset()\r\n"));
+  $("serialForm").addEventListener("submit", (ev) => { ev.preventDefault(); const v = $("serialLine").value; $("serialLine").value = ""; send(v + "\r\n"); });
+  $("serialDisconnect").addEventListener("click", async () => {
+    try { if (reader) await reader.cancel(); } catch (e) {}
+    try { if (writer) { writer.releaseLock(); writer = null; } } catch (e) {}
+    try { if (port) await port.close(); } catch (e) {}
+    port = null; serialUi(false); log("\nDisconnected.\n");
+  });
+
+  // ---------- 07 restore ----------
+  let restoreFiles = [];
+  $("restoreInput").addEventListener("change", (ev) => {
+    const list = Array.from(ev.target.files);
+    restoreFiles = list.map(f => ({ path: f.webkitRelativePath.split("/").slice(1).join("/") || f.name, file: f }))
+      .filter(f => f.path !== "BACKUP-MANIFEST.txt" && !f.path.split("/").some(seg => SKIP.test(seg)));
+    $("restoreBtn").disabled = !restoreFiles.length;
+    status("restoreStatus", restoreFiles.length ? `${restoreFiles.length} files ready to copy back.` : "That folder is empty.", restoreFiles.length ? "ok" : "bad");
+  });
+  $("restoreBtn").addEventListener("click", async () => {
+    const dir = await pickDir("readwrite", "restoreStatus"); if (!dir) return;
+    if (await tryRead(dir, "boot_out.txt") !== null) { status("restoreStatus", `"${dir.name}" is still CIRCUITPY. Flash the stock .uf2 first.`, "bad"); return; }
+    try {
+      let n = 0;
+      for (const f of restoreFiles) { await writeFile(dir, f.path, f.file); status("restoreStatus", `Copying… ${++n}/${restoreFiles.length}`); }
+      status("restoreStatus", "Restored. Eject the drive so the Ting reloads its samples and settings.", "ok");
+      markDone("restore");
+    } catch (e) { status("restoreStatus", "Write failed: " + e.message, "bad"); }
+  });
+})();
+</script>
+
+</body></html>
