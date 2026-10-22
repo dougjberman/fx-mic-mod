@@ -1,6 +1,6 @@
 # fx-mic-mod
 
-Custom CircuitPython firmware for the Teenage Engineering EP-2350 "ting" mic: stackable effects
+Custom CircuitPython firmware for the Teenage Engineering EP-2350 "Ting" / FX Mic: stackable effects
 (autotune, distortion, reverb, delay, chorus, phaser, pitch shift, filters) plus on-device
 sample recording, with a friendly web editor for the presets.
 
