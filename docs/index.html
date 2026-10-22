@@ -168,6 +168,11 @@ code{font-family:var(--f-mono);font-size:.92em}
 .facts{display:grid;gap:12px}
 .facts div{border-left:3px solid var(--accent);padding-left:12px}
 .facts p{font-size:15px;color:var(--muted)}
+.modes>div{display:grid;gap:6px}
+.modes b{font-family:var(--f-display);font-size:18px}
+.modes .how{margin:0;display:flex;align-items:center;gap:8px;font-style:italic;font-weight:600;color:var(--ink)}
+.modes .how .key{width:16px;height:16px;flex:none;border-radius:50%;border:1px solid var(--accent);display:inline-block}
+.modes ul{margin:0;padding-left:18px;display:grid;gap:4px;font-size:15px;color:var(--muted)}
 footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -367,18 +372,18 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
       <article class="step">
         <span class="num">STEP 2 · ANY TIME</span>
         <h3>Design your presets</h3>
-        <p class="when">The editor only changes your presets. The firmware stays as it is.</p>
+        <p class="when">With the fx-mic-mod installed, set up your new toy.</p>
         <ul>
-          <li>Build up to four effect chains, with autotune first if you want it</li>
-          <li>Hear them live through your computer's mic</li>
-          <li>Save <code>config.json</code> to the mic</li>
+          <li>Build your autotune and effects chains using the web UI</li>
+          <li>Try them live using your computer's mic</li>
+          <li>Save the <code>config.json</code> file to the mic</li>
         </ul>
         <a class="btn" href="editor.html">Preset Editor</a>
       </article>
       <article class="step">
         <span class="num">STEP 3</span>
         <h3>Sing, play and record</h3>
-        <p class="when">Unplug it, or leave it on USB power.</p>
+        <p class="when">Play time begins.</p>
         <ul>
           <li>Step through your presets with the orange button</li>
           <li>Squeeze the handle and sing</li>
@@ -402,10 +407,24 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
     </div>
     <div style="display:grid;gap:14px">
       <h2>Saving files to the mic</h2>
-      <div class="facts">
-        <div><b>Normal power-on: the mic can save</b><p>Recording works, and your computer sees the mic's drive as read-only.</p></div>
-        <div><b>Hold orange while you power on: your computer can save</b><p>Use this edit mode to save presets from the editor or copy WAV files over. The red lights flash in record mode to show recording is off until you power on normally again.</p></div>
-        <div><b>A take replaces that slot's sample</b><p>Copy a sample to your computer first if you want to keep it.</p></div>
+      <div class="facts modes">
+        <div>
+          <b>Mic recording enabled (Normal mode)</b>
+          <p class="how">Normal power-on</p>
+          <ul>
+            <li>Samples can be recorded through the mic</li>
+            <li>If connected, your computer sees the mic drive as read-only</li>
+            <li>Samples can be copied from the mic drive to the computer if you want to keep them</li>
+          </ul>
+        </div>
+        <div>
+          <b>Computer-edit mode</b>
+          <p class="how"><span class="key orange" aria-hidden="true"></span>Hold orange when powering on</p>
+          <ul>
+            <li>Use this edit mode to load presets from the editor or copy WAV files over</li>
+            <li>Note: the red lights will flash in record mode to show recording is off until you power the mic on normally again</li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>

@@ -82,7 +82,7 @@ a{color:var(--accent)}
 .slider label{font-size:14px;font-weight:600}
 .slider .ends{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;margin-top:-2px}
 .slider .val{font-family:var(--f-mono);font-size:13px;text-align:right;color:var(--muted)}
-input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0}
+input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;display:block}
 @media (max-width:560px){.slider{grid-template-columns:minmax(0,1fr) 64px}.slider label{grid-column:1/-1}}
 
 /* preset slots, styled after the red LEDs */
@@ -156,10 +156,16 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 .tryit{position:sticky;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:5;display:grid;gap:12px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
 .tryit .readout{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
 .tryit .readout b{color:var(--ink);font-family:var(--f-mono);font-weight:500}
-.talk{border:2px solid var(--accent);background:transparent;color:var(--accent);border-radius:999px;padding:8px 18px;font-weight:700;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+.talk{border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:999px;padding:7px 14px;font-size:14px;font-weight:600;min-width:112px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
 .talk[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
-.tryit .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}
-@media (max-width:760px){.tryit{position:static}.tryit .grid2{grid-template-columns:1fr}}
+.tryit .head{justify-content:space-between}
+.tryit .head .row{gap:6px 14px}
+.tryit .controls{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:10px 28px;align-items:center;padding-top:12px;border-top:1px solid var(--line)}
+.tryit .controls[hidden]{display:none}
+.tryit .talkbox{display:flex;align-items:center;gap:10px}
+.tryit .slider{grid-template-columns:62px minmax(0,1fr) 44px;gap:10px}
+.tryit .readout{grid-column:1/-1}
+@media (max-width:760px){.tryit{position:static}.tryit .controls{grid-template-columns:1fr}.tryit .slider{grid-template-columns:62px minmax(0,1fr) 44px}.tryit .slider label{grid-column:auto}}
 /* how-to strip */
 .howto{display:grid;gap:12px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;background:var(--panel);padding:16px 18px}
 .howto ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
@@ -218,7 +224,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <div id="notice" class="notice" hidden></div>
 
   <section class="panel tryit" id="tryit" aria-label="Try it">
-    <div class="row spread">
+    <div class="row head">
       <div class="row"><h2>Try it on your computer</h2><span class="small muted" id="try-status">Use headphones, or the speakers will feed back into the mic.</span></div>
       <div class="row">
         <button class="btn primary" id="try-mic">Use my mic</button>
@@ -226,8 +232,8 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
         <button class="btn ghost" id="try-stop" hidden>Stop</button>
       </div>
     </div>
-    <div id="try-controls" class="grid2" hidden>
-      <div class="row">
+    <div id="try-controls" class="controls" hidden>
+      <div class="talkbox">
         <button class="talk" id="try-talk" aria-pressed="true" title="Like squeezing the handle on the mic. Space bar works too.">Mic open</button>
         <span class="small muted">Space = squeeze</span>
       </div>
@@ -888,7 +894,7 @@ $("#try-talk").addEventListener("click", ()=>{ tryState.open = !tryState.open; t
 function isTyping(t){ return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t && t.isContentEditable); }
 document.addEventListener("keydown", e=>{ if (e.code==="Space" && tryState.running && !isTyping(e.target) && !(e.target instanceof HTMLButtonElement)){ e.preventDefault(); if (!tryState.held){ tryState.held=true; trySend({g:tryG()}); tryRender(); } } });
 document.addEventListener("keyup", e=>{ if (e.code==="Space" && tryState.held){ tryState.held=false; trySend({g:tryG()}); tryRender(); } });
-$("#try-squeeze-slot").append(sliderEl({label:"Squeeze",min:0,max:1,step:.01,ends:["Rest","Full"]}, 0, v=>{ tryState.squeeze=v; trySend({g:tryG()}); }));
+$("#try-squeeze-slot").append(sliderEl({label:"Squeeze",min:0,max:1,step:.01,}, 0, v=>{ tryState.squeeze=v; trySend({g:tryG()}); }));
 $("#try-level-slot").append(sliderEl({label:"Volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }));
 
 function setHowto(show){ $("#howto").hidden=!show; $("#howto-show").hidden=show; try { localStorage.setItem(KEY+"-howto", show?"1":"0"); } catch(e){} }
