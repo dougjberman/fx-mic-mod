@@ -1,8 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tim Cocks for Adafruit Industries
+# SPDX-FileCopyrightText: Copyright (c) 2026 fx-mic-mod contributors
 #
 # SPDX-License-Identifier: MIT
 """
 EP-2350 CircuitPython Demo: mic -> headphone passthrough with JSON-configured effect chains.
+
+fx-mic-mod fork of Adafruit's demo, adding:
+
+* an ``"autotune"`` effect. A preset that has one runs autotune first and its
+  other effects after it (see autotune.py and config_loader.create_preset).
+* a record mode, one spot past the last preset, for recording samples on the
+  device (see recorder.py and boot.py).
 
 Up to four presets are used (one per red LED). Only one chain exists at a time:
 switching tears the old chain down and builds the new one.
@@ -26,8 +34,17 @@ Controls:
                         LEDs.
 * BOTTOM side button -- plays the current sample wave file with any effects
                         configured for it.
-* TOP + MIDDLE, held together for 500ms -- shuts the unit down by driving
+* TOP + MIDDLE, held together for 800ms -- shuts the unit down by driving
                         POWER_HOLD low.
+
+Record mode (TOP past the last preset):
+
+* All four red LEDs light and the selected sample's white LED blinks.
+* MIDDLE picks the slot to record into, BOTTOM plays it back as usual.
+* Hold the handle to record, release to stop and save over the slot's file.
+  The red LEDs count the time left down from 4 to 0; at 0 the take stops.
+* Needs the drive writable by CircuitPython (the default, see boot.py). In
+  edit mode (TOP held at power-on) the red LEDs flash and nothing records.
 
 Indication:
 
@@ -40,6 +57,7 @@ Indication:
 
 import gc
 import json
+import os
 import time
 
 import analogio
@@ -51,10 +69,13 @@ import board
 import digitalio
 import keypad
 
+import storage
 import synthio
 
 import adafruit_nau88l21
-from config_loader import create_effects, load_samples
+from autotune import Autotune
+from config_loader import create_effects, create_preset, is_autotune, load_samples
+from recorder import Recorder
 
 RATE = 16000  # frame rate on the wire; also what the codec's FLL expects
 
@@ -103,6 +124,18 @@ HANDLE_IN_COUNTS = 29850  # squeezed fully in
 HANDLE_SAMPLES = 16
 HANDLE_SMOOTHING = 0.25
 
+# --- Record mode ---
+
+# Longest take, in seconds. Held in RAM (32 KB per second at 16 kHz) and
+# written to flash after the take, so it is bounded by free memory.
+RECORD_SECONDS = 4
+# How fast the selected white LED blinks in record mode, in seconds per toggle.
+RECORD_BLINK_SECONDS = 0.25
+
+# The paddle switch bounces and its click reaches the mic; the mic gate (and
+# the start of a take) waits this long after a paddle change.
+PADDLE_SETTLE_SECONDS = 0.1
+
 # DC-blocking high-pass corner, Hz. Applied in the codec's ADC path (see the
 # codec.configure_adc_highpass() call below)
 HPF_HZ = 120
@@ -116,6 +149,11 @@ FORMAT = {
     "samples_signed": True,
     "channel_count": 1,
 }
+
+# Autotune hands the chain 256-sample blocks (16 ms), so presets that use it
+# build their effects with a matching 512-byte buffer. Untested on the device
+# against Adafruit's 1024; see NOTES.md.
+AUTOTUNE_FORMAT = dict(FORMAT, buffer_size=512)
 
 
 # --- Mutable state container ---
@@ -132,7 +170,12 @@ class DataContext:
         # The effects making up the currently active preset, in signal-flow
         # order. Empty on the clean spot.
         self.chain = []
-        # Index into the cycle: 0 == clean, 1..len(PRESETS) == that preset.
+        # The preset's autotune stage, heading the chain, or None.
+        self.tune = None
+        # The sample recorder while in record mode, else None.
+        self.recorder = None
+        # Index into the cycle: 0 == clean, 1..len(PRESETS) == that preset,
+        # RECORD_SPOT == record mode.
         self.active = 0
 
         # Active white LED, 1..4 (top to bottom).
@@ -174,6 +217,12 @@ class DataContext:
 
         # True == paddle squeezed.
         self.paddle_held = False
+        # `time.monotonic()` of the last paddle change still waiting to be
+        # acted on after PADDLE_SETTLE_SECONDS, or None.
+        self.paddle_changed = None
+        # Blink phase of the white LED in record mode.
+        self.blink_on = True
+        self.blink_since = 0.0
 
 
 # --- Preset config ---
@@ -209,6 +258,12 @@ PRESETS = list(CONFIG.get("presets", ())[:MAX_PRESETS])
 # One wave file per white LED slot, each with a playmode telling the BOTTOM
 # button how to play it back. See config_loader.load_samples().
 SAMPLES = load_samples(CONFIG, max_samples=MAX_SAMPLES)
+
+# The cycle position of record mode: one past the last preset.
+RECORD_SPOT = len(PRESETS) + 1
+
+# Whether the code may write the drive (boot.py decides at power-on).
+CAN_RECORD = not storage.getmount("/").readonly
 
 # --- Codec + audio bring-up ---
 
@@ -265,6 +320,14 @@ def teardown(ctx):
     for _effect in ctx.chain:
         _effect.deinit()
     ctx.chain = []
+    if ctx.tune is not None:
+        if ctx.tune.shifter is not None:
+            ctx.tune.shifter.deinit()
+        ctx.tune.feed.deinit()
+        ctx.tune = None
+    if ctx.recorder is not None:
+        ctx.recorder.deinit()
+        ctx.recorder = None
     gc.collect()
 
 
@@ -293,17 +356,39 @@ def build(ctx, preset):
         return
 
     # Build first: a config error or an out-of-memory here must not leave a
-    # half-wired graph running. create_effects() builds without wiring, which
+    # half-wired graph running. create_preset() builds without wiring, which
     # is what lets the wiring below run output-first.
-    ctx.chain = create_effects(preset, blocks={"handle": handle_control}, **FORMAT)
-    if not ctx.chain:
-        mixer.voice[0].play(mic, loop=True)
-        return
+    specs = preset.get("list", ())
+    fmt = AUTOTUNE_FORMAT if any(is_autotune(spec) for spec in specs) else FORMAT
+    tune_args, ctx.chain = create_preset(
+        preset, blocks={"handle": handle_control}, **fmt
+    )
 
-    mixer.voice[0].play(ctx.chain[-1], loop=True)
-    for index in range(len(ctx.chain) - 1, 0, -1):
-        ctx.chain[index].play(ctx.chain[index - 1])
-    ctx.chain[0].play(mic)
+    if tune_args is not None:
+        # Autotune reads the mic itself, so it, not the mic, heads the chain.
+        # Python reads speed / humanize each block; "$handle" is offered to
+        # them as the raw handle position, since a synthio Math block only
+        # updates while an effect ticks it.
+        for name in ("speed", "humanize"):
+            if tune_args.get(name) is handle_control:
+                tune_args[name] = handle_value
+        ctx.tune = Autotune(mic, fmt, **tune_args)
+        source = ctx.tune.output
+    else:
+        source = mic
+
+    if not ctx.chain:
+        mixer.voice[0].play(source, loop=True)
+    else:
+        mixer.voice[0].play(ctx.chain[-1], loop=True)
+        for index in range(len(ctx.chain) - 1, 0, -1):
+            ctx.chain[index].play(ctx.chain[index - 1])
+        ctx.chain[0].play(source, loop=ctx.tune is not None)
+
+    # Same rule as handing the mic over last: the feed into the shifter is
+    # wired once everything downstream is.
+    if ctx.tune is not None:
+        ctx.tune.start()
 
 
 def select_preset(ctx, index):
@@ -323,7 +408,10 @@ def select_preset(ctx, index):
 
     ctx.active = index
     try:
-        build(ctx, PRESETS[index - 1] if index else [])
+        if index == RECORD_SPOT:
+            enter_record_mode(ctx)
+        else:
+            build(ctx, PRESETS[index - 1] if index else [])
     except (ValueError, MemoryError) as error:
         print("preset {} failed: {}".format(index, error))
         teardown(ctx)
@@ -331,12 +419,67 @@ def select_preset(ctx, index):
         build(ctx, [])
 
     update_red_leds(ctx)
-    print(
-        "preset {} of {} ({} effects), {} bytes free".format(
-            ctx.active, len(PRESETS), len(ctx.chain), gc.mem_free()
+    update_white_leds(ctx)
+    if ctx.active == RECORD_SPOT:
+        print("record mode, {} bytes free".format(gc.mem_free()))
+    else:
+        print(
+            "preset {} of {} ({} effects{}), {} bytes free".format(
+                ctx.active,
+                len(PRESETS),
+                len(ctx.chain),
+                ", autotune via " + ctx.tune.shifter_name if ctx.tune else "",
+                gc.mem_free(),
+            )
         )
-    )
     codec.dac_soft_mute = muted
+
+
+# --- Record mode ---
+
+
+def enter_record_mode(ctx):
+    """Set up record mode: nothing plays on mixer voice 0, the mic is free.
+
+    Only one consumer can read the I2SIn, so the mic is left unwired here and
+    the recorder calls ``mic.record()`` itself while the paddle is held.
+    """
+    ctx.chain = []
+    if CAN_RECORD:
+        ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE)
+    else:
+        print("record mode: drive is read-only (edit mode), recording is off")
+    ctx.blink_on = True
+    ctx.blink_since = time.monotonic()
+
+
+def save_take(ctx):
+    """Write the finished take over the selected slot's file, then reload it."""
+    sample = sample_for_slot(ctx.white_active)
+    path = "/{}".format(sample["file"])
+    # The slot's WaveFile holds the file open; release it before replacing it.
+    unload_wave_sample(ctx)
+    for _led in red_leds:
+        _led.value = False
+    try:
+        frames = ctx.recorder.save(path)
+        print("saved {} ({:.2f} s)".format(path, frames / RATE))
+    except OSError as error:
+        print("{} not saved: {}".format(path, error))
+    ctx.recorder.frames = 0
+    load_selected_wave_sample(ctx)
+    update_red_leds(ctx)
+
+
+class HandleValue:
+    """The handle position as a plain ``.value``, for Python-side readers."""
+
+    @property
+    def value(self):
+        return handle_control.a
+
+
+handle_value = HandleValue()
 
 
 # --- Controls ---
@@ -386,15 +529,31 @@ for _pin in WHITE_PINS:
 
 
 def update_red_leds(ctx):
-    """Light the red LED belonging to the active preset, if any."""
+    """Light the red LED belonging to the active preset, if any.
+
+    In record mode all four light, counting down the time left while a take
+    runs. In edit mode, where nothing can record, they flash together.
+    """
+    if ctx.active == RECORD_SPOT:
+        if ctx.recorder is None:
+            lit = len(red_leds) if ctx.blink_on else 0
+        elif ctx.recorder.recording:
+            # ceil() without math: 4 while more than 3/4 is left, ... 1, then 0
+            lit = -int(-ctx.recorder.remaining * len(red_leds) // 1)
+        else:
+            lit = len(red_leds)
+        for index, _led in enumerate(red_leds):
+            _led.value = index < lit
+        return
     for index, _led in enumerate(red_leds):
         _led.value = ctx.active == index + 1
 
 
 def update_white_leds(ctx):
-    """Light exactly the currently selected white LED."""
+    """Light exactly the currently selected white LED; blink it in record mode."""
+    on = ctx.blink_on or ctx.active != RECORD_SPOT
     for index, _led in enumerate(white_leds):
-        _led.value = ctx.white_active == index + 1
+        _led.value = on and ctx.white_active == index + 1
 
 
 def build_sample_chain(wave, sample, loop):
@@ -436,30 +595,17 @@ def load_selected_wave_sample(ctx):
     ``ctx.current_effects`` and ``ctx.current_source`` at it, stopping and
     freeing whatever was loaded before. ``ctx.white_active`` is 1-based;
     ``SAMPLES`` is 0-based, so it is short by one. A white LED with no matching
-    entry in ``SAMPLES`` (fewer samples configured than white LEDs) leaves
-    ``ctx.current_wave`` / ``ctx.current_source`` ``None``.
+    entry in ``SAMPLES`` (fewer samples configured than white LEDs) plays
+    ``/<slot>.wav`` plain, if there is one, so recorded takes always play.
 
     A sample whose effects fail to build (an effect this firmware lacks, or
     one too many for RAM) falls back to the plain wave.
 
     :param ctx: The mutable state container.
     """
-    stop_current_wave(ctx)
-    for _effect in ctx.current_effects:
-        _effect.deinit()
-    ctx.current_effects = []
-    if ctx.current_wave is not None:
-        ctx.current_wave.deinit()
-        ctx.current_wave = None
-    ctx.current_playmode = "oneshot"
-    ctx.current_source = None
-    gc.collect()
+    unload_wave_sample(ctx)
 
-    if ctx.white_active > len(SAMPLES):
-        print("no sample configured for LED {}".format(ctx.white_active))
-        return
-
-    sample = SAMPLES[ctx.white_active - 1]
+    sample = sample_for_slot(ctx.white_active)
     ctx.current_playmode = sample["playmode"]
     path = "/{}".format(sample["file"])
     try:
@@ -486,6 +632,32 @@ def load_selected_wave_sample(ctx):
             len(ctx.current_effects),
         )
     )
+
+
+def unload_wave_sample(ctx):
+    """Stop and free the loaded sample, its effects and its open file."""
+    stop_current_wave(ctx)
+    for _effect in ctx.current_effects:
+        _effect.deinit()
+    ctx.current_effects = []
+    if ctx.current_wave is not None:
+        ctx.current_wave.deinit()
+        ctx.current_wave = None
+    ctx.current_playmode = "oneshot"
+    ctx.current_source = None
+    gc.collect()
+
+
+def sample_for_slot(slot):
+    """The config entry for white LED ``slot`` (1-based), or a plain default."""
+    if slot <= len(SAMPLES):
+        return SAMPLES[slot - 1]
+    return {
+        "file": "{}.wav".format(slot),
+        "playmode": "oneshot",
+        "effects": [],
+        "blocks": {},
+    }
 
 
 def stop_current_wave(ctx):
@@ -648,10 +820,9 @@ try:
                 data_context.middle_held = event.pressed
             if event.pressed and event.key_number == TOP:
                 # Step to the next spot in the cycle, wrapping around. The
-                # cycle is one longer than the preset count: spot 0 is clean.
-                select_preset(
-                    data_context, (data_context.active + 1) % (len(PRESETS) + 1)
-                )
+                # cycle is two longer than the preset count: spot 0 is clean
+                # and the last spot is record mode.
+                select_preset(data_context, (data_context.active + 1) % (RECORD_SPOT + 1))
             if event.pressed and event.key_number == MIDDLE:
                 # Cycle the white LEDs: 1 -> 2 -> 3 -> 4 -> 1 ...
                 # No empty spot; exactly one is always lit.
@@ -681,13 +852,40 @@ try:
         else:
             data_context.combo_since = None
 
-        # The paddle gates the mic/effects chain (mixer voice 0)
+        # The paddle gates the mic/effects chain (mixer voice 0), or in
+        # record mode runs a take. Changes are acted on PADDLE_SETTLE_SECONDS
+        # later, without sleeping, so autotune and the recorder keep pace.
+        now = time.monotonic()
         held = paddle.value
         if held != data_context.paddle_held:
             data_context.paddle_held = held
+            data_context.paddle_changed = now
             print("paddle {}".format("pressed" if held else "released"))
-            time.sleep(0.1)
-            mixer.voice[0].level = 1.0 if held else 0.0
+            recorder = data_context.recorder
+            if not held and recorder is not None and recorder.recording:
+                recorder.stop()  # at once: the release click stays out
+        if (
+            data_context.paddle_changed is not None
+            and now - data_context.paddle_changed >= PADDLE_SETTLE_SECONDS
+        ):
+            data_context.paddle_changed = None
+            if data_context.active == RECORD_SPOT:
+                if held and data_context.recorder is not None:
+                    data_context.recorder.start()
+                    print("recording into slot {}".format(data_context.white_active))
+            else:
+                mixer.voice[0].level = 1.0 if held else 0.0
+
+        if data_context.active == RECORD_SPOT:
+            recorder = data_context.recorder
+            # A take that ended (released, or out of time) gets saved.
+            if recorder is not None and recorder.frames and not recorder.recording:
+                save_take(data_context)
+            if now - data_context.blink_since >= RECORD_BLINK_SECONDS:
+                data_context.blink_on = not data_context.blink_on
+                data_context.blink_since = now
+                update_white_leds(data_context)
+            update_red_leds(data_context)
 
         # The knob is free-running: it is read every pass and only acted on
         # when it has actually moved.
@@ -699,10 +897,23 @@ try:
         # Reading .overflow clears it. It trips if the playback side falls
         # behind the mic, which should not happen here. Both run off the
         # same BCLK, so a report means the DSP chain can't keep up.
-        if mic.overflow:
+        # (Skipped while record mode sits idle: nothing reads the mic then,
+        # so it is bound to overflow.)
+        recorder = data_context.recorder
+        idle = data_context.active == RECORD_SPOT and not (
+            recorder is not None and recorder.recording
+        )
+        if not idle and mic.overflow:
             print("overflow")
 
-        time.sleep(0.01)
+        # Autotune and the recorder each block on one 16 ms mic read, which
+        # paces the loop; otherwise nothing here needs to run faster.
+        if data_context.tune is not None:
+            data_context.tune.step()
+        elif data_context.recorder is not None and data_context.recorder.recording:
+            data_context.recorder.step()
+        else:
+            time.sleep(0.01)
 except KeyboardInterrupt:
     teardown(data_context)
     stop_current_wave(data_context)

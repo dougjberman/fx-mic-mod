@@ -534,6 +534,8 @@ def _normalize(name):
     key = out.lower().replace(" ", "_").replace("-", "_")
     key = ALIASES.get(key, key)
 
+    if key in AUTOTUNE_NAMES:
+        raise ValueError("autotune only works as the first effect of a preset")
     if key not in EFFECTS:
         raise ValueError("unknown effect: {}".format(name))
     return key
@@ -633,6 +635,17 @@ def create_effects(preset, blocks=None, **format_args):
     else:
         specs, definitions = preset, None
 
+    namespace = _namespace(definitions, blocks)
+
+    return [
+        create_effect(spec, blocks=namespace, **format_args)
+        for index, spec in enumerate(specs)
+        if _is_enabled(spec, "specs[{}]".format(index))
+    ]
+
+
+def _namespace(definitions, blocks):
+    """The ``"$name"`` namespace for one preset build."""
     if definitions is not None and not isinstance(definitions, dict):
         raise ValueError('"blocks" must be a mapping of name to block')
 
@@ -643,13 +656,86 @@ def create_effects(preset, blocks=None, **format_args):
     namespace = dict(definitions) if definitions else {}
     if blocks:
         namespace.update(blocks)
-    namespace = _Blocks(namespace)
+    return _Blocks(namespace)
 
-    return [
-        create_effect(spec, blocks=namespace, **format_args)
-        for index, spec in enumerate(specs)
-        if _is_enabled(spec, "specs[{}]".format(index))
-    ]
+
+# --- Autotune ---
+
+# Spellings of the "effect" key that mean autotune, after `_normalize`-style
+# folding. Autotune is not an audio effect object: it owns the mic (Python has
+# to see the audio to find the pitch), so the host builds it from the keyword
+# arguments `create_preset` returns, and it always heads the chain.
+AUTOTUNE_NAMES = ("autotune", "auto_tune")
+
+
+def _str(value, name, blocks=None):
+    if not isinstance(value, str) or not value:
+        raise ValueError("{} must be a non-empty string".format(name))
+    return value
+
+
+# parameter -> converter, matching autotune.Autotune's keyword arguments
+AUTOTUNE_PARAMS = {
+    "key": _str,
+    "scale": _str,
+    "speed": _block,
+    "humanize": _block,
+    "mix": _block,
+    "grain_size": _int,
+    "density": _int,
+}
+
+
+def is_autotune(spec):
+    if not isinstance(spec, dict) or not isinstance(spec.get("effect"), str):
+        return False
+    key = spec["effect"].lower().replace(" ", "_").replace("-", "_")
+    return key in AUTOTUNE_NAMES
+
+
+def create_preset(preset, blocks=None, **format_args):
+    """Create a preset's autotune settings and its effects, without wiring.
+
+    Like `create_effects`, but also accepts one ``{"effect": "autotune"}``
+    spec, which may sit anywhere in the list: autotune always runs first,
+    because pitch detection needs the dry voice.
+
+    :return: ``(autotune, effects)`` -- ``autotune`` is a dict of keyword
+        arguments for ``autotune.Autotune`` (block parameters already
+        resolved), or ``None`` if the preset has no enabled autotune;
+        ``effects`` is the list `create_effects` would return for the rest.
+    """
+    if isinstance(preset, dict):
+        specs = preset.get("list", ())
+        definitions = preset.get("blocks", None)
+    else:
+        specs, definitions = preset, None
+    namespace = _namespace(definitions, blocks)
+
+    tune_specs = []
+    rest = []
+    for index, spec in enumerate(specs):
+        if not _is_enabled(spec, "specs[{}]".format(index)):
+            continue
+        if is_autotune(spec):
+            tune_specs.append(spec)
+        else:
+            rest.append(spec)
+    if len(tune_specs) > 1:
+        raise ValueError("a preset can have only one autotune")
+
+    tune = None
+    if tune_specs:
+        tune = {}
+        for name, value in tune_specs[0].items():
+            if name in ("effect", "enabled") or name in FORMAT_ARGS:
+                continue
+            if name not in AUTOTUNE_PARAMS:
+                raise ValueError("autotune has no parameter {}".format(name))
+            tune[name] = AUTOTUNE_PARAMS[name](value, name, namespace)
+
+    effects = [create_effect(spec, blocks=namespace, **format_args) for spec in rest]
+    return tune, effects
 
 
 # --- Samples ---

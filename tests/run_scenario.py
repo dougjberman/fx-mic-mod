@@ -1,0 +1,75 @@
+"""Run firmware/code.py once against the fakes and print a JSON summary.
+
+    python3 tests/run_scenario.py <scenario> <root dir>
+"""
+
+import json
+import os
+import runpy
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+FIRMWARE = os.path.join(os.path.dirname(HERE), "firmware")
+sys.path.insert(0, HERE)
+sys.path.insert(0, FIRMWARE)
+
+import fakes  # noqa: E402
+
+TOP, MIDDLE, BOTTOM = 0, 1, 2
+
+
+def tap(t, key):
+    return [(t, key, True), (t + 0.05, key, False)]
+
+
+SCENARIOS = {
+    # TOP x1 -> preset 1 (autotune + effects), sing a flat note with the paddle
+    # held; TOP x2 more -> record mode; 1 s take into slot 1; then a held
+    # take that runs out of time into slot 2.
+    "record": dict(
+        presses=tap(0.5, TOP) + tap(3.0, TOP) + tap(3.5, TOP)
+        + tap(6.0, MIDDLE) + tap(12.0, BOTTOM),
+        paddle=[(1.0, 2.5), (4.0, 5.0), (7.0, 12.0)],
+        end=13.0,
+    ),
+    # Same, but booted in edit mode: record mode must not record or write.
+    "readonly": dict(
+        presses=tap(0.5, TOP) + tap(1.0, TOP) + tap(1.5, TOP),
+        paddle=[(2.0, 3.0)],
+        end=4.0,
+        readonly=True,
+    ),
+}
+
+
+def main():
+    name, root = sys.argv[1], sys.argv[2]
+    script = fakes.Script(**SCENARIOS[name])
+    fakes.install(script, root)
+    env = runpy.run_path(os.path.join(FIRMWARE, "code.py"), run_name="__main__")
+    ctx = env["data_context"]
+    summary = {
+        "active": ctx.active,
+        "record_spot": env["RECORD_SPOT"],
+        "files": sorted(os.listdir(root)),
+        "shifters": [
+            {"log_len": len(s.semitone_log),
+             "min": min(s.semitone_log) if s.semitone_log else None,
+             "max": max(s.semitone_log) if s.semitone_log else None,
+             "kwargs": sorted(k for k in s.kwargs)}
+            for s in script.shifters
+        ],
+        "mic_reads": script.mic_reads,
+        "red_counts": [
+            [round(t, 3), sum(v for k, v in leds.items() if k.startswith("LED_RED"))]
+            for t, leds in script.led_log
+        ],
+        "white_log": [
+            [round(t, 3), [k for k, v in sorted(leds.items()) if v and k.startswith("LED_WHITE")]]
+            for t, leds in script.led_log
+        ],
+    }
+    print("SUMMARY " + json.dumps(summary))
+
+
+main()
