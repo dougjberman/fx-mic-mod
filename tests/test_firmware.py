@@ -130,6 +130,10 @@ class LoaderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [{"effect": "autotune", "humanize": lerp, "squeeze_key": "D"}]},
                                   blocks={"handle": 0.5})
+        named = {"blocks": {"b": lerp, "c": {"block": "math", "operation": "sum", "a": "$b"}},
+                 "list": [{"effect": "autotune", "speed": "$c", "squeeze_key": "D"}]}
+        with self.assertRaises(ValueError):
+            self.cl.create_preset(named, blocks={"handle": 0.5})
 
     def test_sample_fx_setting(self):
         self.assertEqual(self.cl.sample_routing({}), "own")
