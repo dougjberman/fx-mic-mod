@@ -81,7 +81,8 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   that key/scale when its travel reaches 0.67 (two-thirds), and back to `key`/`scale` when it falls to 0.5 (the gap
   stops it flickering). A missing one of the pair keeps the resting value, e.g.
   `"key": "C", "scale": "major", "squeeze_scale": "minor"` goes C major → C minor.
-  It combines with `"speed": "$handle"`.
+  It can't be combined with `"$handle"` in `speed`, `humanize` or `mix` (directly or inside a
+  block): the handle gets one job besides opening the mic, and the loader rejects both.
 - `speed` s (clamped 0..1) sets the fraction of the remaining correction applied per 16 ms block:
   `rate = 0.08 + 0.92 * s * s` (s = 0 is a ~200 ms glide, s = 1 snaps instantly).
 - `humanize` h is a dead zone of `h * 30` cents: errors inside it are left alone, larger errors

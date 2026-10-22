@@ -537,17 +537,26 @@ function autotuneCard(p, fx){
   if (scale!=="chromatic") body.append(h("div",{class:"field"}, h("label",{}, "Key"), keyRow));
   else body.append(h("p",{class:"small muted"},"Every note snaps to the nearest semitone, so the key doesn't matter. Pick Major or Minor to stay in a key."));
 
-  // squeeze changes the key: squeeze_key / squeeze_scale, switched on a full squeeze
+  // the handle gets one extra job: snap strength ("speed": "$handle") or a key change (squeeze_key / squeeze_scale)
   const alt = fx.squeeze_key!=null || fx.squeeze_scale!=null;
-  const altId = nid("sk");
-  body.append(h("label",{class:"switch", for:altId}, h("input",{type:"checkbox", id:altId, checked:alt||null, onchange:(e)=>{
-      if (e.target.checked){
-        // a sensible first pick: major <-> minor in the same key, or C major from every note
-        fx.squeeze_scale = scale==="major" ? "minor" : "major";
-        fx.squeeze_key = scale==="chromatic" ? "C" : curKey;
-      } else { delete fx.squeeze_key; delete fx.squeeze_scale; }
-      changed(); }}), h("span",{class:"track"}), h("span",{}, "Squeeze hard to change key")));
-  if (alt){
+  const job = alt ? "key" : fx.speed==="$handle" ? "speed" : "none";
+  const setJob = v => {
+    if (v!=="key"){ delete fx.squeeze_key; delete fx.squeeze_scale; }
+    if (v==="speed") fx.speed = "$handle";
+    else if (fx.speed==="$handle") fx.speed = 1;
+    if (v==="key" && !alt){
+      // a sensible first pick: major <-> minor in the same key, or C major from every note
+      fx.squeeze_scale = scale==="major" ? "minor" : "major";
+      fx.squeeze_key = scale==="chromatic" ? "C" : curKey;
+    }
+    changed();
+  };
+  body.append(h("div",{class:"field"}, h("label",{}, "Squeezing also"),
+    h("div",{class:"seg", role:"group", "aria-label":"What squeezing the handle also does"},
+      [["none","Nothing else"],["speed","Snaps harder"],["key","Changes key"]].map(([v,l])=>h("button",{"aria-pressed":String(job===v), onclick:()=>setJob(v)}, l)))));
+  if (job==="none") body.append(h("p",{class:"small muted"},"The handle just opens the mic. It can do one more thing in this preset: snap harder the more you squeeze, or switch to a second key."));
+  if (job==="speed") body.append(h("p",{class:"small muted"},"A light squeeze sounds natural, a full squeeze is a hard snap."));
+  if (job==="key"){
     const aScale = fx.squeeze_scale || scale;
     const aKey = normKey(fx.squeeze_key || curKey);
     const box = h("div",{class:"squeeze"});
@@ -563,15 +572,7 @@ function autotuneCard(p, fx){
     box.append(h("p",{class:"small muted"}, "Sing with a light squeeze for "+name(curKey,scale)+". Squeeze past about two-thirds for "+name(aKey,aScale)+". Ease off to halfway to go back."));
     body.append(box);
   }
-
-  // speed: number or "$handle"
-  const sq = fx.speed === "$handle";
-  const sqId = nid("sq");
-  body.append(h("div",{class:"row"},
-    h("label",{class:"switch", for:sqId}, h("input",{type:"checkbox", id:sqId, checked:sq||null, onchange:(e)=>{ fx.speed = e.target.checked ? "$handle" : 1; changed(); }}), h("span",{class:"track"}),
-      h("span",{}, "Squeeze controls the speed")),
-    sq ? h("span",{class:"small muted"},"Light squeeze is natural, full squeeze is a hard snap.") : null));
-  if (!sq){
+  if (job!=="speed"){
     const sp = typeof fx.speed==="number" ? fx.speed : 1;
     body.append(sliderEl({label:"Speed",min:0,max:1,step:.01,ends:["Natural","Robot"]}, sp, v=>{ fx.speed=v; changedQuiet(); }));
   }

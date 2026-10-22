@@ -16,7 +16,7 @@ TEST_CONFIG = {
     "presets": [
         {"name": "T-Pain", "list": [
             {"effect": "distortion", "drive": 0.3, "mode": "overdrive", "mix": 0.5},
-            {"effect": "autotune", "key": "A", "scale": "minor", "speed": "$handle",
+            {"effect": "autotune", "key": "A", "scale": "minor", "speed": 1.0,
              "squeeze_key": "C", "squeeze_scale": "major"},
             {"effect": "reverb", "roomsize": 0.6, "mix": 0.3}]},
         {"name": "Echo", "list": [
@@ -100,7 +100,7 @@ class LoaderTests(unittest.TestCase):
 
     def test_autotune_is_split_out_wherever_it_sits(self):
         tune, effects = self.cl.create_preset(TEST_CONFIG["presets"][0], blocks={"handle": 0.5})
-        self.assertEqual(tune, {"key": "A", "scale": "minor", "speed": 0.5,
+        self.assertEqual(tune, {"key": "A", "scale": "minor", "speed": 1.0,
                                 "squeeze_key": "C", "squeeze_scale": "major"})
         self.assertEqual(len(effects), 2)
 
@@ -121,6 +121,15 @@ class LoaderTests(unittest.TestCase):
     def test_squeeze_key_must_be_text(self):
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [{"effect": "autotune", "squeeze_key": 3}]})
+
+    def test_handle_drives_key_or_setting_not_both(self):
+        both = {"list": [{"effect": "autotune", "speed": "$handle", "squeeze_scale": "minor"}]}
+        with self.assertRaises(ValueError):
+            self.cl.create_preset(both, blocks={"handle": 0.5})
+        lerp = {"block": "math", "operation": "constrained_lerp", "a": 0, "b": 1, "c": "$handle"}
+        with self.assertRaises(ValueError):
+            self.cl.create_preset({"list": [{"effect": "autotune", "humanize": lerp, "squeeze_key": "D"}]},
+                                  blocks={"handle": 0.5})
 
     def test_sample_fx_setting(self):
         self.assertEqual(self.cl.sample_routing({}), "own")

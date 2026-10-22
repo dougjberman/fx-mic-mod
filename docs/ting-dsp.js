@@ -217,6 +217,9 @@ function dspFactory(){
         const grain=num(spec.grain_size,"grain_size",512)*S, density=clamp(Math.round(num(spec.density,"density",2)),1,8);
         // squeeze_key / squeeze_scale: a second key the handle switches to (on at 0.67, back at 0.5, like code.py)
         let alt=null;
+        const usesHandle=v=> typeof v==="string" ? v==="$handle" : (v&&typeof v==="object" ? Object.values(v).some(usesHandle) : false);
+        if((spec.squeeze_key!=null||spec.squeeze_scale!=null)&&["speed","humanize","mix"].some(k=>usesHandle(spec[k])))
+          throw new Error("autotune: the handle can change the key or drive a setting, not both");
         if(spec.squeeze_key!=null||spec.squeeze_scale!=null){
           const ak=spec.squeeze_key==null?key:String(spec.squeeze_key).toUpperCase();
           if(!(ak in NOTE_IDX)) throw new Error('autotune squeeze_key must be "C" to "B", e.g. "F#"');

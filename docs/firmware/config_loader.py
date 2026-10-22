@@ -697,6 +697,17 @@ def is_autotune(spec):
     return key in AUTOTUNE_NAMES
 
 
+def _uses_handle(value):
+    """Whether a parameter value refers to ``"$handle"``, directly or in a block."""
+    if isinstance(value, str):
+        return value == "$handle"
+    if isinstance(value, dict):
+        return any(_uses_handle(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_uses_handle(item) for item in value)
+    return False
+
+
 def create_preset(preset, blocks=None, **format_args):
     """Create a preset's autotune settings and its effects, without wiring.
 
@@ -730,6 +741,13 @@ def create_preset(preset, blocks=None, **format_args):
 
     tune = None
     if tune_specs:
+        spec = tune_specs[0]
+        if ("squeeze_key" in spec or "squeeze_scale" in spec) and any(
+            _uses_handle(spec.get(name)) for name in ("speed", "humanize", "mix")
+        ):
+            raise ValueError(
+                "autotune: the handle can change the key or drive a setting, not both"
+            )
         tune = {}
         for name, value in tune_specs[0].items():
             if name in ("effect", "enabled") or name in FORMAT_ARGS:
