@@ -73,7 +73,7 @@ import storage
 import synthio
 
 import adafruit_nau88l21
-from autotune import Autotune
+from autotune import Autotune, key_by_name, scale_by_name
 from config_loader import create_effects, create_preset, is_autotune, load_samples
 from recorder import Recorder
 
@@ -132,6 +132,11 @@ RECORD_SECONDS = 4
 # How fast the selected white LED blinks in record mode, in seconds per toggle.
 RECORD_BLINK_SECONDS = 0.25
 
+# Handle travel (0 out .. 1 in) at which an autotune preset's "squeeze_key"
+# takes over, and below which it lets go again.
+SQUEEZE_KEY_ON = 0.8
+SQUEEZE_KEY_OFF = 0.6
+
 # The paddle switch bounces and its click reaches the mic; the mic gate (and
 # the start of a take) waits this long after a paddle change.
 PADDLE_SETTLE_SECONDS = 0.1
@@ -172,6 +177,11 @@ class DataContext:
         self.chain = []
         # The preset's autotune stage, heading the chain, or None.
         self.tune = None
+        # ((key, scale) at rest, (key, scale) squeezed) when the autotune
+        # preset sets "squeeze_key" / "squeeze_scale", else None.
+        self.tune_keys = None
+        # Whether the squeezed key is the one in use.
+        self.tune_squeezed = False
         # The sample recorder while in record mode, else None.
         self.recorder = None
         # Index into the cycle: 0 == clean, 1..len(PRESETS) == that preset,
@@ -372,6 +382,19 @@ def build(ctx, preset):
         for name in ("speed", "humanize"):
             if tune_args.get(name) is handle_control:
                 tune_args[name] = handle_value
+        # "squeeze_key" / "squeeze_scale": a second key and scale that take
+        # over while the handle is squeezed far in. Checked here, so a typo
+        # fails the build (and falls back to clean) instead of mid-song.
+        rest = (tune_args.get("key", "C"), tune_args.get("scale", "chromatic"))
+        alt = (tune_args.pop("squeeze_key", None), tune_args.pop("squeeze_scale", None))
+        ctx.tune_keys = None
+        if alt != (None, None):
+            alt = (alt[0] or rest[0], alt[1] or rest[1])
+            for key, scale in (rest, alt):
+                key_by_name(key)
+                scale_by_name(scale)
+            ctx.tune_keys = (rest, alt)
+        ctx.tune_squeezed = False
         ctx.tune = Autotune(mic, fmt, **tune_args)
         source = ctx.tune.output
     else:
@@ -893,6 +916,20 @@ try:
 
         # The handle is read every pass too, always applied
         read_handle()
+
+        # An autotune preset with a squeeze key switches key / scale when the
+        # handle goes far in, and back once it eases off (hysteresis, so a
+        # hand hovering near the threshold doesn't flip it back and forth).
+        if data_context.tune is not None and data_context.tune_keys is not None:
+            position = handle_control.a
+            squeezed = data_context.tune_squeezed
+            if (not squeezed and position >= SQUEEZE_KEY_ON) or (
+                squeezed and position <= SQUEEZE_KEY_OFF
+            ):
+                data_context.tune_squeezed = not squeezed
+                key, scale = data_context.tune_keys[1 if not squeezed else 0]
+                data_context.tune.set_key_scale(key, scale)
+                print("autotune now {} {}".format(key, scale))
 
         # Reading .overflow clears it. It trips if the playback side falls
         # behind the mic, which should not happen here. Both run off the

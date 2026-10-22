@@ -16,7 +16,8 @@ TEST_CONFIG = {
     "presets": [
         {"name": "T-Pain", "list": [
             {"effect": "distortion", "drive": 0.3, "mode": "overdrive", "mix": 0.5},
-            {"effect": "autotune", "key": "A", "scale": "minor", "speed": "$handle"},
+            {"effect": "autotune", "key": "A", "scale": "minor", "speed": "$handle",
+             "squeeze_key": "C", "squeeze_scale": "major"},
             {"effect": "reverb", "roomsize": 0.6, "mix": 0.3}]},
         {"name": "Echo", "list": [
             {"effect": "echo", "max_delay_ms": 500, "delay_ms": 250, "decay": 0.5, "mix": 0.3}]},
@@ -73,7 +74,8 @@ class LoaderTests(unittest.TestCase):
 
     def test_autotune_is_split_out_wherever_it_sits(self):
         tune, effects = self.cl.create_preset(TEST_CONFIG["presets"][0], blocks={"handle": 0.5})
-        self.assertEqual(tune, {"key": "A", "scale": "minor", "speed": 0.5})
+        self.assertEqual(tune, {"key": "A", "scale": "minor", "speed": 0.5,
+                                "squeeze_key": "C", "squeeze_scale": "major"})
         self.assertEqual(len(effects), 2)
 
     def test_disabled_autotune_is_skipped(self):
@@ -89,6 +91,10 @@ class LoaderTests(unittest.TestCase):
     def test_unknown_autotune_param_rejected(self):
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [{"effect": "autotune", "pitch": 3}]})
+
+    def test_squeeze_key_must_be_text(self):
+        with self.assertRaises(ValueError):
+            self.cl.create_preset({"list": [{"effect": "autotune", "squeeze_key": 3}]})
 
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
@@ -111,6 +117,9 @@ class DeviceScenarioTests(unittest.TestCase):
     def test_autotune_preset_then_record_two_takes(self):
         root, out, s = run("record")
         self.assertIn("autotune via GranularPitchShift", out)
+        # squeezing the handle in switches A minor -> C major, releasing switches back
+        self.assertIn("autotune now C major", out)
+        self.assertLess(out.index("autotune now C major"), out.index("autotune now A minor"))
         # 207 Hz in A minor snaps down to G3 (196 Hz), about -0.95 semitones.
         shifter = s["shifters"][0]
         self.assertAlmostEqual(shifter["min"], -0.95, delta=0.05)

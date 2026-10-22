@@ -19,7 +19,7 @@ Presets use Adafruit's `config.json` format, plus an `autotune` effect, so Adafr
 | TOP (orange) | Next spot: clean → preset 1..4 → **record mode** → clean. Red LEDs show the preset. |
 | MIDDLE (white) | Next sample slot 1..4. White LEDs show the slot. |
 | BOTTOM (grey) | Play the selected sample (oneshot / hold / startstop, from the config). |
-| Squeeze handle | Turns the mic on. Its travel is also `"$handle"` in presets (0 = rest, 1 = fully in). |
+| Squeeze handle | Turns the mic on. Its travel is also `"$handle"` in presets (0 = rest, 1 = fully in), and an autotune preset can switch key on a full squeeze (`squeeze_key` / `squeeze_scale`). |
 | Volume knob | Output level. |
 | TOP + MIDDLE 0.8 s | Power off. |
 

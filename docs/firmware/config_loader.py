@@ -683,6 +683,10 @@ AUTOTUNE_PARAMS = {
     "mix": _block,
     "grain_size": _int,
     "density": _int,
+    # Taken by the host, not autotune.Autotune: the key / scale to switch to
+    # while the handle is squeezed far in.
+    "squeeze_key": _str,
+    "squeeze_scale": _str,
 }
 
 

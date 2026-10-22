@@ -50,7 +50,7 @@ Any numeric param marked (B) accepts a number, a block object, or `"$name"`.
 
 | type | params |
 |---|---|
-| `autotune` **(new)** | `key` "C".."B" (sharps, e.g. "F#"), `scale` "chromatic" / "major" / "minor", `speed` (B) 0 = natural .. 1 = hard snap, `humanize` 0..1, `mix` (B), `grain_size` int (default 512), `density` int (default 2) |
+| `autotune` **(new)** | `key` "C".."B" (sharps, e.g. "F#"), `scale` "chromatic" / "major" / "minor", `speed` (B) 0 = natural .. 1 = hard snap, `humanize` 0..1, `mix` (B), `grain_size` int (default 512), `density` int (default 2), `squeeze_key` / `squeeze_scale` (same values as key/scale: the key used while the handle is fully squeezed) |
 | `pitch_shift` | `semitones` (B), `window` int, `overlap` int, `mix` (B) |
 | `granular_pitch_shift` | `semitones` (B), `grain_size` int, `density` int, `spread` float, `mix` (B) |
 | `distortion` | `drive` (B), `pre_gain` (B, dB), `post_gain` (B, dB), `mode` = an `audiofilters.DistortionMode` name, case-insensitive (e.g. "clip", "lofi", "overdrive", "wavefold"), `soft_clip` bool, `mix` (B) |
@@ -69,6 +69,11 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   The firmware moves it to the front if it is not; the GUI enforces it.
 - At most one per preset. Not allowed in sample `effects`.
 - Defaults: `key` "C", `scale` "chromatic", `speed` 1.0, `humanize` 0, `mix` 1.
+- Squeeze to change key: if `squeeze_key` or `squeeze_scale` is set, the handle switches autotune to
+  that key/scale when its travel reaches 0.8, and back to `key`/`scale` when it falls to 0.6 (the gap
+  stops it flickering). A missing one of the pair keeps the resting value, e.g.
+  `"key": "C", "scale": "major", "squeeze_scale": "minor"` goes C major → C minor.
+  It combines with `"speed": "$handle"`.
 - `speed` s (clamped 0..1) sets the fraction of the remaining correction applied per 16 ms block:
   `rate = 0.08 + 0.92 * s * s` (s = 0 is a ~200 ms glide, s = 1 snaps instantly).
 - `humanize` h is a dead zone of `h * 30` cents: errors inside it are left alone, larger errors

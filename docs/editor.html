@@ -207,7 +207,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     </div>
     <ol>
       <li><span class="n">1 · DESIGN</span><b>Pick a preset and build its chain</b>Each card below is one press of the orange button. Start from a template or add effects. Autotune always runs first.</li>
-      <li><span class="n">2 · LISTEN</span><b>Try it with your computer's mic</b>Click Use my mic and wear headphones. Every change you make plays right away.</li>
+      <li><span class="n">2 · LISTEN</span><b>Try it with your computer's mic</b>Click Use my mic and wear headphones. Every change you make plays right away. Hold Space to squeeze the handle, so you can try squeeze settings like a key change.</li>
       <li><span class="n">3 · SAVE</span><b>Put it on the Ting</b>Hold orange while you power on the Ting, plug it in, then click Save to Ting and pick CIRCUITPY. Power it off and on to play.</li>
     </ol>
     <p class="small muted">This page only changes your presets (<span class="mono">config.json</span>). If your Ting doesn't have fx-mic-mod yet, follow the <a href="install.html">install guide</a> first.</p>
@@ -350,6 +350,7 @@ const STARTERS = [
   {name:"Radio", list:[{effect:"filter",filter:{mode:"band_pass",frequency:1500,Q:1.2},mix:1},{effect:"distortion",drive:.5,pre_gain:12,post_gain:-10,mode:"clip",soft_clip:true,mix:1}]},
   {name:"Chipmunk space", list:[{effect:"filter",filter:{mode:"high_pass",frequency:200,Q:.7071},mix:1},{effect:"granular_pitch_shift",semitones:8,density:3},{effect:"echo",max_delay_ms:1200,delay_ms:750,decay:.45,mix:.35,freq_shift:true},{effect:"freeverb",roomsize:.75,damp:.55,mix:.6}]},
   {name:"Squeeze monster", list:[{effect:"pitch_shift",semitones:{block:"math",operation:"constrained_lerp",a:-12,b:12,c:"$handle"},mix:1,window:1024,overlap:128},{effect:"distortion",drive:.6,pre_gain:12,post_gain:-8,mode:"overdrive",soft_clip:true,mix:1},{effect:"filter",filter:{mode:"low_pass",frequency:3500,Q:.7071},mix:1}]},
+  {name:"Key flip", list:[{effect:"autotune",key:"C",scale:"major",squeeze_scale:"minor",speed:.85,humanize:.1,mix:1},{effect:"echo",max_delay_ms:500,delay_ms:250,decay:.3,mix:.2},{effect:"freeverb",roomsize:.6,damp:.5,mix:.3}]},
 ];
 const DEFAULT_CONFIG = {name:"FXMICMOD", presets:[STARTERS[0],STARTERS[1],STARTERS[4],STARTERS[5]].map(clone),
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"hold"},{file:"4.wav",playmode:"startstop"}]};
@@ -521,11 +522,12 @@ function fxHead(title, what, list, i, fx, extra){
     h("button",{class:"icon-btn", title:"Remove", "aria-label":"Remove "+title, onclick:()=>{ list.splice(i===null?list.indexOf(fx):i,1); changed(); }}, "✕"));
 }
 
+function normKey(k){ return String(k).toUpperCase().replace("DB","C#").replace("EB","D#").replace("GB","F#").replace("AB","G#").replace("BB","A#"); }
 function autotuneCard(p, fx){
   const body = h("div",{class:"fx-body"});
   // key
   const keyRow = h("div",{class:"keys", role:"group", "aria-label":"Key"});
-  const curKey = (fx.key||"C").toUpperCase().replace("DB","C#").replace("EB","D#").replace("GB","F#").replace("AB","G#").replace("BB","A#");
+  const curKey = normKey(fx.key||"C");
   NOTES.forEach(nm => keyRow.append(h("button",{"aria-pressed":String(nm===curKey), onclick:()=>{ fx.key=nm; changed(); }}, nm)));
   const scale = fx.scale||"chromatic";
   const scaleSeg = h("div",{class:"seg", role:"group", "aria-label":"Scale"},
@@ -533,6 +535,33 @@ function autotuneCard(p, fx){
   body.append(h("div",{class:"field"}, h("label",{}, "Scale"), scaleSeg));
   if (scale!=="chromatic") body.append(h("div",{class:"field"}, h("label",{}, "Key"), keyRow));
   else body.append(h("p",{class:"small muted"},"Every note snaps to the nearest semitone, so the key doesn't matter. Pick Major or Minor to stay in a key."));
+
+  // squeeze changes the key: squeeze_key / squeeze_scale, switched on a full squeeze
+  const alt = fx.squeeze_key!=null || fx.squeeze_scale!=null;
+  const altId = nid("sk");
+  body.append(h("label",{class:"switch", for:altId}, h("input",{type:"checkbox", id:altId, checked:alt||null, onchange:(e)=>{
+      if (e.target.checked){
+        // a sensible first pick: major <-> minor in the same key, or C major from every note
+        fx.squeeze_scale = scale==="major" ? "minor" : "major";
+        fx.squeeze_key = scale==="chromatic" ? "C" : curKey;
+      } else { delete fx.squeeze_key; delete fx.squeeze_scale; }
+      changed(); }}), h("span",{class:"track"}), h("span",{}, "Squeeze all the way to change key")));
+  if (alt){
+    const aScale = fx.squeeze_scale || scale;
+    const aKey = normKey(fx.squeeze_key || curKey);
+    const box = h("div",{class:"squeeze"});
+    box.append(h("div",{class:"field"}, h("label",{}, "Squeezed scale"),
+      h("div",{class:"seg", role:"group", "aria-label":"Squeezed scale"},
+        [["chromatic","Every note"],["major","Major"],["minor","Minor"]].map(([v,l])=>h("button",{"aria-pressed":String(aScale===v), onclick:()=>{ fx.squeeze_scale=v; if (fx.squeeze_key==null) fx.squeeze_key=aKey; changed(); }}, l)))));
+    if (aScale!=="chromatic"){
+      const aRow = h("div",{class:"keys", role:"group", "aria-label":"Squeezed key"});
+      NOTES.forEach(nm => aRow.append(h("button",{"aria-pressed":String(nm===aKey), onclick:()=>{ fx.squeeze_key=nm; if (fx.squeeze_scale==null) fx.squeeze_scale=aScale; changed(); }}, nm)));
+      box.append(h("div",{class:"field"}, h("label",{}, "Squeezed key"), aRow));
+    }
+    const name = (k,sc)=> sc==="chromatic" ? "every note" : k+" "+sc;
+    box.append(h("p",{class:"small muted"}, "Sing with a light squeeze for "+name(curKey,scale)+". Squeeze all the way for "+name(aKey,aScale)+". Ease off past halfway to go back."));
+    body.append(box);
+  }
 
   // speed: number or "$handle"
   const sq = fx.speed === "$handle";
@@ -832,6 +861,7 @@ function tryInfo(info){
   if (info.midi != null){
     parts.push(h("span",{}, "You sang ", h("b",{}, noteName(info.midi)+" "+(((info.midi-Math.round(info.midi))*100)>=0?"+":"")+Math.round((info.midi-Math.round(info.midi))*100)+"¢")));
     if (info.autotune) parts.push(h("span",{}, "Autotune moved it ", h("b",{}, (info.correction>=0?"+":"")+info.correction.toFixed(2)+" st")));
+    if (info.squeezed) parts.push(h("b",{style:"color:var(--accent)"}, "Squeezed key"));
   } else parts.push(h("span",{}, "No note heard"));
   ro.replaceChildren(...parts);
 }
