@@ -152,6 +152,8 @@ code{font-family:var(--f-mono);font-size:.92em}
 .controls{display:grid;gap:10px}
 .ctl{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .ctl .key{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.pair-keys{display:flex;gap:4px;align-items:center;width:36px}
+.pair-keys .key{width:16px;height:16px}
 .key.orange{background:var(--accent);border-color:var(--accent)}
 .key.white{background:var(--btn-white)}
 .key.grey{background:var(--btn-grey)}
@@ -375,7 +377,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
         <div class="ctl"><span class="key white" aria-hidden="true"></span><div><b>White: next sample slot</b><span>Slots 1 to 4, shown on the white lights.</span></div></div>
         <div class="ctl"><span class="key grey" aria-hidden="true"></span><div><b>Grey: play the sample</b><span>Tap to play, hold to play, or tap start/stop, set per slot in the editor.</span></div></div>
         <div class="ctl"><span class="key handle" aria-hidden="true"></span><div><b>Handle: squeeze to sing</b><span>Opens the mic. Presets can also use how far you squeeze: more autotune, a key change, a deeper pitch, more echo.</span></div></div>
-        <div class="ctl"><span class="key" aria-hidden="true">+</span><div><b>Orange and white together, about 1 second</b><span>Turns the mic off.</span></div></div>
+        <div class="ctl"><span class="pair-keys" aria-hidden="true"><span class="key orange"></span><span class="key white"></span></span><div><b>Orange and white together, about 1 second</b><span>Turns the mic off.</span></div></div>
       </div>
     </div>
     <div style="display:grid;gap:14px">
