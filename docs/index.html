@@ -45,7 +45,7 @@ code{font-family:var(--f-mono);font-size:.92em}
 .lede{font-size:clamp(17px,2vw,20px);color:var(--muted);max-width:62ch}
 .eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .eyebrow.accent{color:var(--accent)}
-.hero{display:grid;gap:20px;padding-top:12px}
+.hero > .pair, .hero > .cta{margin-top:6px}
 .cta{display:flex;flex-wrap:wrap;gap:10px}
 .btn{display:inline-block;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:10px 18px;font-weight:700;text-decoration:none;font:inherit;font-weight:700;cursor:pointer}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -171,15 +171,15 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
 <nav class="site-nav" aria-label="Site">
   <a class="brand" href="index.html"><i aria-hidden="true"></i>fx-mic-mod</a>
   <ul>
-    <li><a class="tab" href="index.html" aria-current="page">How it works</a></li>
+    <li><a class="tab" href="index.html" aria-current="page">How It Works</a></li>
     <li><a class="tab" href="install.html">Install</a></li>
-    <li><a class="tab" href="editor.html">Preset editor</a></li>
+    <li><a class="tab" href="editor.html">Preset Editor</a></li>
     <li><a class="tab" href="https://github.com/franklin-fernman/fx-mic-mod" target="_blank" rel="noopener">GitHub</a></li>
   </ul>
 </nav>
 <main>
-  <section class="hero">
-    <span class="eyebrow">Free firmware for the EP–2350 Ting and FX Mic</span>
+  <section class="hero page-head">
+    <span class="eyebrow">EP–2350 Ting / FX Mic · free firmware</span>
     <h1>Autotune your voice. <span>Record your own samples.</span> All on the mic.</h1>
     <p class="lede">fx-mic-mod gives Teenage Engineering's little fx mic two new tricks. Autotune now stacks with distortion, reverb, echo and the rest. Record mode captures new samples straight into the mic, with no computer involved.</p>
     <div class="pair">
@@ -353,7 +353,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
           <li>Hear them live through your computer's mic</li>
           <li>Save <code>config.json</code> to the mic</li>
         </ul>
-        <a class="btn" href="editor.html">Preset editor</a>
+        <a class="btn" href="editor.html">Preset Editor</a>
       </article>
       <article class="step">
         <span class="num">STEP 3</span>

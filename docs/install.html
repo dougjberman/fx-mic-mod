@@ -41,15 +41,16 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 28px 64px;
+  padding-block: 20px 64px;
 }
 a { color: var(--orange); }
 a:focus-visible, button:focus-visible, input:focus-visible, label:focus-within { outline: 2px solid var(--orange); outline-offset: 2px; }
 .wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 40px; }
-header.top { max-width: 1120px; margin: 0 auto 28px; display: grid; gap: 14px; }
+header.top { margin: 0 auto 28px; }
 .eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 h1 { font-family: var(--f-display); font-weight: 800; font-size: clamp(34px, 6vw, 58px); line-height: .95; margin: 0; letter-spacing: -.02em; text-wrap: balance; }
 h1 span { color: var(--orange); }
@@ -135,18 +136,15 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
 <nav class="site-nav" aria-label="Site">
   <a class="brand" href="index.html"><i aria-hidden="true"></i>fx-mic-mod</a>
   <ul>
-    <li><a class="tab" href="index.html">How it works</a></li>
+    <li><a class="tab" href="index.html">How It Works</a></li>
     <li><a class="tab" href="install.html" aria-current="page">Install</a></li>
-    <li><a class="tab" href="editor.html">Preset editor</a></li>
+    <li><a class="tab" href="editor.html">Preset Editor</a></li>
     <li><a class="tab" href="https://github.com/franklin-fernman/fx-mic-mod" target="_blank" rel="noopener">GitHub</a></li>
   </ul>
 </nav>
 
-<header class="top">
-  <div class="row" style="justify-content: space-between;">
-    <span class="eyebrow">EP–2350 Ting / FX Mic · RP2350 · CircuitPython 10.3.1</span>
-    <span class="leds" aria-hidden="true"><i class="on-w"></i><i></i><i></i><i></i><i class="on-r"></i><i></i><i></i><i></i></span>
-  </div>
+<header class="top page-head">
+  <span class="eyebrow">EP–2350 Ting / FX Mic · RP2350 · CircuitPython 10.3.1</span>
   <h1>Install <span>fx-mic-mod</span></h1>
   <p class="lede">Back up the samples and settings on your mic (the EP-2350, sold as the Ting and as the FX Mic), swap Teenage Engineering's firmware for CircuitPython, install fx-mic-mod in one click, and get back to stock whenever you want. Each step runs in the browser while the mic is plugged in, with a drag-and-drop route if the browser won't allow it. You only do this once. After that, you change presets in the <a href="editor.html">preset editor</a>.</p>
   <div class="note" id="frameNote" hidden>
