@@ -425,7 +425,7 @@ function dspFactory(){
       this.env={frame:0, dt:0, handle:0};
       this.gateG=0; this.lvl=0; this.mic=new Float32Array(128); this.smp=new Float32Array(128);
       this.n=0; this.ping=null; this.pingResult=null; this.error=null; this.latency=0; this.info=null;
-      this.rec=null; this.recDone=null;     // on-device recorder: raw mic, up to maxSec
+      this.rec=null; this.recDone=null; this.through=false;     // on-device recorder: raw mic, up to maxSec
     }
     set(q){
       if(q.g) Object.assign(this.g,q.g);
@@ -434,6 +434,7 @@ function dspFactory(){
         catch(e){ this.chain=[]; this.error=e.message; }           // the firmware falls back to clean
         this.atInfo=null; this.latency=this.chain.reduce((s,f)=>s+f.latency,0);
       }
+      if("sampleFx" in q) this.through=String(q.sampleFx||"own").toLowerCase()==="preset";
       if(q.samples){
         this.samples=q.samples.map(s=>{ if(!s) return null; let fx=[]; try{ fx=buildChain({list:s.effects||[],blocks:s.blocks},this.host,true).fx; }catch(e){}
           return {data:s.data, fx}; });
@@ -465,18 +466,21 @@ function dspFactory(){
       if(!this.chain.some(f=>f.type==="autotune")){
         for(let i=0;i<n;i++) if(this.tuner.push(mic[i])){ const hz=this.tuner.detect(); this.tunerInfo={hz, cents:null, correction:0, target:null, midi:hz>0?12*log2(hz/440)+69:null, autotune:false}; }
       }
-      for(const f of this.chain) f.process(mic,env);
       const smp=this.smp; smp.fill(0); let playing=-1;
       if(this.voice){
         const v=this.voice, d=v.s.data; playing=this.samples.indexOf(v.s);
         for(let i=0;i<n;i++){ if(v.pos>=d.length){ if(v.loop) v.pos=0; else { this.voice=null; break; } } smp[i]=d[v.pos++]; }
       }
+      const gGoal=g.gate?1:0, lGoal=g.power?g.level:0, through=this.through&&!this.rec;
+      // sample_fx "preset": the sample is mixed in ahead of the preset (autotune included), and the handle gates only the mic
+      if(through) for(let i=0;i<n;i++){ this.gateG+=(gGoal-this.gateG)*0.004; mic[i]=mic[i]*this.gateG+smp[i]; }
+      for(const f of this.chain) f.process(mic,env);
       // every sample chain keeps running so echo and reverb tails ring out after the sample stops
-      for(const s of this.samples) if(s) for(const f of s.fx){ if(this.voice&&this.voice.s===s) f.process(smp,env); }
-      const gGoal=g.gate?1:0, lGoal=g.power?g.level:0;
+      if(!through) for(const s of this.samples) if(s) for(const f of s.fx){ if(this.voice&&this.voice.s===s) f.process(smp,env); }
       for(let i=0;i<n;i++){
-        this.gateG+=(gGoal-this.gateG)*0.004; this.lvl+=(lGoal-this.lvl)*0.002;
-        const y=(mic[i]*this.gateG+smp[i])*this.lvl;
+        if(!through) this.gateG+=(gGoal-this.gateG)*0.004;
+        this.lvl+=(lGoal-this.lvl)*0.002;
+        const y=(through ? mic[i] : mic[i]*this.gateG+smp[i])*this.lvl;
         out[i]= this.ping ? this.pingSample(inp[i]||0) : y;
         this.n++;
       }

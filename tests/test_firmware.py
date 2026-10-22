@@ -26,10 +26,36 @@ TEST_CONFIG = {
 }
 
 
-def run(scenario):
+THROUGH_CONFIG = {
+    "name": "THRU",
+    "sample_fx": "preset",
+    "presets": [
+        {"list": [{"effect": "autotune", "key": "A", "scale": "minor"},
+                  {"effect": "reverb", "mix": 0.3}]},
+        {"list": [{"effect": "echo", "max_delay_ms": 500, "delay_ms": 250, "mix": 0.3}]},
+    ],
+    "samples": [{"file": "1.wav", "effects": [{"effect": "freeverb", "mix": 0.4}]}],
+}
+
+
+def write_tone(path, hz, seconds):
+    import math
+    import struct
+    frames = b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * hz * i / 16000)))
+                      for i in range(int(seconds * 16000)))
+    with wave.open(path, "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(16000)
+        out.writeframes(frames)
+
+
+def run(scenario, config=TEST_CONFIG, tone=None):
     root = tempfile.mkdtemp()
     with open(os.path.join(root, "config.json"), "w") as file:
-        json.dump(TEST_CONFIG, file)
+        json.dump(config, file)
+    if tone:
+        write_tone(os.path.join(root, "1.wav"), *tone)
     out = subprocess.run(
         [sys.executable, os.path.join(HERE, "run_scenario.py"), scenario, root],
         capture_output=True, text=True, timeout=600, check=True,
@@ -96,6 +122,12 @@ class LoaderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [{"effect": "autotune", "squeeze_key": 3}]})
 
+    def test_sample_fx_setting(self):
+        self.assertEqual(self.cl.sample_routing({}), "own")
+        self.assertEqual(self.cl.sample_routing({"sample_fx": "Preset"}), "preset")
+        with self.assertRaises(ValueError):
+            self.cl.sample_routing({"sample_fx": "chain"})
+
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
             self.cl.create_effects({"list": [{"effect": "autotune"}]})
@@ -145,6 +177,18 @@ class DeviceScenarioTests(unittest.TestCase):
         whites = [w for t, w in transitions(s["white_log"]) if 3.6 < t < 6.0]
         self.assertIn([], whites)
         self.assertIn(["LED_WHITE1"], whites)
+
+    def test_samples_through_the_preset(self):
+        # 340 Hz is 46 cents flat of F4, which is in A minor.
+        root, out, s = run("through", THROUGH_CONFIG, tone=(340.0, 1.0))
+        self.assertIn("0 effect(s)", out)  # the sample's own reverb is ignored
+        shifter = s["shifters"][0]
+        # with the paddle released the mic is muted, so only the sample was tuned
+        self.assertEqual(shifter["min"], 0.0)
+        self.assertAlmostEqual(shifter["max"], 0.46, delta=0.05)
+        # clean and the echo preset take the sample on an input mixer, mic gated off
+        self.assertEqual(s["heads"][-1], {"mic_level": 0.0, "sample": "WaveFile"})
+        self.assertEqual(s["out_level"], 1.0)
 
     def test_edit_mode_never_writes(self):
         root, out, s = run("readonly")

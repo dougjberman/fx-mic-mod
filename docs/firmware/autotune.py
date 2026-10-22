@@ -14,6 +14,7 @@
 
 import array
 import math
+import struct
 
 try:
     from ulab import numpy as np  # CircuitPython build with ulab
@@ -331,6 +332,69 @@ def _make_native_shifter(audiodelays, fmt, mix, grain_size, density):
     return None, None
 
 
+class WaveReader:
+    """Streams a 16-bit mono WAV from the drive one block at a time.
+
+    Lets a sample be mixed into the autotune feed, and so be tuned like the
+    voice, without loading the whole file into RAM: each 16 ms block reads
+    512 bytes.
+    """
+
+    def __init__(self, path, loop=False):
+        self.loop = loop
+        self.done = False
+        self.buf = array.array("h", [0] * BLOCK_SIZE)
+        self._view = memoryview(self.buf)
+        self.file = open(path, "rb")
+        try:
+            self.start, self.size = self._find_data()
+        except Exception:
+            self.file.close()
+            raise
+        self.left = self.size
+        self.file.seek(self.start)
+
+    def _find_data(self):
+        f = self.file
+        head = f.read(12)
+        if len(head) < 12 or head[0:4] != b"RIFF" or head[8:12] != b"WAVE":
+            raise ValueError("not a WAV file")
+        while True:
+            chunk = f.read(8)
+            if len(chunk) < 8:
+                raise ValueError("WAV file has no data")
+            name, size = chunk[0:4], struct.unpack("<I", chunk[4:8])[0]
+            if name == b"fmt ":
+                fmt = f.read(size)
+                code, channels, rate = struct.unpack("<HHI", fmt[0:8])
+                bits = struct.unpack("<H", fmt[14:16])[0]
+                if code != 1 or channels != 1 or bits != 16 or rate != SAMPLE_RATE:
+                    raise ValueError("needs 16-bit mono {} Hz".format(SAMPLE_RATE))
+            elif name == b"data":
+                return f.tell(), size // 2
+            else:
+                f.seek(size + (size & 1), 1)
+
+    def read(self):
+        """Fill ``buf`` with the next block. Returns how many samples."""
+        if self.done:
+            return 0
+        if self.left <= 0:
+            if not self.loop:
+                self.done = True
+                return 0
+            self.file.seek(self.start)
+            self.left = self.size
+        want = min(BLOCK_SIZE, self.left)
+        got = (self.file.readinto(self._view[0:want]) or 0) // 2
+        self.left = self.left - got if got else 0
+        return got
+
+    def close(self):
+        self.done = True
+        self.file.close()
+
+
 def _value(param):
     # plain number, or a synthio block (LFO / Math) that reports .value
     return getattr(param, "value", param)
@@ -381,6 +445,13 @@ class Autotune:
         self._window = array.array("h", [0] * BUFFER_SIZE)
         self._block = array.array("h", [0] * BLOCK_SIZE)
         self._half = 0
+        # Mic level, 0 or 1, applied before pitch detection. Used when
+        # samples are mixed into this stage, so the paddle can mute the mic
+        # without muting the sample.
+        self.gate = 1
+        # The WaveReader being mixed in, or None.
+        self.sample = None
+        self._zeros = array.array("h", [0] * BLOCK_SIZE)
 
         # Python writes each processed block into the half of this buffer
         # that is not playing; the audio pipeline loops over it.
@@ -415,6 +486,18 @@ class Autotune:
     def set_key_scale(self, key="C", scale="chromatic"):
         self.snapper.set_scale(scale_by_name(scale), key_by_name(key))
 
+    def play_sample(self, path, loop=False):
+        """Mix the WAV at ``path`` into the voice from the next block on, so
+        it is tuned and goes through the rest of the chain. Replaces any
+        sample already playing."""
+        self.stop_sample()
+        self.sample = WaveReader(path, loop)
+
+    def stop_sample(self):
+        if self.sample is not None:
+            self.sample.close()
+            self.sample = None
+
     def start(self):
         """Wire the feed into the shifter. Call after the downstream chain is
         wired, mirroring Adafruit's demo where the mic is connected last."""
@@ -428,6 +511,16 @@ class Autotune:
         got = self.mic.record(block, BLOCK_SIZE)
         for i in range(got, BLOCK_SIZE):
             block[i] = 0
+        if not self.gate:
+            block[0:BLOCK_SIZE] = self._zeros
+        sample = self.sample
+        if sample is not None:
+            extra, n = sample.buf, sample.read()
+            for i in range(n):
+                value = block[i] + extra[i]
+                block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
+            if sample.done:
+                self.stop_sample()
         window = self._window
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]
         window[BLOCK_SIZE:BUFFER_SIZE] = block

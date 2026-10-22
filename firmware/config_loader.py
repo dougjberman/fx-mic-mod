@@ -832,3 +832,23 @@ def load_samples(config, max_samples=None):
             }
         )
     return out
+
+
+SAMPLE_FX_MODES = ("own", "preset")
+
+
+def sample_routing(config):
+    """Where samples get their effects: the top-level ``"sample_fx"`` key.
+
+    * ``"own"`` (the default, and how Adafruit's packs work): each sample runs
+      through its own ``"effects"`` list, whatever preset is selected.
+    * ``"preset"``: samples play dry into the selected preset's chain, the
+      same chain the mic goes through. Their own ``"effects"`` are ignored.
+
+    :param dict config: A parsed config file, as from ``json.load``.
+    :return: ``"own"`` or ``"preset"``.
+    """
+    mode = config.get("sample_fx", "own")
+    if not isinstance(mode, str) or mode.lower() not in SAMPLE_FX_MODES:
+        raise ValueError('"sample_fx" must be "own" or "preset"')
+    return mode.lower()

@@ -39,6 +39,14 @@ SCENARIOS = {
         end=4.0,
         readonly=True,
     ),
+    # sample_fx "preset": TOP -> autotune preset, grey plays 1.wav with the
+    # paddle released (so only the sample reaches autotune); TOP -> echo
+    # preset, grey plays it into the chain's input mixer.
+    "through": dict(
+        presses=tap(0.5, TOP) + tap(1.0, BOTTOM) + tap(3.0, TOP) + tap(3.5, BOTTOM),
+        paddle=[],
+        end=4.0,
+    ),
 }
 
 
@@ -60,6 +68,13 @@ def main():
             for s in script.shifters
         ],
         "mic_reads": script.mic_reads,
+        # mixers after the output one are preset input mixers
+        "heads": [
+            {"mic_level": m.voice[0].level,
+             "sample": type(m.voice[1].playing).__name__}
+            for m in script.mixers[1:]
+        ],
+        "out_level": env["mixer"].voice[0].level,
         "red_counts": [
             [round(t, 3), sum(v for k, v in leds.items() if k.startswith("LED_RED"))]
             for t, leds in script.led_log

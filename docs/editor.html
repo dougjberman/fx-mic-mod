@@ -250,6 +250,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <section class="panel" style="display:grid;gap:12px">
     <div class="row spread"><h2>Samples · white and grey buttons</h2></div>
     <p class="small muted">White picks a slot, grey plays it. To record a slot on the mic, step the orange button past preset 4 into Record mode, pick the slot with white, and hold the handle while you talk (up to 4 seconds).</p>
+    <div id="sample-fx" style="display:grid;gap:6px"></div>
     <div class="samples" id="samples"></div>
   </section>
 
@@ -352,7 +353,7 @@ const STARTERS = [
   {name:"Squeeze monster", list:[{effect:"pitch_shift",semitones:{block:"math",operation:"constrained_lerp",a:-12,b:12,c:"$handle"},mix:1,window:1024,overlap:128},{effect:"distortion",drive:.6,pre_gain:12,post_gain:-8,mode:"overdrive",soft_clip:true,mix:1},{effect:"filter",filter:{mode:"low_pass",frequency:3500,Q:.7071},mix:1}]},
   {name:"Key flip", list:[{effect:"autotune",key:"C",scale:"major",squeeze_scale:"minor",speed:.85,humanize:.1,mix:1},{effect:"echo",max_delay_ms:500,delay_ms:250,decay:.3,mix:.2},{effect:"freeverb",roomsize:.6,damp:.5,mix:.3}]},
 ];
-const DEFAULT_CONFIG = {name:"FXMICMOD", presets:[STARTERS[0],STARTERS[1],STARTERS[4],STARTERS[5]].map(clone),
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[STARTERS[0],STARTERS[1],STARTERS[4],STARTERS[5]].map(clone),
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"hold"},{file:"4.wav",playmode:"startstop"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -703,6 +704,15 @@ function addEffectBlock(list, forSample){
 }
 
 function renderSamples(){
+  // "sample_fx": "preset" plays samples dry into the selected preset; "own" (or unset) gives each slot its own effects
+  const through = String(config.sample_fx||"own").toLowerCase()==="preset";
+  $("#sample-fx").replaceChildren(
+    h("div",{class:"field"}, h("label",{}, "Sample effects"),
+      h("div",{class:"seg", role:"group", "aria-label":"Sample effects"},
+        [["preset","Through the current preset"],["own","Each slot's own effects"]].map(([v,l])=>h("button",{"aria-pressed":String((through?"preset":"own")===v), onclick:()=>{ if (v==="own") delete config.sample_fx; else config.sample_fx=v; changed(); }}, l)))),
+    h("p",{class:"small muted"}, through
+      ? "Samples play dry into whichever preset is selected, the same chain your voice goes through, autotune included. On Clean and in Record mode they play dry."
+      : "Each slot gets its own effects below, whatever preset is selected. This is how Adafruit's packs work."));
   const root = $("#samples"); root.replaceChildren();
   config.samples.forEach((s, i) => {
     s.effects = s.effects || [];
@@ -711,12 +721,16 @@ function renderSamples(){
         h("div",{class:"row"}, h("b",{}, "Slot "+(i+1)), h("input",{class:"text mono", id:"sample-file-"+i, value:s.file, "aria-label":"Slot "+(i+1)+" file name", size:"10",
           oninput:(e)=>{ s.file=e.target.value.trim()||((i+1)+".wav"); changedQuiet(); }})),
         h("div",{class:"seg", role:"group", "aria-label":"Slot "+(i+1)+" playback"}, PLAYMODES.map(([v,l])=>h("button",{"aria-pressed":String((s.playmode||"oneshot")===v), onclick:()=>{ s.playmode=v; changed(); }}, l)))));
-    if (s.effects.length){
-      const chain = h("div",{class:"chain"});
-      s.effects.forEach((fx, j) => chain.append(effectCard(s.effects, j, s)));
-      body.append(chain);
+    if (through){
+      if (s.effects.length) body.append(h("p",{class:"small muted"}, s.effects.length+" effect"+(s.effects.length>1?"s":"")+" kept for \u201cEach slot's own effects\u201d, unused now."));
+    } else {
+      if (s.effects.length){
+        const chain = h("div",{class:"chain"});
+        s.effects.forEach((fx, j) => chain.append(effectCard(s.effects, j, s)));
+        body.append(chain);
+      }
+      body.append(addEffectBlock(s.effects, true));
     }
-    body.append(addEffectBlock(s.effects, true));
     root.append(h("div",{class:"sample"}, h("span",{class:"wled"}), body));
   });
 }
@@ -801,7 +815,7 @@ function tryG(){ return {power:true, gate:tryState.open || tryState.held, handle
 function tryPreset(){
   if (!tryState.engine) return;
   clearTimeout(tryState.timer);
-  tryState.timer = setTimeout(()=>{ const p = serialize().presets[selected]; trySend({preset: p || null}); }, 60);
+  tryState.timer = setTimeout(()=>{ const p = serialize().presets[selected]; trySend({preset: p || null, sampleFx: config.sample_fx || "own"}); }, 60);
 }
 async function tryEnsure(){
   if (tryState.ctx) return;
@@ -814,7 +828,7 @@ async function tryEnsure(){
   tryState.engine.onInfo = tryInfo;
   tryState.engine.node.connect(ctx.destination);
   trySend({g:tryG()});
-  trySend({preset: serialize().presets[selected] || null});
+  trySend({preset: serialize().presets[selected] || null, sampleFx: config.sample_fx || "own"});
 }
 function tryStopSource(){
   if (tryState.src){ try { tryState.src.stop && tryState.src.stop(); } catch(e){} tryState.src.disconnect(); tryState.src = null; }

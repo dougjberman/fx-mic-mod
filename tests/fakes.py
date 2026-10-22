@@ -35,6 +35,7 @@ class Script:
         self.leds = {}
         self.led_log = []
         self.shifters = []
+        self.mixers = []
         self.mic_reads = 0
 
     def paddle_held(self):
@@ -191,6 +192,7 @@ class Mixer(_Obj):
     def __init__(self, voice_count=2, **kwargs):
         super().__init__(**kwargs)
         self.voice = [_Voice() for _ in range(voice_count)]
+        SCRIPT.mixers.append(self)
 
 
 class GranularPitchShift(_Obj):

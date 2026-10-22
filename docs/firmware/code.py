@@ -74,7 +74,13 @@ import synthio
 
 import adafruit_nau88l21
 from autotune import Autotune, key_by_name, scale_by_name
-from config_loader import create_effects, create_preset, is_autotune, load_samples
+from config_loader import (
+    create_effects,
+    create_preset,
+    is_autotune,
+    load_samples,
+    sample_routing,
+)
 from recorder import Recorder
 
 RATE = 16000  # frame rate on the wire; also what the codec's FLL expects
@@ -177,6 +183,10 @@ class DataContext:
         self.chain = []
         # The preset's autotune stage, heading the chain, or None.
         self.tune = None
+        # With samples played through the preset: the two-voice mixer at the
+        # chain's input, mic (or autotune) on voice 0, samples on voice 1.
+        # None otherwise, and in record mode.
+        self.head = None
         # ((key, scale) at rest, (key, scale) squeezed) when the autotune
         # preset sets "squeeze_key" / "squeeze_scale", else None.
         self.tune_keys = None
@@ -205,6 +215,8 @@ class DataContext:
         # effects, otherwise the last element of `current_effects`. ``None``
         # when there is no sample loaded.
         self.current_source = None
+        # The loaded sample's file path, for autotune to stream it.
+        self.current_path = None
         # True while `current_source` is looping on mixer voice 1 because of a
         # "hold" or "startstop" press, tracked so a "startstop" press knows
         # whether to start or stop, and so a LED switch mid-loop can clean up
@@ -269,6 +281,14 @@ PRESETS = list(CONFIG.get("presets", ())[:MAX_PRESETS])
 # button how to play it back. See config_loader.load_samples().
 SAMPLES = load_samples(CONFIG, max_samples=MAX_SAMPLES)
 
+# "preset": samples play dry into the selected preset, like the mic does.
+# "own": each sample keeps its own effects (Adafruit's behaviour).
+try:
+    THROUGH_PRESET = sample_routing(CONFIG) == "preset"
+except ValueError as error:
+    print("config: {}".format(error))
+    THROUGH_PRESET = False
+
 # The cycle position of record mode: one past the last preset.
 RECORD_SPOT = len(PRESETS) + 1
 
@@ -311,14 +331,19 @@ mic = audioi2sin.I2SIn(
 # Two-voice audio mixer sits between the sources and the I2S output.
 # Voice 0 carries the current mic/effects chain. Voice 1 carries the
 # wave file samples
-mixer = audiomixer.Mixer(
-    voice_count=2,
-    buffer_size=FORMAT["buffer_size"],
-    channel_count=FORMAT["channel_count"],
-    bits_per_sample=FORMAT["bits_per_sample"],
-    samples_signed=FORMAT["samples_signed"],
-    sample_rate=FORMAT["sample_rate"],
-)
+def make_mixer(fmt):
+    """A two-voice mixer in audio format ``fmt``."""
+    return audiomixer.Mixer(
+        voice_count=2,
+        buffer_size=fmt["buffer_size"],
+        channel_count=fmt["channel_count"],
+        bits_per_sample=fmt["bits_per_sample"],
+        samples_signed=fmt["samples_signed"],
+        sample_rate=fmt["sample_rate"],
+    )
+
+
+mixer = make_mixer(FORMAT)
 i2s.play(mixer, loop=True)
 
 # --- Chain switching ---
@@ -331,6 +356,7 @@ def teardown(ctx):
         _effect.deinit()
     ctx.chain = []
     if ctx.tune is not None:
+        ctx.tune.stop_sample()
         if ctx.tune.shifter is not None:
             ctx.tune.shifter.deinit()
         ctx.tune.feed.deinit()
@@ -338,6 +364,12 @@ def teardown(ctx):
     if ctx.recorder is not None:
         ctx.recorder.deinit()
         ctx.recorder = None
+    if ctx.head is not None:
+        ctx.head.deinit()
+        ctx.head = None
+    if THROUGH_PRESET:
+        # A sample playing into the old preset stops with it.
+        ctx.wave_playing = False
     gc.collect()
 
 
@@ -359,20 +391,24 @@ def build(ctx, preset):
     :param ctx: The mutable state container.
     :param preset: A preset from the config, or an empty one for the clean
         spot, where the mic is played directly.
-    """
-    if not preset:
-        ctx.chain = []
-        mixer.voice[0].play(mic, loop=True)
-        return
 
+    With samples played through the preset (``THROUGH_PRESET``), a mixer
+    heads the chain instead: mic on its voice 0, samples on voice 1, and the
+    paddle gates voice 0 of that mixer rather than of the output mixer. An
+    autotune preset needs no mixer: autotune mixes the sample into the mic
+    blocks itself, and the paddle mutes the mic there.
+    """
     # Build first: a config error or an out-of-memory here must not leave a
     # half-wired graph running. create_preset() builds without wiring, which
     # is what lets the wiring below run output-first.
-    specs = preset.get("list", ())
+    specs = preset.get("list", ()) if preset else ()
     fmt = AUTOTUNE_FORMAT if any(is_autotune(spec) for spec in specs) else FORMAT
-    tune_args, ctx.chain = create_preset(
-        preset, blocks={"handle": handle_control}, **fmt
-    )
+    tune_args = None
+    ctx.chain = []
+    if preset:
+        tune_args, ctx.chain = create_preset(
+            preset, blocks={"handle": handle_control}, **fmt
+        )
 
     if tune_args is not None:
         # Autotune reads the mic itself, so it, not the mic, heads the chain.
@@ -400,13 +436,30 @@ def build(ctx, preset):
     else:
         source = mic
 
+    inlet, inlet_loop = source, ctx.tune is not None or not ctx.chain
+    if THROUGH_PRESET:
+        mixer.voice[1].stop()  # a sample left over from record mode
+        mixer.voice[0].level = 1.0
+        if ctx.tune is not None:
+            # Autotune mixes the sample in itself, before pitch detection,
+            # so the sample is tuned too; the paddle mutes only the mic.
+            ctx.tune.gate = ctx.paddle_held
+        else:
+            ctx.head = make_mixer(fmt)
+            ctx.head.voice[0].level = 1.0 if ctx.paddle_held else 0.0
+            inlet, inlet_loop = ctx.head, True
+
     if not ctx.chain:
-        mixer.voice[0].play(source, loop=True)
+        mixer.voice[0].play(inlet, loop=True)
     else:
         mixer.voice[0].play(ctx.chain[-1], loop=True)
         for index in range(len(ctx.chain) - 1, 0, -1):
             ctx.chain[index].play(ctx.chain[index - 1])
-        ctx.chain[0].play(source, loop=ctx.tune is not None)
+        ctx.chain[0].play(inlet, loop=inlet_loop)
+
+    if ctx.head is not None:
+        # The mic still goes in last.
+        ctx.head.voice[0].play(source, loop=True)
 
     # Same rule as handing the mic over last: the feed into the shifter is
     # wired once everything downstream is.
@@ -631,12 +684,16 @@ def load_selected_wave_sample(ctx):
     sample = sample_for_slot(ctx.white_active)
     ctx.current_playmode = sample["playmode"]
     path = "/{}".format(sample["file"])
+    ctx.current_path = path
     try:
         ctx.current_wave = audiocore.WaveFile(path)
     except OSError as error:
         print("{} not loaded: {}".format(path, error))
         return
 
+    if THROUGH_PRESET:
+        # The preset is the sample's effect chain; its own list is unused.
+        sample = dict(sample, effects=[])
     try:
         ctx.current_effects, ctx.current_source = build_sample_chain(
             ctx.current_wave, sample, loop=ctx.current_playmode != "oneshot"
@@ -683,11 +740,41 @@ def sample_for_slot(slot):
     }
 
 
-def stop_current_wave(ctx):
-    """Stop whatever mixer voice 1 is playing, if anything.
-    .
+def sample_voice(ctx):
+    """The mixer voice samples play on.
+
+    The input mixer of the preset when samples play through it, otherwise
+    voice 1 of the output mixer (always the case in record mode, so a slot
+    preview there plays dry).
     """
-    mixer.voice[1].stop()
+    return ctx.head.voice[1] if ctx.head is not None else mixer.voice[1]
+
+
+def set_gate(ctx, held):
+    """Open or close the mic for the paddle, wherever the mic is mixed."""
+    if THROUGH_PRESET and ctx.tune is not None:
+        ctx.tune.gate = held
+    else:
+        voice = ctx.head.voice[0] if ctx.head is not None else mixer.voice[0]
+        voice.level = 1.0 if held else 0.0
+
+
+def start_sample(ctx, loop=False):
+    """Play the loaded sample from the top on whatever plays samples now."""
+    if THROUGH_PRESET and ctx.tune is not None:
+        try:
+            ctx.tune.play_sample(ctx.current_path, loop)
+        except (OSError, ValueError) as error:
+            print("{} can't go through autotune: {}".format(ctx.current_path, error))
+    else:
+        sample_voice(ctx).play(ctx.current_source, loop=loop)
+
+
+def stop_current_wave(ctx):
+    """Stop whatever the sample voice is playing, if anything."""
+    if ctx.tune is not None:
+        ctx.tune.stop_sample()
+    sample_voice(ctx).stop()
     ctx.wave_playing = False
 
 
@@ -713,10 +800,10 @@ def play_current_wave_sample(ctx):
         )
 
     if ctx.current_playmode == "oneshot":
-        mixer.voice[1].play(ctx.current_source)
+        start_sample(ctx)
         print("playing {} (oneshot)".format(ctx.white_active))
     elif ctx.current_playmode == "hold":
-        mixer.voice[1].play(ctx.current_source, loop=True)
+        start_sample(ctx, loop=True)
         ctx.wave_playing = True
         print("playing {} (hold)".format(ctx.white_active))
     elif ctx.current_playmode == "startstop":
@@ -724,7 +811,7 @@ def play_current_wave_sample(ctx):
             stop_current_wave(ctx)
             print("stopped {} (startstop)".format(ctx.white_active))
         else:
-            mixer.voice[1].play(ctx.current_source, loop=True)
+            start_sample(ctx, loop=True)
             ctx.wave_playing = True
             print("playing {} (startstop)".format(ctx.white_active))
 
@@ -897,7 +984,7 @@ try:
                     data_context.recorder.start()
                     print("recording into slot {}".format(data_context.white_active))
             else:
-                mixer.voice[0].level = 1.0 if held else 0.0
+                set_gate(data_context, held)
 
         if data_context.active == RECORD_SPOT:
             recorder = data_context.recorder

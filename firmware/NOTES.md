@@ -25,6 +25,10 @@ with no extra CPU. `speed` / `humanize` accept a number or `"$handle"`. With `sq
 - **Take length:** `RECORD_SECONDS = 4` uses 128 KB of RAM. The serial console prints free memory
   on entering record mode; raise it if there is room.
 - **Flash write time:** saving a 4 s take writes 128 KB. The LEDs go dark while it saves.
+- **Samples through the preset** (`"sample_fx": "preset"`): non-autotune presets get a second
+  `audiomixer.Mixer` at the chain input. Autotune presets stream the WAV from flash 512 bytes per
+  block and mix it in Python before pitch detection. Check for crackle or `overflow` while a
+  sample plays on an autotune preset, and that a 1024-byte effect chain accepts the mixer.
 - **Squeeze key threshold:** check the handle really reaches 0.67 travel on a firm squeeze
   (`handle_control.a` on the serial console). Lower `SQUEEZE_KEY_ON` / `SQUEEZE_KEY_OFF` if not.
 - **LFO-driven speed/humanize:** only plain numbers and `"$handle"` are verified. A synthio LFO

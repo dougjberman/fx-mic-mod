@@ -1,5 +1,6 @@
 {
   "name": "FXMICMOD",
+  "sample_fx": "preset",
   "presets": [
     {
       "name": "Hard tune",
