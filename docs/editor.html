@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ting Preset Editor</title>
+<title>Preset Editor</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -184,8 +184,8 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
 <div class="wrap">
   <header class="top">
     <div class="title">
-      <h1>Ting <span>Preset</span> Editor</h1>
-      <p class="muted small">For the fx-mic-mod firmware on the EP-2350. Edits <span class="mono">config.json</span>.</p>
+      <h1><span>Preset</span> Editor</h1>
+      <p class="muted small">For the fx-mic-mod firmware on the EP-2350 (Ting or FX Mic). Edits <span class="mono">config.json</span>.</p>
     </div>
     <div class="actions">
       <div class="seg" role="group" aria-label="Editor mode">
@@ -196,7 +196,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       <input id="file-open" type="file" accept=".json,application/json" hidden>
       <button class="btn" id="btn-copy">Copy</button>
       <button class="btn" id="btn-download">Download</button>
-      <button class="btn primary" id="btn-save">Save to Ting</button>
+      <button class="btn primary" id="btn-save">Save to mic</button>
     </div>
   </header>
 
@@ -208,9 +208,9 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     <ol>
       <li><span class="n">1 · DESIGN</span><b>Pick a preset and build its chain</b>Each card below is one press of the orange button. Start from a template or add effects. Autotune always runs first.</li>
       <li><span class="n">2 · LISTEN</span><b>Try it with your computer's mic</b>Click Use my mic and wear headphones. Every change you make plays right away. Hold Space to squeeze the handle, so you can try squeeze settings like a key change.</li>
-      <li><span class="n">3 · SAVE</span><b>Put it on the Ting</b>Hold orange while you power on the Ting, plug it in, then click Save to Ting and pick CIRCUITPY. Power it off and on to play.</li>
+      <li><span class="n">3 · SAVE</span><b>Put it on the mic</b>Hold orange while you power on the mic, plug it in, then click Save to mic and pick CIRCUITPY. Power it off and on to play.</li>
     </ol>
-    <p class="small muted">This page only changes your presets (<span class="mono">config.json</span>). If your Ting doesn't have fx-mic-mod yet, follow the <a href="install.html">install guide</a> first.</p>
+    <p class="small muted">This page only changes your presets (<span class="mono">config.json</span>). If your mic doesn't have fx-mic-mod yet, follow the <a href="install.html">install guide</a> first.</p>
   </section>
   <button class="btn small ghost" id="howto-show" style="justify-self:start" hidden>How to use this page</button>
 
@@ -263,7 +263,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     <h2>Getting it onto the mic</h2>
     <ol class="steps small">
       <li>Turn the mic off. Plug it into your computer, then <b>hold the orange button while you turn it on</b>. That's edit mode, where your computer can save files to it. (No fx-mic-mod on it yet? Use the <a href="install.html">install guide</a>.)</li>
-      <li>Click <b>Save to Ting</b> and pick the <span class="mono">CIRCUITPY</span> drive. In browsers without folder access (Safari, Firefox), click <b>Download</b> and drag <span class="mono">config.json</span> onto the drive.</li>
+      <li>Click <b>Save to mic</b> and pick the <span class="mono">CIRCUITPY</span> drive. In browsers without folder access (Safari, Firefox), click <b>Download</b> and drag <span class="mono">config.json</span> onto the drive.</li>
       <li>Turn the mic off and on again normally to play, and to record samples.</li>
     </ol>
   </section>

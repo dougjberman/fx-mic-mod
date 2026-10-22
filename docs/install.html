@@ -144,11 +144,11 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
 
 <header class="top">
   <div class="row" style="justify-content: space-between;">
-    <span class="eyebrow">EP–2350 Ting · RP2350 · CircuitPython 10.3.1</span>
+    <span class="eyebrow">EP–2350 Ting / FX Mic · RP2350 · CircuitPython 10.3.1</span>
     <span class="leds" aria-hidden="true"><i class="on-w"></i><i></i><i></i><i></i><i class="on-r"></i><i></i><i></i><i></i></span>
   </div>
   <h1>Install <span>fx-mic-mod</span></h1>
-  <p class="lede">Back up the samples and settings on your Ting, swap Teenage Engineering's firmware for CircuitPython, install fx-mic-mod in one click, and get back to stock whenever you want. Each step runs in the browser while the Ting is plugged in, with a drag-and-drop route if the browser won't allow it. You only do this once. After that, you change presets in the <a href="editor.html">preset editor</a>.</p>
+  <p class="lede">Back up the samples and settings on your mic (the EP-2350, sold as the Ting and as the FX Mic), swap Teenage Engineering's firmware for CircuitPython, install fx-mic-mod in one click, and get back to stock whenever you want. Each step runs in the browser while the mic is plugged in, with a drag-and-drop route if the browser won't allow it. You only do this once. After that, you change presets in the <a href="editor.html">preset editor</a>.</p>
   <div class="note" id="frameNote" hidden>
     <b>Drive and serial access are blocked in this view.</b> Chrome and Edge only let a page touch USB drives and serial ports when it runs as its own tab, and this page is running inside a frame. Every step still works by drag and drop. For one-click flashing, save the standalone copy and open it in Chrome or Edge on your computer.
     <div class="row" style="margin-top: 10px;"><button class="go" id="saveStandalone">Save standalone flasher (.html)</button><span class="status" id="standaloneStatus"></span></div>
@@ -181,25 +181,25 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
       <div class="step-head"><span class="step-num">00</span><h2>Before you start</h2><label class="mark"><input type="checkbox" data-done="prep"> Done</label></div>
       <ul class="how">
         <li>A desktop computer with <b>Chrome or Edge</b> for the one-click tools. Safari and Firefox can still follow the drag-and-drop route.</li>
-        <li>A USB-C cable that carries data. Many charge-only cables power the Ting but never show a drive.</li>
+        <li>A USB-C cable that carries data. Many charge-only cables power the mic but never show a drive.</li>
         <li>A rubber band or clip. Boot mode needs the handle squeezed all the way in for the whole flash, and that's hard to do by hand.</li>
         <li>Take off the lower lid to reach the USB-C port and the small reset button above it.</li>
       </ul>
-      <div class="note calm">The Ting has no charging circuit, so USB only powers it and won't charge AA batteries. On USB it stays off until you squeeze the handle all the way in.</div>
+      <div class="note calm">The mic has no charging circuit, so USB only powers it and won't charge AA batteries. On USB it stays off until you squeeze the handle all the way in.</div>
     </section>
 
     <!-- 01 -->
     <section class="step" id="backup" data-step="backup">
-      <div class="step-head"><span class="step-num">01</span><h2>Back up the Ting's disk</h2><label class="mark"><input type="checkbox" data-done="backup"> Done</label></div>
+      <div class="step-head"><span class="step-num">01</span><h2>Back up the mic's disk</h2><label class="mark"><input type="checkbox" data-done="backup"> Done</label></div>
       <p>Flashing CircuitPython erases everything on the device's own drive: your samples <code>1.wav</code> to <code>4.wav</code>, <code>config.json</code>, and any other files. Copy them off first.</p>
       <ol class="how">
-        <li>Plug in the Ting and squeeze the handle to power it on.</li>
+        <li>Plug in the mic and squeeze the handle to power it on.</li>
         <li>A drive called <b>TING DISK</b> appears. Some firmware versions and the official manual call it <b>FX-MIC DISK</b>.</li>
         <li>Pick that drive below. The page reads every file and saves them as one zip.</li>
       </ol>
       <div class="tool">
         <div class="row">
-          <button class="go" id="backupPick">Pick TING DISK and back up</button>
+          <button class="go" id="backupPick">Pick the mic's drive and back up</button>
           <label class="filebtn">Or choose the folder manually<input type="file" id="backupInput" webkitdirectory multiple></label>
         </div>
         <div class="status" id="backupStatus">No files read yet.</div>
@@ -225,17 +225,17 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
       <details>
         <summary>Optional: full flash dump with picotool</summary>
         <div style="display: grid; gap: 8px; margin-top: 8px;">
-          <p>If you want a byte-for-byte image of the chip (firmware plus the disk), Raspberry Pi's <code>picotool</code> can read the RP2350's flash while the Ting is in boot mode (step 03):</p>
+          <p>If you want a byte-for-byte image of the chip (firmware plus the disk), Raspberry Pi's <code>picotool</code> can read the RP2350's flash while the mic is in boot mode (step 03):</p>
           <pre>picotool info -a
 picotool save -a ting-full-flash.bin</pre>
-          <p><span class="tag">Unverified</span>Nobody has published a picotool dump of a Ting yet. TE changed the boot-mode USB IDs in firmware 1.0.5, so picotool may not recognise the device, and the chip could have reads locked. The official .uf2 above is the dependable restore path.</p>
+          <p><span class="tag">Unverified</span>Nobody has published a picotool dump of an EP-2350 yet. TE changed the boot-mode USB IDs in firmware 1.0.5, so picotool may not recognise the device, and the chip could have reads locked. The official .uf2 above is the dependable restore path.</p>
         </div>
       </details>
     </section>
 
     <!-- 03 -->
     <section class="step" id="boot" data-step="boot">
-      <div class="step-head"><span class="step-num">03</span><h2>Put the Ting in boot mode</h2><label class="mark"><input type="checkbox" data-done="boot"> Done</label></div>
+      <div class="step-head"><span class="step-num">03</span><h2>Put the mic in boot mode</h2><label class="mark"><input type="checkbox" data-done="boot"> Done</label></div>
       <div class="gesture">
         <div>
           <b>1 · Squeeze</b>
@@ -274,7 +274,7 @@ picotool save -a ting-full-flash.bin</pre>
     <!-- 04 -->
     <section class="step" id="flash" data-step="flash">
       <div class="step-head"><span class="step-num">04</span><h2>Flash CircuitPython</h2><label class="mark"><input type="checkbox" data-done="flash"> Done</label></div>
-      <p>Download the Ting's CircuitPython build. The board has had official builds since 10.3, so pick the stable one:</p>
+      <p>Download the EP-2350's CircuitPython build (the same one for the Ting and the FX Mic). The board has had official builds since 10.3, so pick the stable one:</p>
       <ul class="how">
         <li><a href="https://downloads.circuitpython.org/bin/teenage_engineering_ep2350/en_US/adafruit-circuitpython-teenage_engineering_ep2350-en_US-10.3.1.uf2" target="_blank" rel="noopener">adafruit-circuitpython-teenage_engineering_ep2350-en_US-10.3.1.uf2</a> (stable, recommended)</li>
         <li>Other versions and languages: <a href="https://circuitpython.org/board/teenage_engineering_ep2350/" target="_blank" rel="noopener">circuitpython.org/board/teenage_engineering_ep2350</a></li>
@@ -282,20 +282,20 @@ picotool save -a ting-full-flash.bin</pre>
       <div class="tool">
         <div class="row">
           <label class="filebtn">1. Choose the .uf2 file<input type="file" id="uf2Input" accept=".uf2"></label>
-          <button class="go" id="uf2Flash" disabled>2. Pick TING BOOT and flash</button>
+          <button class="go" id="uf2Flash" disabled>2. Pick the boot drive and flash</button>
         </div>
         <div class="status" id="uf2Status">No firmware chosen.</div>
         <pre id="infoUf2" hidden></pre>
       </div>
-      <p>The drive disappears as soon as the copy finishes, the Ting restarts, and a new drive named <b>CIRCUITPY</b> mounts. Your computer may complain that the drive was removed without ejecting. That's expected.</p>
-      <details><summary>Doing it by hand</summary><p style="margin-top: 8px;">Drag the <code>.uf2</code> file onto the TING BOOT drive in Finder or File Explorer, keep squeezing, and wait for CIRCUITPY to appear.</p></details>
+      <p>The drive disappears as soon as the copy finishes, the mic restarts, and a new drive named <b>CIRCUITPY</b> mounts. Your computer may complain that the drive was removed without ejecting. That's expected.</p>
+      <details><summary>Doing it by hand</summary><p style="margin-top: 8px;">Drag the <code>.uf2</code> file onto the boot drive (TING BOOT or FX MIC BOOT) in Finder or File Explorer, keep squeezing, and wait for CIRCUITPY to appear.</p></details>
     </section>
 
     <!-- 05 -->
     <section class="step" id="install" data-step="install">
       <div class="step-head"><span class="step-num">05</span><h2>Install fx-mic-mod</h2><label class="mark"><input type="checkbox" data-done="install"> Done</label></div>
       <p>This copies the fx-mic-mod files to CIRCUITPY: <code>code.py</code> and its modules (<code>autotune.py</code>, <code>recorder.py</code>, <code>config_loader.py</code>), <code>boot.py</code>, and a starter <code>config.json</code> with four presets.</p>
-      <p>It also needs Adafruit's driver for the Ting's audio chip, <code>adafruit_nau88l21.mpy</code>. Download the <b>10.x</b> library bundle from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>, unzip it, and choose its <code>lib</code> folder below. Only the driver is copied from it. You can skip this if the driver is already on the drive.</p>
+      <p>It also needs Adafruit's driver for the mic's audio chip, <code>adafruit_nau88l21.mpy</code>. Download the <b>10.x</b> library bundle from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>, unzip it, and choose its <code>lib</code> folder below. Only the driver is copied from it. You can skip this if the driver is already on the drive.</p>
       <div class="tool">
         <div class="row">
           <label class="filebtn">1. Choose the bundle's lib folder<input type="file" id="libInput" webkitdirectory multiple></label>
@@ -306,7 +306,7 @@ picotool save -a ting-full-flash.bin</pre>
         <div class="status" id="codeStatus">No driver chosen yet. That's fine if it's already in CIRCUITPY/lib.</div>
         <pre id="bootOut" hidden></pre>
       </div>
-      <div class="note"><b>After installing, turn the Ting off and on again.</b> From then on, a normal power-on lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
+      <div class="note"><b>After installing, turn the mic off and on again.</b> From then on, a normal power-on lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
       <details><summary>Installing by hand</summary>
         <div style="display: grid; gap: 10px; margin-top: 10px;">
           <p>Download these files and copy them to the root of CIRCUITPY, with <code>code.py</code> last:</p>
@@ -354,14 +354,14 @@ picotool save -a ting-full-flash.bin</pre>
       <div class="step-head"><span class="step-num">07</span><h2>Go back to stock</h2><label class="mark"><input type="checkbox" data-done="restore"> Done</label></div>
       <ol class="how">
         <li>Unzip the TE firmware from step 02 so you have its <code>.uf2</code>.</li>
-        <li>Enter boot mode as in step 03. If the double-click doesn't bring up TING BOOT while CircuitPython is installed, squeeze the handle and use <b>Reboot to boot mode</b> in the step 06 console instead.</li>
-        <li>Flash that <code>.uf2</code> with the step 04 tool or by dragging it onto TING BOOT. The white LED turns on when the stock firmware starts.</li>
-        <li>When TING DISK appears again, copy your backed-up files back with the tool below or by hand.</li>
+        <li>Enter boot mode as in step 03. If the double-click doesn't bring up the boot drive while CircuitPython is installed, squeeze the handle and use <b>Reboot to boot mode</b> in the step 06 console instead.</li>
+        <li>Flash that <code>.uf2</code> with the step 04 tool or by dragging it onto the boot drive. The white LED turns on when the stock firmware starts.</li>
+        <li>When the mic's drive (TING DISK or FX-MIC DISK) appears again, copy your backed-up files back with the tool below or by hand.</li>
       </ol>
       <div class="tool">
         <div class="row">
           <label class="filebtn">Choose backup folder (unzipped)<input type="file" id="restoreInput" webkitdirectory multiple></label>
-          <button class="go" id="restoreBtn" disabled>Pick TING DISK and copy back</button>
+          <button class="go" id="restoreBtn" disabled>Pick the mic's drive and copy back</button>
         </div>
         <div class="status" id="restoreStatus">No backup folder chosen.</div>
       </div>
@@ -374,8 +374,8 @@ picotool save -a ting-full-flash.bin</pre>
       <ul class="how uncertain">
         <li><span class="tag">Drive names</span>Adafruit's guide says TING BOOT and TING DISK. TE's manual says FX-MIC BOOT and fx-mic disk, and their install notes accept either. TE changed the boot-mode name in 1.0.5, so expect either depending on your firmware.</li>
         <li><span class="tag">Factory samples</span>We don't know whether reflashing stock firmware brings back the factory sounds by itself. TE's 1.0.7 notes say factory samples are no longer loaded after sleep, which suggests they live in firmware, but keep your backup either way.</li>
-        <li><span class="tag">Writing the .uf2</span>Chrome writes files through a temporary <code>.crswap</code> copy and then renames it. UF2 boot drives usually accept this because they read the data blocks and ignore the name, but this hasn't been tested on a Ting. If the device doesn't restart within a minute, drag the file instead.</li>
-        <li><span class="tag">Boot mode after flashing</span>TE's double-click gesture is likely handled by the RP2350's built-in boot ROM, so it should survive the switch to CircuitPython, but we haven't confirmed it. The console's Reboot to boot mode button is the backup route, and needs the handle squeezed so the Ting stays powered through the reset.</li>
+        <li><span class="tag">Writing the .uf2</span>Chrome writes files through a temporary <code>.crswap</code> copy and then renames it. UF2 boot drives usually accept this because they read the data blocks and ignore the name, but this hasn't been tested on an EP-2350. If the device doesn't restart within a minute, drag the file instead.</li>
+        <li><span class="tag">Boot mode after flashing</span>TE's double-click gesture is likely handled by the RP2350's built-in boot ROM, so it should survive the switch to CircuitPython, but we haven't confirmed it. The console's Reboot to boot mode button is the backup route, and needs the handle squeezed so the mic stays powered through the reset.</li>
         <li><span class="tag">Full dump</span>The picotool flash dump in step 02 is untested on this device.</li>
         <li><span class="tag">Standalone file</span>The saved .html copy should get drive and serial access when opened from disk in Chrome or Edge, since browsers treat local files as a secure context. If a button still reports it's blocked, serve the folder with <code>python3 -m http.server</code> and open <code>http://localhost:8000</code>.</li>
       </ul>
@@ -396,7 +396,7 @@ picotool save -a ting-full-flash.bin</pre>
   const inArtifact = !!(window.claude && window.claude.use);
   const SKIP = /^(\.Trashes|\.fseventsd|\.Spotlight-V100|System Volume Information|\.TemporaryItems|\._.*|\.DS_Store)$/;
 
-  const SMOKE = `# Ting hardware smoke test for CircuitPython (EP-2350)
+  const SMOKE = `# EP-2350 hardware smoke test for CircuitPython (EP-2350)
 # Squeeze the handle: white LEDs fill from the bottom.
 # Top / middle / bottom buttons: red LEDs 1 / 2 / 3.  Volume past half: red LED 4.
 #
@@ -429,7 +429,7 @@ buttons = [button(p) for p in (board.BUTTON_TOP, board.BUTTON_MIDDLE, board.BUTT
 handle = analogio.AnalogIn(board.HANDLE_POSITION)
 volume = analogio.AnalogIn(board.VOLUME)
 
-print("Ting smoke test running")
+print("EP-2350 smoke test running")
 for p in whites + reds:
     p.value = True
     time.sleep(0.08)
@@ -576,7 +576,7 @@ while True:
     });
     $("backupTableBox").hidden = files.length === 0;
     $("backupSave").disabled = files.length === 0;
-    status("backupStatus", files.length ? `Read ${files.length} files (${fmtBytes(total)}) from ${sourceName}.` : "That folder is empty. Check you picked the Ting's drive.", files.length ? "ok" : "bad");
+    status("backupStatus", files.length ? `Read ${files.length} files (${fmtBytes(total)}) from ${sourceName}.` : "That folder is empty. Check you picked the mic's drive.", files.length ? "ok" : "bad");
   }
   $("backupPick").addEventListener("click", async () => {
     const dir = await pickDir("read", "backupStatus"); if (!dir) return;
@@ -597,7 +597,7 @@ while True:
     if (!window.JSZip) { status("backupStatus", "The zip library didn't load. Check your connection, or copy the files by hand.", "bad"); return; }
     status("backupStatus", "Building zip…");
     const zip = new JSZip();
-    const manifest = [`Ting disk backup, ${new Date().toISOString()}`, ""];
+    const manifest = [`EP-2350 disk backup, ${new Date().toISOString()}`, ""];
     for (const f of backupFiles) { zip.file(f.path, f.file); manifest.push(`${f.path}\t${f.file.size}`); }
     zip.file("BACKUP-MANIFEST.txt", manifest.join("\n"));
     const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
@@ -620,25 +620,25 @@ while True:
     const fam = (flags & 0x2000) ? dv.getUint32(28, true) : null;
     const famName = fam === null ? "no family ID" : (FAMILIES[fam] || "unknown family 0x" + fam.toString(16));
     const blocks = buf.length / 512;
-    if (fam === 0xe48bff56) { status("uf2Status", `${f.name} is built for the RP2040, not the Ting's RP2350. Download the teenage_engineering_ep2350 build.`, "bad"); return; }
+    if (fam === 0xe48bff56) { status("uf2Status", `${f.name} is built for the RP2040, not the EP-2350's RP2350. Download the teenage_engineering_ep2350 build.`, "bad"); return; }
     uf2 = f;
     $("uf2Flash").disabled = false;
-    status("uf2Status", `${f.name} · ${fmtBytes(f.size)} · ${blocks} blocks · ${famName}. Put the Ting in boot mode, then pick its drive.`, "ok");
+    status("uf2Status", `${f.name} · ${fmtBytes(f.size)} · ${blocks} blocks · ${famName}. Put the mic in boot mode, then pick its drive.`, "ok");
   });
   $("uf2Flash").addEventListener("click", async () => {
     if (!uf2) return;
     const dir = await pickDir("readwrite", "uf2Status"); if (!dir) return;
     const info = await tryRead(dir, "INFO_UF2.TXT");
-    if (info === null) { status("uf2Status", `"${dir.name}" has no INFO_UF2.TXT, so it isn't the boot drive. Redo step 03 and pick TING BOOT.`, "bad"); return; }
+    if (info === null) { status("uf2Status", `"${dir.name}" has no INFO_UF2.TXT, so it isn't the boot drive. Redo step 03 and pick the boot drive (TING BOOT or FX MIC BOOT).`, "bad"); return; }
     $("infoUf2").hidden = false; $("infoUf2").textContent = "INFO_UF2.TXT on " + dir.name + "\n" + info.trim();
     status("uf2Status", "Writing " + uf2.name + "… keep squeezing the handle.");
     try {
       await writeFile(dir, uf2.name, uf2);
-      status("uf2Status", "Copied. The Ting should restart and mount CIRCUITPY (or TING DISK for stock firmware) within a few seconds.", "ok");
+      status("uf2Status", "Copied. The mic should restart and mount CIRCUITPY (or its TING DISK / FX-MIC DISK drive for stock firmware) within a few seconds.", "ok");
       markDone("flash");
     } catch (e) {
       // The bootloader often reboots before the browser finishes closing the file.
-      status("uf2Status", "The browser lost the drive during the write (" + e.name + "). That usually means the Ting rebooted after flashing. If CIRCUITPY doesn't appear within a minute, drag the file onto TING BOOT instead.", "bad");
+      status("uf2Status", "The browser lost the drive during the write (" + e.name + "). That usually means the mic rebooted after flashing. If CIRCUITPY doesn't appear within a minute, drag the file onto the boot drive (TING BOOT or FX MIC BOOT) instead.", "bad");
     }
   });
 
@@ -677,7 +677,7 @@ while True:
     if (bootOut === null) { status("codeStatus", `"${dir.name}" has no boot_out.txt, so it doesn't look like CIRCUITPY. Pick the drive that appeared after flashing.`, "bad"); return; }
     $("bootOut").hidden = false; $("bootOut").textContent = "boot_out.txt\n" + bootOut.trim();
     const m = /CircuitPython (\d+)\./.exec(bootOut);
-    if (m && m[1] !== "10") { status("codeStatus", `This Ting runs CircuitPython ${m[1]}. fx-mic-mod and the driver bundle need 10.x. Flash 10.x in step 04 first.`, "bad"); return; }
+    if (m && m[1] !== "10") { status("codeStatus", `This mic runs CircuitPython ${m[1]}. fx-mic-mod and the driver bundle need 10.x. Flash 10.x in step 04 first.`, "bad"); return; }
     const haveDriver = await hasFile(dir, "lib/" + DRIVER);
     if (!driverFile && !haveDriver) { status("codeStatus", `CIRCUITPY has no lib/${DRIVER}. Choose the bundle's lib folder first (step 1 above).`, "bad"); return; }
     const keepConfig = $("keepConfig").checked && await hasFile(dir, "config.json");
@@ -693,10 +693,10 @@ while True:
         await writeFile(dir, f.name, f.data);
         status("codeStatus", `Copying… ${++n}/${total}`);
       }
-      status("codeStatus", "Installed" + (keepConfig ? " (your config.json was kept)" : "") + ". Turn the Ting off and on again to finish. Open the serial console below to watch it start.", "ok");
+      status("codeStatus", "Installed" + (keepConfig ? " (your config.json was kept)" : "") + ". Turn the mic off and on again to finish. Open the serial console below to watch it start.", "ok");
       markDone("install");
     } catch (e) {
-      status("codeStatus", "The Ting didn't accept the files (" + e.message + "). If fx-mic-mod is already installed, the drive is read-only: turn the Ting off, hold the orange button while you power it on, and try again. If CIRCUITPY is full, delete old files from lib/ first.", "bad");
+      status("codeStatus", "The mic didn't accept the files (" + e.message + "). If fx-mic-mod is already installed, the drive is read-only: turn the mic off, hold the orange button while you power it on, and try again. If CIRCUITPY is full, delete old files from lib/ first.", "bad");
     }
   });
 
@@ -768,7 +768,7 @@ while True:
     try {
       let n = 0;
       for (const f of restoreFiles) { await writeFile(dir, f.path, f.file); status("restoreStatus", `Copying… ${++n}/${restoreFiles.length}`); }
-      status("restoreStatus", "Restored. Eject the drive so the Ting reloads its samples and settings.", "ok");
+      status("restoreStatus", "Restored. Eject the drive so the mic reloads its samples and settings.", "ok");
       markDone("restore");
     } catch (e) { status("restoreStatus", "Write failed: " + e.message, "bad"); }
   });

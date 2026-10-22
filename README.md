@@ -50,7 +50,7 @@ skips it.
 One static site, deployed by Cloudflare from `docs/` (see `wrangler.jsonc`):
 
 - `index.html`: how it works, the button guide and record mode.
-- `install.html`: back up the Ting, flash CircuitPython, then install fx-mic-mod in one click
+- `install.html`: back up the mic (Ting or FX Mic), flash CircuitPython, then install fx-mic-mod in one click
   (it copies the files in `docs/firmware/` to CIRCUITPY), plus a serial console and restore steps.
   Adapted from this project's Ting Flash Bench.
 - `editor.html`: the preset editor. Simple mode uses sliders and switches, Advanced mode shows every
