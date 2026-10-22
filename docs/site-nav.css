@@ -10,7 +10,7 @@
 .site-nav a:focus-visible{outline:2px solid var(--accent,#e2541c);outline-offset:2px}
 
 /* Shared page header: eyebrow, title and lede look the same on every page. */
-.page-head{max-width:1120px;margin:0 auto;display:grid;gap:14px;padding-top:12px}
+.page-head{width:100%;max-width:1120px;margin:0 auto;display:grid;gap:14px;padding-top:12px}
 .page-head .eyebrow{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .page-head h1{font-family:"Archivo","Helvetica Neue",Arial,sans-serif;font-weight:800;font-size:clamp(34px,5.5vw,56px);line-height:1.02;letter-spacing:-.03em;margin:0;text-wrap:balance;max-width:20ch}
 .page-head h1 span{color:var(--accent)}
