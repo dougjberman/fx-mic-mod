@@ -215,7 +215,7 @@ function dspFactory(){
         if(!SCALES[scale]) throw new Error("autotune scale must be chromatic, major or minor");
         const speed=P("speed",1), hum=P("humanize",0);
         const grain=num(spec.grain_size,"grain_size",512)*S, density=clamp(Math.round(num(spec.density,"density",2)),1,8);
-        // squeeze_key / squeeze_scale: a second key the handle switches to (on at 0.8, back at 0.6, like code.py)
+        // squeeze_key / squeeze_scale: a second key the handle switches to (on at 0.67, back at 0.5, like code.py)
         let alt=null;
         if(spec.squeeze_key!=null||spec.squeeze_scale!=null){
           const ak=spec.squeeze_key==null?key:String(spec.squeeze_key).toUpperCase();
@@ -236,8 +236,8 @@ function dspFactory(){
           const py=host.g.engine==="python";
           if(alt){
             const h=env.handle||0;
-            if(!squeezed&&h>=0.8){ squeezed=true; snap=alt; alt.target=null; }
-            else if(squeezed&&h<=0.6){ squeezed=false; snap=rest; rest.target=null; }
+            if(!squeezed&&h>=0.67){ squeezed=true; snap=alt; alt.target=null; }
+            else if(squeezed&&h<=0.5){ squeezed=false; snap=rest; rest.target=null; }
           }
           for(let i=0;i<buf.length;i++){
             const x=buf[i];

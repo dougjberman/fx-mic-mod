@@ -12,7 +12,7 @@ Python calls `mic.record()` every 16 ms, detects pitch, and writes the block int
 `RawSample` that feeds `audiodelays.GranularPitchShift`. The preset's other effects play from the
 shifter. Presets without autotune hand the mic straight to the native chain, like Adafruit's demo,
 with no extra CPU. `speed` / `humanize` accept a number or `"$handle"`. With `squeeze_key` /
-`squeeze_scale`, the main loop switches the key when the handle passes 0.8 and back below 0.6.
+`squeeze_scale`, the main loop switches the key when the handle passes 0.67 (two-thirds) and back at 0.5.
 
 ## Needs checking on the device
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
@@ -25,7 +25,7 @@ with no extra CPU. `speed` / `humanize` accept a number or `"$handle"`. With `sq
 - **Take length:** `RECORD_SECONDS = 4` uses 128 KB of RAM. The serial console prints free memory
   on entering record mode; raise it if there is room.
 - **Flash write time:** saving a 4 s take writes 128 KB. The LEDs go dark while it saves.
-- **Squeeze key threshold:** check the handle really reaches 0.8 travel when fully squeezed
+- **Squeeze key threshold:** check the handle really reaches 0.67 travel on a firm squeeze
   (`handle_control.a` on the serial console). Lower `SQUEEZE_KEY_ON` / `SQUEEZE_KEY_OFF` if not.
 - **LFO-driven speed/humanize:** only plain numbers and `"$handle"` are verified. A synthio LFO
   only updates while a native effect ticks it.

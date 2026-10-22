@@ -545,7 +545,7 @@ function autotuneCard(p, fx){
         fx.squeeze_scale = scale==="major" ? "minor" : "major";
         fx.squeeze_key = scale==="chromatic" ? "C" : curKey;
       } else { delete fx.squeeze_key; delete fx.squeeze_scale; }
-      changed(); }}), h("span",{class:"track"}), h("span",{}, "Squeeze all the way to change key")));
+      changed(); }}), h("span",{class:"track"}), h("span",{}, "Squeeze hard to change key")));
   if (alt){
     const aScale = fx.squeeze_scale || scale;
     const aKey = normKey(fx.squeeze_key || curKey);
@@ -559,7 +559,7 @@ function autotuneCard(p, fx){
       box.append(h("div",{class:"field"}, h("label",{}, "Squeezed key"), aRow));
     }
     const name = (k,sc)=> sc==="chromatic" ? "every note" : k+" "+sc;
-    box.append(h("p",{class:"small muted"}, "Sing with a light squeeze for "+name(curKey,scale)+". Squeeze all the way for "+name(aKey,aScale)+". Ease off past halfway to go back."));
+    box.append(h("p",{class:"small muted"}, "Sing with a light squeeze for "+name(curKey,scale)+". Squeeze past about two-thirds for "+name(aKey,aScale)+". Ease off to halfway to go back."));
     body.append(box);
   }
 

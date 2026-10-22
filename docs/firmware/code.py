@@ -134,8 +134,8 @@ RECORD_BLINK_SECONDS = 0.25
 
 # Handle travel (0 out .. 1 in) at which an autotune preset's "squeeze_key"
 # takes over, and below which it lets go again.
-SQUEEZE_KEY_ON = 0.8
-SQUEEZE_KEY_OFF = 0.6
+SQUEEZE_KEY_ON = 0.67
+SQUEEZE_KEY_OFF = 0.5
 
 # The paddle switch bounces and its click reaches the mic; the mic gate (and
 # the start of a take) waits this long after a paddle change.

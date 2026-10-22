@@ -70,7 +70,7 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
 - At most one per preset. Not allowed in sample `effects`.
 - Defaults: `key` "C", `scale` "chromatic", `speed` 1.0, `humanize` 0, `mix` 1.
 - Squeeze to change key: if `squeeze_key` or `squeeze_scale` is set, the handle switches autotune to
-  that key/scale when its travel reaches 0.8, and back to `key`/`scale` when it falls to 0.6 (the gap
+  that key/scale when its travel reaches 0.67 (two-thirds), and back to `key`/`scale` when it falls to 0.5 (the gap
   stops it flickering). A missing one of the pair keeps the resting value, e.g.
   `"key": "C", "scale": "major", "squeeze_scale": "minor"` goes C major → C minor.
   It combines with `"speed": "$handle"`.
