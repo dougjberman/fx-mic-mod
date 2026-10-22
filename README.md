@@ -49,7 +49,10 @@ skips it.
 
 `docs/index.html` is a web editor for `config.json`: preset slots like the red LEDs, autotune
 with plain-language sliders, an effect chain you add to and reorder, sample slots, and an
-Advanced mode with every raw parameter. It opens and saves `config.json` (Chrome and Edge can
+Advanced mode with every raw parameter. **Try it on your computer** runs the selected preset
+live on your computer's mic (or a built-in sample singer) through `docs/ting-dsp.js`, a Web Audio
+approximation of the firmware: autotune matches the firmware's algorithm, the other effects are
+close to CircuitPython's but not identical. Space acts as a full squeeze. It opens and saves `config.json` (Chrome and Edge can
 save straight to the CIRCUITPY drive; other browsers download the file). It is one self-contained
 page, served by GitHub Pages from the `docs/` folder.
 

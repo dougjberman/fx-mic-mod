@@ -150,6 +150,14 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 .notice.ok{border-color:var(--ok);color:var(--ok)}
 .steps{margin:0;padding-left:20px;display:grid;gap:4px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:20;max-width:calc(100vw - 32px)}
+/* try-it bar */
+.tryit{position:sticky;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:5;display:grid;gap:12px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.tryit .readout{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.tryit .readout b{color:var(--ink);font-family:var(--f-mono);font-weight:500}
+.talk{border:2px solid var(--accent);background:transparent;color:var(--accent);border-radius:999px;padding:8px 18px;font-weight:700;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+.talk[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.tryit .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}
+@media (max-width:760px){.tryit{position:static}.tryit .grid2{grid-template-columns:1fr}}
 pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-size:12.5px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
@@ -175,6 +183,26 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   </header>
 
   <div id="notice" class="notice" hidden></div>
+
+  <section class="panel tryit" id="tryit" aria-label="Try it">
+    <div class="row spread">
+      <div class="row"><h2>Try it on your computer</h2><span class="small muted" id="try-status">Use headphones, or the speakers will feed back into the mic.</span></div>
+      <div class="row">
+        <button class="btn primary" id="try-mic">Use my mic</button>
+        <button class="btn" id="try-singer">Play sample singer</button>
+        <button class="btn ghost" id="try-stop" hidden>Stop</button>
+      </div>
+    </div>
+    <div id="try-controls" class="grid2" hidden>
+      <div class="row">
+        <button class="talk" id="try-talk" aria-pressed="true" title="Like squeezing the handle on the mic. Space bar works too.">Mic open</button>
+        <span class="small muted">Space = squeeze</span>
+      </div>
+      <div id="try-squeeze-slot"></div>
+      <div id="try-level-slot"></div>
+      <div class="readout" id="try-readout"></div>
+    </div>
+  </section>
 
   <section class="panel" style="display:grid;gap:14px">
     <div class="row spread">
@@ -209,6 +237,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
 </div>
 <div class="toast" id="toast" hidden></div>
 
+<script src="ting-dsp.js"></script>
 <script>
 "use strict";
 /* ------------------------------------------------------------------ *
@@ -389,7 +418,7 @@ function chainSummary(p){
 }
 function renderSlots(){
   const root = $("#slots"); root.replaceChildren();
-  config.presets.forEach((p,i) => root.append(h("button",{class:"slot","aria-pressed":String(i===selected), onclick:()=>{selected=i; addOpen=false; render();}},
+  config.presets.forEach((p,i) => root.append(h("button",{class:"slot","aria-pressed":String(i===selected), onclick:()=>{selected=i; addOpen=false; render(); tryPreset();}},
     h("div",{class:"top"}, h("span",{class:"led"}), h("span",{class:"num"}, "PRESET "+(i+1))),
     h("span",{class:"name"}, p.name || "Untitled"),
     h("span",{class:"chain"}, chainSummary(p)))));
@@ -636,8 +665,8 @@ function render(){
   renderSlots(); renderEditor(); renderSamples(); renderJSON();
 }
 function renderJSON(){ $("#json-out").textContent = formatJSON(serialize()); }
-function changed(){ save(); render(); }
-function changedQuiet(){ save(); renderJSON(); renderSlotsLight(); }
+function changed(){ save(); render(); tryPreset(); }
+function changedQuiet(){ save(); renderJSON(); renderSlotsLight(); tryPreset(); }
 function renderSlotsLight(){ renderSlots(); const m=$("#editor .meter"); if (m && config.presets[selected]) m.replaceWith(loadMeter(config.presets[selected])); }
 
 /* ---------------------------- storage ------------------------------ */
@@ -699,6 +728,90 @@ function setMode(adv){
 $("#mode-simple").addEventListener("click", ()=>setMode(false));
 $("#mode-adv").addEventListener("click", ()=>setMode(true));
 $("#pack-name").addEventListener("input", e=>{ config.name = e.target.value.toUpperCase().replace(/[^A-Z0-9_ -]/g,""); e.target.value=config.name; changedQuiet(); });
+
+/* ------------------------- try it (Web Audio) ------------------------ *
+ * Runs the selected preset on the computer mic through ting-dsp.js, at the
+ * mic's 16 kHz where the browser allows it. Space or the button acts as the
+ * handle: open/closed gates the mic, the Squeeze slider is "$handle".
+ * ------------------------------------------------------------------- */
+const tryState = {ctx:null, engine:null, src:null, stream:null, running:false, open:true, squeeze:0, held:false, level:0.5, timer:0};
+function trySend(msg){ if (tryState.engine) tryState.engine.set(msg); }
+function tryG(){ return {power:true, gate:tryState.open || tryState.held, handle:tryState.held ? 1 : tryState.squeeze, level:tryState.level}; }
+function tryPreset(){
+  if (!tryState.engine) return;
+  clearTimeout(tryState.timer);
+  tryState.timer = setTimeout(()=>{ const p = serialize().presets[selected]; trySend({preset: p || null}); }, 60);
+}
+async function tryEnsure(){
+  if (tryState.ctx) return;
+  if (typeof makeTingEngine !== "function") throw new Error("The audio engine (ting-dsp.js) didn't load.");
+  let ctx;
+  try { ctx = new AudioContext({latencyHint:"interactive", sampleRate:16000}); }
+  catch(e){ ctx = new AudioContext({latencyHint:"interactive"}); }
+  tryState.ctx = ctx;
+  tryState.engine = await makeTingEngine(ctx);
+  tryState.engine.onInfo = tryInfo;
+  tryState.engine.node.connect(ctx.destination);
+  trySend({g:tryG()});
+  trySend({preset: serialize().presets[selected] || null});
+}
+function tryStopSource(){
+  if (tryState.src){ try { tryState.src.stop && tryState.src.stop(); } catch(e){} tryState.src.disconnect(); tryState.src = null; }
+  if (tryState.stream){ tryState.stream.getTracks().forEach(t=>t.stop()); tryState.stream = null; }
+}
+async function tryStart(kind){
+  try { await tryEnsure(); } catch(e){ tryStatus("Couldn't start audio: "+e.message, true); return; }
+  await tryState.ctx.resume();
+  tryStopSource();
+  if (kind === "mic"){
+    try {
+      tryState.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+    } catch(e){
+      tryStatus("The browser didn't allow the microphone ("+e.name+"). Check the mic permission for this site, or play the sample singer instead.", true);
+      return;
+    }
+    tryState.src = tryState.ctx.createMediaStreamSource(tryState.stream);
+    tryStatus("Listening. Use headphones so the speakers don't feed back.");
+  } else {
+    const b = makeSampleSinger(tryState.ctx.sampleRate);
+    tryState.src = tryState.ctx.createBufferSource(); tryState.src.buffer = b; tryState.src.loop = true; tryState.src.start();
+    tryStatus("Looping a slightly off-pitch singer through the preset.");
+  }
+  tryState.src.connect(tryState.engine.node);
+  tryState.running = true; tryRender();
+}
+function tryStop(){ tryStopSource(); tryState.running = false; tryRender(); tryStatus("Stopped."); }
+function tryStatus(t, bad){ const el=$("#try-status"); el.textContent=t; el.style.color = bad ? "var(--bad)" : ""; }
+function tryRender(){
+  $("#try-controls").hidden = !tryState.running;
+  $("#try-stop").hidden = !tryState.running;
+  $("#try-talk").setAttribute("aria-pressed", String(tryState.open || tryState.held));
+  $("#try-talk").textContent = tryState.held ? "Squeezed" : tryState.open ? "Mic open" : "Mic closed";
+}
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+function noteName(midi){ const m = Math.round(midi); return NOTE_NAMES[((m%12)+12)%12] + (Math.floor(m/12)-1); }
+let tryPeak = 0;
+function tryInfo(info){
+  const ro = $("#try-readout"); if (!ro) return;
+  const parts = [];
+  const p = config.presets[selected];
+  parts.push(h("span",{}, "Preset ", h("b",{}, (selected+1)+" · "+((p&&p.name)||"Untitled"))));
+  if (info.error) parts.push(h("span",{style:"color:var(--bad)"}, "Won't run on the mic: "+info.error));
+  if (info.midi != null){
+    parts.push(h("span",{}, "You sang ", h("b",{}, noteName(info.midi)+" "+(((info.midi-Math.round(info.midi))*100)>=0?"+":"")+Math.round((info.midi-Math.round(info.midi))*100)+"¢")));
+    if (info.autotune) parts.push(h("span",{}, "Autotune moved it ", h("b",{}, (info.correction>=0?"+":"")+info.correction.toFixed(2)+" st")));
+  } else parts.push(h("span",{}, "No note heard"));
+  ro.replaceChildren(...parts);
+}
+$("#try-mic").addEventListener("click", ()=>tryStart("mic"));
+$("#try-singer").addEventListener("click", ()=>tryStart("singer"));
+$("#try-stop").addEventListener("click", tryStop);
+$("#try-talk").addEventListener("click", ()=>{ tryState.open = !tryState.open; trySend({g:tryG()}); tryRender(); });
+function isTyping(t){ return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t && t.isContentEditable); }
+document.addEventListener("keydown", e=>{ if (e.code==="Space" && tryState.running && !isTyping(e.target) && !(e.target instanceof HTMLButtonElement)){ e.preventDefault(); if (!tryState.held){ tryState.held=true; trySend({g:tryG()}); tryRender(); } } });
+document.addEventListener("keyup", e=>{ if (e.code==="Space" && tryState.held){ tryState.held=false; trySend({g:tryG()}); tryRender(); } });
+$("#try-squeeze-slot").append(sliderEl({label:"Squeeze",min:0,max:1,step:.01,ends:["Rest","Full"]}, 0, v=>{ tryState.squeeze=v; trySend({g:tryG()}); }));
+$("#try-level-slot").append(sliderEl({label:"Volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }));
 
 /* ------------------------------ boot ------------------------------- */
 config = restore() || normalizeConfig(DEFAULT_CONFIG);
