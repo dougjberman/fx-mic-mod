@@ -45,6 +45,14 @@ skips it.
 3. Copy `adafruit_nau88l21.mpy` from the matching Adafruit library bundle into `CIRCUITPY/lib`.
 4. Power-cycle. To change presets later, power on holding TOP and save a new `config.json`.
 
+## Preset editor
+
+`docs/index.html` is a web editor for `config.json`: preset slots like the red LEDs, autotune
+with plain-language sliders, an effect chain you add to and reorder, sample slots, and an
+Advanced mode with every raw parameter. It opens and saves `config.json` (Chrome and Edge can
+save straight to the CIRCUITPY drive; other browsers download the file). It is one self-contained
+page, served by GitHub Pages from the `docs/` folder.
+
 ## Presets
 
 See [CONFIG_FORMAT.md](CONFIG_FORMAT.md). `firmware/config.json` is a starter pack (two autotune
