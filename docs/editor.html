@@ -64,10 +64,14 @@ a{color:var(--accent-text)}
 .btn.stop[hidden]{display:none}
 .btn.stop .sq{width:10px;height:10px;border-radius:2px;background:currentColor}
 .btn.live{box-shadow:inset 0 0 0 1px var(--accent-text);color:var(--accent-text)}
-.btn.live::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent-btn);margin-right:7px;vertical-align:1px;animation:live-dot 1.2s ease-in-out infinite}
+.btn.ico-btn{display:inline-flex;align-items:center;gap:8px}
+.btn .ico{flex:none;width:10px;height:10px;background:currentColor}
+.btn .ico.rec{border-radius:50%}
+.btn .ico.play{clip-path:polygon(10% 0,100% 50%,10% 100%)}
+.btn.live .ico{background:var(--accent-btn);animation:live-dot 1.2s ease-in-out infinite}
 @keyframes stop-ring{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent)}70%,100%{box-shadow:0 0 0 8px transparent}}
 @keyframes live-dot{50%{opacity:.35}}
-@media (prefers-reduced-motion:reduce){.btn.stop,.btn.live::before{animation:none}}
+@media (prefers-reduced-motion:reduce){.btn.stop,.btn.live .ico{animation:none}}
 .btn.ghost{background:transparent}
 .btn.small{padding:4px 10px;font-size:13px}
 .btn:disabled{opacity:.45;cursor:default}
@@ -324,8 +328,8 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     <div class="row head">
       <div class="row"><h2>Try it on your computer</h2><span class="small muted" id="try-status">Use wired headphones. Speakers feed back into the mic, and Bluetooth adds a delay the real mic doesn't have.</span></div>
       <div class="row">
-        <button class="btn primary" id="try-mic">Use my mic</button>
-        <button class="btn" id="try-singer">Play sample singer</button>
+        <button class="btn primary ico-btn" id="try-mic"><span class="ico rec" aria-hidden="true"></span>Use my mic</button>
+        <button class="btn ico-btn" id="try-singer"><span class="ico play" aria-hidden="true"></span>Play sample singer</button>
         <button class="btn stop" id="try-stop" hidden><span class="sq" aria-hidden="true"></span><span id="try-stop-label">Stop</span></button>
       </div>
     </div>
