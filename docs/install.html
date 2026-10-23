@@ -181,8 +181,7 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
       <ul class="how">
         <li>A desktop computer with <b>Chrome or Edge</b> for the one-click tools. Safari and Firefox can still follow the drag-and-drop route.</li>
         <li>A USB-C cable that carries data. Many charge-only cables power the mic but never show a drive.</li>
-        <li>A rubber band or clip. Boot mode needs the handle squeezed all the way in for the whole flash, and that's hard to do by hand.</li>
-        <li>Take off the lower lid to reach the USB-C port and the small reset button above it.</li>
+                <li>Take off the lower lid to reach the USB-C port and the small reset button above it.</li>
       </ul>
       <div class="note calm">The mic has no charging circuit, so USB only powers it and won't charge AA batteries. On USB it stays off until you squeeze the handle all the way in.</div>
     </section>
@@ -251,7 +250,7 @@ picotool save -a ting-full-flash.bin</pre>
             <rect x="72" y="8" width="80" height="124" rx="4" fill="none" stroke="var(--outline)" stroke-width="1.2"/>
             <text x="82" y="94" font-family="Barlow, Helvetica Neue, Arial, sans-serif" font-weight="300" font-size="15" fill="#2a2a2a">MOD</text>
           </svg>
-          <span>Hold the handle all the way in. Strap it with a rubber band.</span>
+          <span>Hold the handle all the way in, and keep holding it through step 04. It's about half a minute.</span>
         </div>
         <div>
           <b>2 · Double-click reset</b>
@@ -288,7 +287,7 @@ picotool save -a ting-full-flash.bin</pre>
           <span>All LEDs go dark and a drive named <b>TING BOOT</b> (or <b>FX MIC BOOT</b>) appears with <code>INDEX.HTM</code> and <code>INFO_UF2.TXT</code>.</span>
         </div>
       </div>
-      <div class="note"><b>Keep the handle squeezed</b> until the flash is finished and the device has restarted. Releasing it mid-copy cuts power to the chip.</div>
+      <div class="note"><b>Keep the handle squeezed</b> until the boot drive disappears and <b>CIRCUITPY</b> shows up. In boot mode nothing else keeps the mic powered, so letting go mid-copy cuts power to the chip. Once CircuitPython is running it holds the power on itself, and you can let go.</div>
     </section>
 
     <!-- 04 -->
