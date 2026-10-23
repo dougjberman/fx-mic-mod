@@ -3,12 +3,14 @@
   "sample_fx": "preset",
   "presets": [
     {
-      "name": "Hard tune",
-      "comment": "Robotic snap to the nearest note, with a little room.",
-      "level": 0.5,
+      "name": "Snapped and Crunched",
+      "comment": "Hard autotune through crunchy overdrive. Squeeze harder for more echo.",
+      "level": 0.6,
       "list": [
-        {"effect": "autotune", "key": "C", "scale": "chromatic", "speed": 1.0, "humanize": 0.0, "mix": 1.0},
-        {"effect": "freeverb", "roomsize": 0.4, "damp": 0.6, "mix": 0.25}
+        {"effect": "autotune", "key": "C", "scale": "chromatic", "speed": 1, "humanize": 0, "mix": 1},
+        {"effect": "distortion", "drive": 0.6, "mode": "overdrive", "pre_gain": 25, "post_gain": -16, "soft_clip": true, "mix": 0.4},
+        {"effect": "echo", "delay_ms": 250, "decay": 0.38, "mix": {"block": "math", "operation": "constrained_lerp", "a": 0, "b": 0.4, "c": "$handle"}, "freq_shift": false, "max_delay_ms": 400},
+        {"effect": "freeverb", "roomsize": 0.2, "damp": 0.6, "mix": 0.15}
       ]
     },
     {
