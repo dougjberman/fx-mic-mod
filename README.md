@@ -16,16 +16,16 @@ Presets use Adafruit's `config.json` format, plus `autotune` and `harmonizer` ef
 
 | Control | Does |
 |---|---|
-| TOP (orange) | Next spot: clean → preset 1..4 → **record mode** → clean. Red LEDs show the preset. |
-| MIDDLE (white) | Next sample slot 1..4. White LEDs show the slot. |
-| BOTTOM (grey) | Play the selected sample (oneshot / hold / startstop, from the config), through the effect preset currently selected on the mic (`"sample_fx": "preset"`) or the sample's own effects. |
-| Squeeze handle | Turns the mic on. Its travel is also `"$handle"` in presets (0 = just squeezed enough to open the mic, 1 = fully in), and an autotune preset can switch key on a full squeeze (`squeeze_key` / `squeeze_scale`). |
+| TOP (orange) | Next effects preset: clean → preset 1..4 → **record mode** → clean. Red LEDs indicate the selected preset. Record mode indicated by all four LEDs lit. |
+| MIDDLE (white) | Next sample slot 1..4. White LEDs show the slot. In record mode, a blinking LED indicates the slot that will be recorded into. |
+| BOTTOM (grey) | Play the selected sample (oneshot / hold / startstop, from the config). In config, you can decide if you want samples to play through the currently selected effect preset, (`"sample_fx": "preset"`) or hardcode the sample's own effects. |
+| Squeeze handle | Turns the mic on. Its travel is also `"$handle"` in presets (0 = just squeezed enough to open the mic, 1 = fully in). Effects parameters can be mapped to the squeeze, such as an autotune preset that switches key on a full squeeze (`squeeze_key` / `squeeze_scale`). |
 | Volume knob | Output level. |
 | TOP + MIDDLE 0.8 s | Power off. |
 
-**Record mode:** all four red LEDs light and the slot's white LED blinks. MIDDLE picks the slot,
-squeeze and hold the handle to record, release to save. The red LEDs count the 4 seconds down.
-A take replaces the slot's WAV. Grey plays it back.
+**Record mode:** all four red LEDs lit and the slot's white LED blinks. MIDDLE picks the slot,
+squeeze and hold the handle to record, release to save. The red LEDs count down the 4 second max sample length as you record.
+A recording immediately replaces the slot's WAV. Grey plays it back to decide if you want another take.
 
 ## Two power-on modes (boot.py)
 
@@ -40,7 +40,7 @@ skips it.
 
 ## Install
 
-1. Back up the ting and flash CircuitPython 10.x for `teenage_engineering_ep2350` (see the flash guide).
+1. Back up the mic and flash CircuitPython 10.x for `teenage_engineering_ep2350` (see the flash guide).
 2. Copy everything in `firmware/` to the CIRCUITPY drive.
 3. Copy `adafruit_nau88l21.mpy` from the matching Adafruit library bundle into `CIRCUITPY/lib`.
 4. Power-cycle. To change presets later, power on holding TOP and save a new `config.json`.
