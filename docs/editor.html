@@ -300,7 +300,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
         <button id="mode-simple" aria-pressed="true">Simple</button>
         <button id="mode-adv" aria-pressed="false">Advanced</button>
       </div>
-      <label class="btn ghost" for="file-open">Open config.json</label>
+      <label class="btn ghost" for="file-open" title="Pick a config.json from the mic's CIRCUITPY drive or your computer">Load existing config.json</label>
       <input id="file-open" type="file" accept=".json,application/json" hidden>
       <button class="btn" id="btn-copy">Copy</button>
       <button class="btn" id="btn-download">Download</button>
@@ -1061,8 +1061,8 @@ function restore(){ try { const t = localStorage.getItem(KEY); if (t) return nor
 
 /* ---------------------------- file I/O ----------------------------- */
 function adoptText(text, source){
-  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Opened "+source); }
-  catch(e){ notice("Couldn't open "+source+": "+e.message, "bad"); }
+  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Loaded "+source); }
+  catch(e){ notice("Couldn't load "+source+": "+e.message, "bad"); }
 }
 $("#file-open").addEventListener("change", async (e)=>{ const f=e.target.files[0]; if(!f) return; adoptText(await f.text(), f.name); e.target.value=""; });
 document.addEventListener("dragover", e=>e.preventDefault());
