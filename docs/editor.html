@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Barlow:wght@300;400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="site-nav.css">
+<script src="site-stats.js"></script>
 <link rel="stylesheet" href="site-motion.css">
 <style>
 /* Layout: a pedalboard. Preset slots run across the top like the mic's red LEDs; the
@@ -56,6 +57,10 @@ a{color:var(--accent-text)}
 .actions{display:flex;flex-wrap:wrap;gap:8px}
 .btn{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:7px 14px;cursor:pointer;font-weight:600;font-size:14px}
 .btn:hover{border-color:var(--muted)}
+.share{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:0;width:min(560px,calc(100vw - 32px))}
+.share::backdrop{background:rgba(0,0,0,.35)}
+.share-body{display:grid;gap:12px;padding:20px}
+.share-body input{width:100%}
 /* The header here is one line shorter, so the mic drawing sits higher and smaller to clear the card below. */
 .page-head .hero-dev{top:22px;width:min(13%,140px)}
 .btn.primary{background:var(--accent-btn);border-color:var(--accent-btn);color:var(--accent-ink)}
@@ -304,6 +309,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       <input id="file-open" type="file" accept=".json,application/json" hidden>
       <button class="btn" id="btn-copy">Copy</button>
       <button class="btn" id="btn-download">Download</button>
+      <button class="btn" id="btn-share">Share via URL</button>
       <button class="btn primary" id="btn-save">Save to mic</button>
     </div>
   </div>
@@ -323,6 +329,15 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <button class="btn small ghost" id="howto-show" style="justify-self:start" hidden>How to use this page</button>
 
   <div id="notice" class="notice" hidden></div>
+
+  <dialog id="share" class="share" aria-labelledby="share-title">
+    <form method="dialog" class="share-body">
+      <h3 id="share-title">Share these presets</h3>
+      <p class="small muted">Anyone who opens this link gets your four presets in the editor, ready to try or save to their mic. Your recorded samples aren't included.</p>
+      <input id="share-url" class="text mono" readonly aria-label="Share link">
+      <div class="row"><button type="button" class="btn primary" id="share-copy">Copy link</button><button class="btn ghost" value="close">Done</button></div>
+    </form>
+  </dialog>
 
   <section class="panel tryit" id="tryit" aria-label="Try it">
     <div class="row head">
@@ -384,6 +399,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
 
 <script src="ting-dsp.js"></script>
 <script>
+if (!window.track) window.track = function(){};  // site-stats.js missing
 "use strict";
 /* ------------------------------------------------------------------ *
  * Effect catalogue. Mirrors firmware/config_loader.py (EFFECTS) and
@@ -1064,7 +1080,7 @@ function adoptText(text, source){
   try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Loaded "+source); }
   catch(e){ notice("Couldn't load "+source+": "+e.message, "bad"); }
 }
-$("#file-open").addEventListener("change", async (e)=>{ const f=e.target.files[0]; if(!f) return; adoptText(await f.text(), f.name); e.target.value=""; });
+$("#file-open").addEventListener("change", async (e)=>{ const f=e.target.files[0]; if(!f) return; track("load-file"); adoptText(await f.text(), f.name); e.target.value=""; });
 document.addEventListener("dragover", e=>e.preventDefault());
 document.addEventListener("drop", async e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if (f) adoptText(await f.text(), f.name); });
 document.addEventListener("paste", e=>{ const t=e.clipboardData && e.clipboardData.getData("text"); if (t && t.trim().startsWith("{") && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLInputElement)) adoptText(t, "pasted text"); });
@@ -1074,9 +1090,10 @@ function copyText(){
   const fallback = ()=>{ document.body.classList.add("advanced"); setMode(true); const pre=$("#json-out"); const r=document.createRange(); r.selectNodeContents(pre); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); toast("Selected. Press Ctrl+C or Cmd+C to copy."); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=>toast("Copied config.json"), fallback); else fallback();
 }
-$("#btn-copy").addEventListener("click", copyText);
-$("#btn-copy2").addEventListener("click", copyText);
+$("#btn-copy").addEventListener("click", ()=>{ track("copy"); copyText(); });
+$("#btn-copy2").addEventListener("click", ()=>{ track("copy"); copyText(); });
 $("#btn-download").addEventListener("click", ()=>{
+  track("download");
   const blob = new Blob([formatJSON(serialize())], {type:"application/json"});
   const a = h("a",{href:URL.createObjectURL(blob), download:"config.json"}); document.body.append(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
@@ -1086,6 +1103,7 @@ $("#btn-download").addEventListener("click", ()=>{
 const canPickFolder = "showDirectoryPicker" in window;
 if (!canPickFolder) $("#btn-save").title = "Your browser can't write to drives. Use Download, then drag the file onto CIRCUITPY.";
 $("#btn-save").addEventListener("click", async ()=>{
+  track("save-to-mic");
   if (!canPickFolder){ notice("This browser can't save straight to the mic. Click Download, then drag config.json onto the CIRCUITPY drive. Chrome and Edge can save directly.", ""); return; }
   let dir;
   try { dir = await window.showDirectoryPicker({id:"circuitpy", mode:"readwrite"}); }
@@ -1098,10 +1116,56 @@ $("#btn-save").addEventListener("click", async ()=>{
     const w = await fh.createWritable();
     await w.write(formatJSON(serialize())); await w.close();
     notice("Saved config.json to the mic. Turn it off and on again to use the new presets.", "ok");
+    track("save-to-mic-done");
   } catch(e){
     notice("The mic didn't accept the file. It's probably in play mode, where your computer can only read it. Turn the mic off, hold the orange button while you turn it on, then save again.", "bad");
   }
 });
+
+/* ---------------------------- share link ---------------------------- *
+ * The whole config rides in the URL after "#c=", compressed and base64url
+ * encoded. The part after # never reaches the server or the stats. */
+const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const unb64url = t => Uint8Array.from(atob(t.replace(/-/g,"+").replace(/_/g,"/")), c=>c.charCodeAt(0));
+async function squeezeBytes(bytes, stream){ return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
+async function shareLink(){
+  const raw = new TextEncoder().encode(JSON.stringify(serialize()));
+  const body = "CompressionStream" in window ? "z" + b64url(await squeezeBytes(raw, new CompressionStream("deflate-raw"))) : "j" + b64url(raw);
+  return location.origin + location.pathname + "#c=" + body;
+}
+async function readShared(body){
+  const bytes = unb64url(body.slice(1));
+  const raw = body[0]==="z" ? await squeezeBytes(bytes, new DecompressionStream("deflate-raw")) : bytes;
+  return new TextDecoder().decode(raw);
+}
+$("#btn-share").addEventListener("click", async ()=>{
+  track("share");
+  const url = await shareLink();
+  $("#share-url").value = url;
+  $("#share-copy").textContent = "Copy link";
+  $("#share").showModal();
+  $("#share-url").select();
+});
+$("#share-url").addEventListener("focus", e=>e.target.select());
+$("#share-copy").addEventListener("click", async ()=>{
+  track("share-copy");
+  const input = $("#share-url");
+  try { await navigator.clipboard.writeText(input.value); $("#share-copy").textContent = "Copied"; }
+  catch(e){ input.select(); toast("Selected. Press Ctrl+C or Cmd+C to copy."); }
+});
+async function openSharedLink(){
+  const m = location.hash.match(/^#c=([jz][A-Za-z0-9_-]+)$/);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  try {
+    const before = formatJSON(serialize());
+    config = normalizeConfig(JSON.parse(await readShared(m[1]))); selected = 0; changed();
+    track("shared-link-opened"); toast("Opened shared presets");
+    notice("Opened shared presets. They replaced the draft you had here.", "ok");
+    const undo = h("button",{class:"btn small", style:"margin-left:10px", onclick:()=>{ adoptText(before, "your earlier draft"); }}, "Bring my draft back");
+    $("#notice").append(undo);
+  } catch(e){ notice("That share link didn't work. It may have been cut off when it was copied.", "bad"); }
+}
 
 /* ------------------------------ mode ------------------------------- */
 function setMode(adv){
@@ -1341,6 +1405,8 @@ for (const [i, json] of OLD_DEFAULTS)
 try { setMode(localStorage.getItem(KEY+"-mode")==="adv"); } catch(e){ setMode(false); }
 render();
 renderSqueezeHint();
+openSharedLink();
+window.addEventListener("hashchange", openSharedLink);
 </script>
 <script src="site-motion.js"></script>
 </body>
