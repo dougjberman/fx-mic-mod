@@ -44,6 +44,13 @@ parameter names and types) and the demo `config.json`.
 `list` runs top to bottom. `name`/`comment` are new-ish: Adafruit's tool writes them, their
 firmware ignores them; we show `name` in the GUI.
 
+`level` **(new, optional)**: the preset's output level, `0.0` to `1.0`, default `1.0`. The
+firmware sets the output mixer voice to it whenever the mic is open on this preset (with
+`sample_fx: "preset"` it scales the sample too). It's how a loud chain, like distortion, is
+brought down to match the others. The editor's **Match volume** button sets it by running the
+sample singer through each preset and turning the loud ones down to about the dry voice's
+loudness. It can only turn a preset down, because a mixer voice can't go above 1.0.
+
 ## Sample
 
 ```json

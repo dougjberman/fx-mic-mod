@@ -428,13 +428,15 @@ function dspFactory(){
       this.env={frame:0, dt:0, handle:0};
       this.gateG=0; this.lvl=0; this.mic=new Float32Array(128); this.smp=new Float32Array(128);
       this.n=0; this.ping=null; this.pingResult=null; this.error=null; this.latency=0; this.info=null;
-      this.rec=null; this.recDone=null; this.through=false;     // on-device recorder: raw mic, up to maxSec
+      this.rec=null; this.recDone=null; this.through=false; this.plev=1;     // on-device recorder: raw mic, up to maxSec
     }
     set(q){
       if(q.g) Object.assign(this.g,q.g);
       if("preset" in q){
         try{ const c=buildChain(q.preset,this.host,false); this.chain=c.fx; this.error=null; }
         catch(e){ this.chain=[]; this.error=e.message; }           // the firmware falls back to clean
+        // "level": the preset's output level, 0..1 (the firmware sets the output mixer voice to it)
+        const lv=q.preset&&q.preset.level; this.plev=typeof lv==="number"&&lv>=0&&lv<=1&&!this.error ? lv : 1;
         this.atInfo=null; this.latency=this.chain.reduce((s,f)=>s+f.latency,0);
       }
       if("sampleFx" in q) this.through=String(q.sampleFx||"own").toLowerCase()==="preset";
@@ -483,7 +485,7 @@ function dspFactory(){
       for(let i=0;i<n;i++){
         if(!through) this.gateG+=(gGoal-this.gateG)*0.004;
         this.lvl+=(lGoal-this.lvl)*0.002;
-        const y=(through ? mic[i] : mic[i]*this.gateG+smp[i])*this.lvl;
+        const y=(through ? mic[i]*this.plev : mic[i]*this.gateG*this.plev+smp[i])*this.lvl;
         out[i]= this.ping ? this.pingSample(inp[i]||0) : y;
         this.n++;
       }

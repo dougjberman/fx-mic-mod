@@ -141,6 +141,13 @@ class LoaderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.cl.sample_routing({"sample_fx": "chain"})
 
+    def test_preset_level(self):
+        self.assertEqual(self.cl.preset_level({"list": []}), 1.0)
+        self.assertEqual(self.cl.preset_level({"level": 0.5, "list": []}), 0.5)
+        for bad in (1.5, -0.1, "loud", True):
+            with self.assertRaises(ValueError):
+                self.cl.preset_level({"level": bad, "list": []})
+
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
             self.cl.create_effects({"list": [{"effect": "autotune"}]})
@@ -202,6 +209,17 @@ class DeviceScenarioTests(unittest.TestCase):
         # clean and the echo preset take the sample on an input mixer, mic gated off
         self.assertEqual(s["heads"][-1], {"mic_level": 0.0, "sample": "WaveFile"})
         self.assertEqual(s["out_level"], 1.0)
+
+    def test_preset_level_sets_the_output(self):
+        config = json.loads(json.dumps(TEST_CONFIG))
+        config["presets"][0]["level"] = 0.5
+        root, out, s = run("level", config)
+        self.assertEqual(s["active"], 1)
+        self.assertEqual(s["out_level"], 0.5)
+        through = json.loads(json.dumps(THROUGH_CONFIG))
+        through["presets"][1]["level"] = 0.6
+        root, out, s = run("through", through, tone=(340.0, 1.0))
+        self.assertEqual(s["out_level"], 0.6)
 
     def test_edit_mode_never_writes(self):
         root, out, s = run("readonly")

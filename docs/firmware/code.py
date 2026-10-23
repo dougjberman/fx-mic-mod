@@ -79,6 +79,7 @@ from config_loader import (
     create_preset,
     is_autotune,
     load_samples,
+    preset_level,
     sample_routing,
 )
 from recorder import Recorder
@@ -239,6 +240,10 @@ class DataContext:
 
         # True == paddle squeezed.
         self.paddle_held = False
+        # Whether set_gate() last opened the mic.
+        self.gate_open = False
+        # The active preset's output level, 0.0 to 1.0 (the "level" key).
+        self.level = 1.0
         # `time.monotonic()` of the last paddle change still waiting to be
         # acted on after PADDLE_SETTLE_SECONDS, or None.
         self.paddle_changed = None
@@ -402,6 +407,7 @@ def build(ctx, preset):
     # half-wired graph running. create_preset() builds without wiring, which
     # is what lets the wiring below run output-first.
     specs = preset.get("list", ()) if preset else ()
+    ctx.level = preset_level(preset) if preset else 1.0
     fmt = AUTOTUNE_FORMAT if any(is_autotune(spec) for spec in specs) else FORMAT
     tune_args = None
     ctx.chain = []
@@ -439,7 +445,7 @@ def build(ctx, preset):
     inlet, inlet_loop = source, ctx.tune is not None or not ctx.chain
     if THROUGH_PRESET:
         mixer.voice[1].stop()  # a sample left over from record mode
-        mixer.voice[0].level = 1.0
+        mixer.voice[0].level = ctx.level
         if ctx.tune is not None:
             # Autotune mixes the sample in itself, before pitch detection,
             # so the sample is tuned too; the paddle mutes only the mic.
@@ -456,6 +462,10 @@ def build(ctx, preset):
         for index in range(len(ctx.chain) - 1, 0, -1):
             ctx.chain[index].play(ctx.chain[index - 1])
         ctx.chain[0].play(inlet, loop=inlet_loop)
+
+    if not THROUGH_PRESET and ctx.gate_open:
+        # Squeezed through a preset change: open at the new preset's level.
+        mixer.voice[0].level = ctx.level
 
     if ctx.head is not None:
         # The mic still goes in last.
@@ -754,9 +764,11 @@ def set_gate(ctx, held):
     """Open or close the mic for the paddle, wherever the mic is mixed."""
     if THROUGH_PRESET and ctx.tune is not None:
         ctx.tune.gate = held
+    elif ctx.head is not None:
+        ctx.head.voice[0].level = 1.0 if held else 0.0
     else:
-        voice = ctx.head.voice[0] if ctx.head is not None else mixer.voice[0]
-        voice.level = 1.0 if held else 0.0
+        mixer.voice[0].level = ctx.level if held else 0.0
+    ctx.gate_open = held
 
 
 def start_sample(ctx, loop=False):

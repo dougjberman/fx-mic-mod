@@ -42,6 +42,13 @@ SCENARIOS = {
     # sample_fx "preset": TOP -> autotune preset, grey plays 1.wav with the
     # paddle released (so only the sample reaches autotune); TOP -> echo
     # preset, grey plays it into the chain's input mixer.
+    # TOP -> preset 1, squeezed and still held at the end: the output mixer
+    # sits at the preset's "level".
+    "level": dict(
+        presses=tap(0.5, TOP),
+        paddle=[(1.0, 3.0)],
+        end=2.0,
+    ),
     "through": dict(
         presses=tap(0.5, TOP) + tap(1.0, BOTTOM) + tap(3.0, TOP) + tap(3.5, BOTTOM),
         paddle=[],

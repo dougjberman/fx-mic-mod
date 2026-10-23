@@ -862,6 +862,25 @@ def load_samples(config, max_samples=None):
 SAMPLE_FX_MODES = ("own", "preset")
 
 
+def preset_level(preset):
+    """A preset's output level: the optional ``"level"`` key, 0.0 to 1.0.
+
+    It scales the whole preset (mic and, with samples played through the
+    preset, the sample too) so loud chains such as distortion can be brought
+    down to match the others. The editor's Match volume button sets it.
+    Missing means 1.0, full level, which is how every preset sounded before.
+
+    :param dict preset: One entry of the config's ``"presets"`` list.
+    :return: The level as a float.
+    """
+    level = preset.get("level", 1.0) if isinstance(preset, dict) else 1.0
+    if isinstance(level, bool) or not isinstance(level, (int, float)):
+        raise ValueError('"level" must be a number from 0.0 to 1.0')
+    if not 0.0 <= level <= 1.0:
+        raise ValueError('"level" must be from 0.0 to 1.0, not {}'.format(level))
+    return float(level)
+
+
 def sample_routing(config):
     """Where samples get their effects: the top-level ``"sample_fx"`` key.
 

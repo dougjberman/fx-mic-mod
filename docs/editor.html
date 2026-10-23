@@ -119,6 +119,10 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .keys button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 .field{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr);gap:12px;align-items:center}
 .field > .seg{justify-self:start}
+.match{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 16px;align-items:start;border-top:1px solid var(--line);padding-top:12px}
+.match p{margin:0;max-width:78ch}
+@media (max-width:560px){.match{grid-template-columns:1fr}}
+.levelrow{border-top:1px solid var(--line);padding-top:10px}
 .credit{margin:24px 0 0;font-size:12px;color:var(--muted)}
 .credit a{color:inherit;text-decoration-color:var(--line);text-underline-offset:2px}
 @media (max-width:560px){.field{grid-template-columns:1fr}}
@@ -219,7 +223,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     </div>
     <ol>
       <li><span class="n">1 · DESIGN</span><b>Pick a preset and build its chain</b>Each card below is one press of the orange button. Start from a template or add effects. Autotune always runs first.</li>
-      <li><span class="n">2 · LISTEN</span><b>Try it with your computer's mic</b>Click Use my mic and wear wired headphones (Bluetooth adds a delay the real mic doesn't have). Every change you make plays right away. Hold Space to squeeze the handle, so you can try squeeze settings like a key change.</li>
+      <li><span class="n">2 · LISTEN</span><b>Try it with your computer's mic</b>Click Use my mic and wear wired headphones (Bluetooth adds a delay the real mic doesn't have). Every change you make plays right away. Drag the Squeeze slider to try squeeze settings like a key change.</li>
       <li><span class="n">3 · SAVE</span><b>Put it on the mic</b>Hold orange while you power on the mic, plug it in, then click Save to mic and pick CIRCUITPY. Power it off and on to play.</li>
     </ol>
     <p class="small muted">This page only changes your presets (<span class="mono">config.json</span>). If your mic doesn't have fx-mic-mod yet, follow the <a href="install.html">install guide</a> first.</p>
@@ -239,8 +243,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     </div>
     <div id="try-controls" class="controls" hidden>
       <div class="talkbox">
-        <button class="talk" id="try-talk" aria-pressed="true" title="Like squeezing the handle on the mic. Space bar works too.">Mic open</button>
-        <span class="small muted">Space = squeeze</span>
+        <button class="talk" id="try-talk" aria-pressed="true" title="Opens and closes the mic, like the handle on the real mic.">Mic open</button>
       </div>
       <div id="try-squeeze-slot"></div>
       <div id="try-level-slot"></div>
@@ -251,10 +254,14 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <section class="panel" style="display:grid;gap:14px">
     <div class="row spread">
       <h2>Presets · orange button</h2>
-      <div class="row small muted"><span class="adv">Pack name</span><input id="pack-name" class="text mono adv" maxlength="16" aria-label="Pack name"></div>
+      <div class="row small muted"><button class="btn small ghost" id="btn-reset" title="Replace your presets and samples with the editor's defaults">Reset to defaults</button><span class="adv">Pack name</span><input id="pack-name" class="text mono adv" maxlength="16" aria-label="Pack name"></div>
     </div>
     <div class="slots" id="slots"></div>
     <p class="small muted">The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic.</p>
+    <div class="match">
+      <button class="btn" id="btn-match">Match volume</button>
+      <p class="small muted" id="match-help"><b>Optional.</b> Some chains come out much louder than others. Distortion is the usual culprit, and the volume jumps when you switch presets. Match volume plays the sample singer through each preset here in the browser, measures how loud it comes out, and turns the loud ones down to about the level of your plain voice. It only turns presets down, never up. It sets each preset's Output level, which you can still adjust by hand. Leave it alone if you like the jumps.</p>
+    </div>
   </section>
 
   <section id="editor" style="display:grid;gap:14px"></section>
@@ -489,7 +496,9 @@ function renderEditor(){
         h("button",{class:"icon-btn", title:"Move preset left", "aria-label":"Move preset left", disabled:selected===0||null, onclick:()=>movePreset(-1)}, "←"),
         h("button",{class:"icon-btn", title:"Move preset right", "aria-label":"Move preset right", disabled:selected===config.presets.length-1||null, onclick:()=>movePreset(1)}, "→"),
         h("button",{class:"btn small ghost", onclick:()=>{ config.presets.splice(selected,1); selected=Math.max(0,selected-1); changed(); }}, "Delete preset"))),
-    loadMeter(p));
+    loadMeter(p),
+    h("div",{class:"levelrow"}, sliderEl({label:"Output level", min:0, max:1, step:.05}, typeof p.level==="number" ? p.level : 1,
+      v=>{ if (v>=1) delete p.level; else p.level=Math.round(v*100)/100; changedQuiet(); })));
   root.append(head);
 
   const chain = h("div",{class:"chain"});
@@ -821,7 +830,7 @@ $("#pack-name").addEventListener("input", e=>{ config.name = e.target.value.toUp
 
 /* ------------------------- try it (Web Audio) ------------------------ *
  * Runs the selected preset on the computer mic through ting-dsp.js, at the
- * mic's 16 kHz where the browser allows it. Space or the button acts as the
+ * mic's 16 kHz where the browser allows it. The button acts as the
  * handle: open/closed gates the mic, the Squeeze slider is "$handle".
  * ------------------------------------------------------------------- */
 const tryState = {ctx:null, engine:null, src:null, stream:null, running:false, open:true, squeeze:0, held:false, level:0.5, timer:0};
@@ -870,6 +879,53 @@ async function tryStart(kind){
   tryState.src.connect(tryState.engine.node);
   tryState.running = true; tryRender();
 }
+/* Match volume: run each preset offline on the sample singer, measure its
+ * loudness, and set "level" so loud presets come out about as loud as the dry
+ * voice. Only ever turns presets down: the firmware's mixer level tops out at 1.0. */
+async function singerData(rate){
+  const ctx = new OfflineAudioContext(1, 1, rate);
+  try {
+    const res = await fetch("audio/sample-singer.mp3"); if (!res.ok) throw new Error(res.status);
+    return (await ctx.decodeAudioData(await res.arrayBuffer())).getChannelData(0);
+  } catch(e){ return makeSampleSinger(rate).getChannelData(0); }
+}
+async function loudness(preset, data, rate){
+  const d = new (dspFactory().TingDSP)(rate);
+  d.set({g:{power:true, gate:true, handle:0.5, level:1}, preset, sampleFx:"own"});
+  const N = 256, out = new Float32Array(N), skip = Math.round(rate*0.5);
+  let sum = 0, count = 0;
+  for (let i = 0; i + N <= data.length; i += N){
+    d.process(data.subarray(i, i+N), out);
+    if (i >= skip){ let e = 0; for (let k = 0; k < N; k++) e += out[k]*out[k]; e /= N; if (e > 1e-5){ sum += e; count++; } }
+    if (i % (N*400) === 0) await new Promise(r=>setTimeout(r));
+  }
+  return count ? Math.sqrt(sum/count) : 0;
+}
+async function matchVolume(){
+  const btn = $("#btn-match"); btn.disabled = true; const label = btn.textContent;
+  try {
+    const rate = 32000, data = (await singerData(rate)).slice(0, rate*10);
+    btn.textContent = "Measuring…";
+    const dry = await loudness({list:[]}, data, rate);
+    const presets = serialize().presets, report = [];
+    for (let i = 0; i < presets.length; i++){
+      btn.textContent = "Measuring " + (i+1) + " of " + presets.length + "…";
+      const q = Object.assign({}, presets[i]); delete q.level;
+      const loud = await loudness(q, data, rate);
+      const lv = loud > dry ? Math.max(0.05, Math.round(dry/loud*20)/20) : 1;
+      if (lv >= 1) delete config.presets[i].level; else config.presets[i].level = lv;
+      report.push((presets[i].name || "Preset "+(i+1)) + " " + Math.round(lv*100) + "%");
+    }
+    changed(); toast("Matched: " + report.join(", "));
+  } catch(e){ toast("Couldn't match volume: " + e.message); }
+  btn.disabled = false; btn.textContent = label;
+}
+$("#btn-match").addEventListener("click", matchVolume);
+$("#btn-reset").addEventListener("click", ()=>{
+  if (!confirm("Replace all your presets and sample settings with the editor's defaults? Save or download your config.json first if you want to keep it.")) return;
+  config = clone(DEFAULT_CONFIG); selected = 0; addOpen = false; changed(); toast("Back to the default presets.");
+});
+
 // The sample singer: a real a cappella recording, or the synthetic one if the file can't load.
 let trySinger = null;
 async function trySingerBuffer(){
@@ -912,9 +968,6 @@ $("#try-mic").addEventListener("click", ()=>tryStart("mic"));
 $("#try-singer").addEventListener("click", ()=>tryStart("singer"));
 $("#try-stop").addEventListener("click", tryStop);
 $("#try-talk").addEventListener("click", ()=>{ tryState.open = !tryState.open; trySend({g:tryG()}); tryRender(); });
-function isTyping(t){ return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t && t.isContentEditable); }
-document.addEventListener("keydown", e=>{ if (e.code==="Space" && tryState.running && !isTyping(e.target) && !(e.target instanceof HTMLButtonElement)){ e.preventDefault(); if (!tryState.held){ tryState.held=true; trySend({g:tryG()}); tryRender(); } } });
-document.addEventListener("keyup", e=>{ if (e.code==="Space" && tryState.held){ tryState.held=false; trySend({g:tryG()}); tryRender(); } });
 $("#try-squeeze-slot").append(sliderEl({label:"Squeeze",min:0,max:1,step:.01,}, 0, v=>{ tryState.squeeze=v; trySend({g:tryG()}); }));
 $("#try-level-slot").append(sliderEl({label:"Volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }));
 
