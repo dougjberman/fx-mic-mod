@@ -47,7 +47,7 @@ code{font-family:var(--f-mono);font-size:.92em}
 .eyebrow.accent{color:var(--accent)}
 .hero > .pair, .hero > .cta{margin-top:6px}
 .hero{position:relative}
-.hero-dev{position:absolute;right:3%;top:58px;width:min(16%,165px);height:auto;transform:rotate(9deg);pointer-events:none}
+.hero-dev{position:absolute;right:calc((100% - 615px) / 2 - 82px);top:58px;width:min(16%,165px);height:auto;transform:rotate(9deg);pointer-events:none}
 @media (max-width:980px){.hero-dev{display:none}}
 .hero-dev .blink{animation:heroBlink 1s steps(1,end) infinite}
 @keyframes heroBlink{50%{opacity:0}}
