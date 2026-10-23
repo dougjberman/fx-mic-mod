@@ -13,7 +13,7 @@
     {
       "name": "Squeeze for backups",
       "comment": "Light autotune. Squeeze and the backing vocals come in: a sus2 chord in 2nd inversion around your voice. A short echo.",
-      "level": 0.7,
+      "level": 0.6,
       "list": [
         {"effect": "autotune", "key": "C", "scale": "chromatic", "speed": 0.7, "humanize": 0.2, "mix": 1},
         {"effect": "harmonizer", "chord": "sus2", "inversion": 2, "octave": 0, "level": "$handle"},

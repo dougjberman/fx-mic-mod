@@ -481,11 +481,11 @@ const STARTERS = [
   {name:"Chipmunk space", list:[{effect:"filter",filter:{mode:"high_pass",frequency:200,Q:.7071},mix:1},{effect:"granular_pitch_shift",semitones:8,density:3},{effect:"echo",max_delay_ms:1200,delay_ms:750,decay:.45,mix:.35,freq_shift:true},{effect:"freeverb",roomsize:.75,damp:.55,mix:.6}]},
   {name:"Squeeze monster", list:[{effect:"pitch_shift",semitones:{block:"math",operation:"constrained_lerp",a:-12,b:12,c:"$handle"},mix:1,window:1024,overlap:128},{effect:"distortion",drive:.6,pre_gain:12,post_gain:-8,mode:"overdrive",soft_clip:true,mix:1},{effect:"filter",filter:{mode:"low_pass",frequency:3500,Q:.7071},mix:1}]},
   {name:"Key flip", list:[{effect:"autotune",key:"C",scale:"major",squeeze_scale:"minor",speed:.85,humanize:.1,mix:1},{effect:"echo",max_delay_ms:500,delay_ms:250,decay:.3,mix:.2},{effect:"freeverb",roomsize:.6,damp:.5,mix:.3}]},
-  {name:"Snap crackle pop", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"distortion",drive:.6,mode:"overdrive",pre_gain:25,post_gain:-16,soft_clip:true,mix:.4},{effect:"echo",delay_ms:250,decay:.38,mix:.2,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.2,damp:.6,mix:.15}]},
+  {name:"Snap crackle pop", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"distortion",drive:.6,mode:"overdrive",pre_gain:25,post_gain:-16,soft_clip:true,mix:.4},{effect:"echo",delay_ms:250,decay:.38,mix:{block:"math",operation:"constrained_lerp",a:0,b:.4,c:"$handle"},freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.2,damp:.6,mix:.15}]},
 ];
 STARTERS.push(
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.8,damp:.5,mix:.4}]});
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.8],[STARTERS[1],.7],[STARTERS[4],1],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Match volume
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.8],[STARTERS[1],.6],[STARTERS[4],1],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Match volume
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"hold"},{file:"4.wav",playmode:"startstop"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -1273,6 +1273,10 @@ function squeezeJob(p){
   if (hz && hz.enabled!==false && JSON.stringify(hz).includes("$handle")) return "the backing vocals come in";
   if (at && at.speed==="$handle") return "the tuning tighten up";
   if (at && (at.squeeze_key!=null || at.squeeze_scale!=null)) return "the key change";
+  const moved = p.list.find(f=>f.enabled!==false && f.effect!=="autotune" && JSON.stringify(f).includes("$handle"));
+  if (moved && ["echo","multi_tap_delay"].includes(moved.effect)) return "the echo build";
+  if (moved && ["pitch_shift","granular_pitch_shift"].includes(moved.effect)) return "the pitch sweep from low to high";
+  if (moved && moved.effect==="freeverb") return "the reverb open up";
   return "what the squeeze does";
 }
 function setSqueeze(v){ squeezeInput.value = v; squeezeInput.dispatchEvent(new Event("input")); }
@@ -1305,9 +1309,17 @@ try { if (localStorage.getItem(KEY+"-howto")==="0") setHowto(false); } catch(e){
 
 /* ------------------------------ boot ------------------------------- */
 config = restore() || normalizeConfig(DEFAULT_CONFIG);
-// Preset 2 used to default to "Squeeze to tune". Visitors who never changed it get its replacement.
-const OLD_PRESET_2 = '[{"effect":"autotune","key":"C","scale":"major","speed":"$handle","humanize":0.3,"mix":1},{"effect":"filter","filter":{"mode":"high_pass","frequency":150,"Q":0.7071},"mix":1},{"effect":"echo","max_delay_ms":400,"delay_ms":140,"decay":0.3,"mix":0.25}]';
-if (config.presets[1] && config.presets[1].name==="Squeeze to tune" && JSON.stringify(config.presets[1].list)===OLD_PRESET_2){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); }
+// Earlier site defaults. A visitor whose preset still matches one exactly never changed it, so it
+// moves to the current default in that slot.
+const OLD_DEFAULTS = [
+  [0, '{"name":"Snap crackle pop","list":[{"effect":"autotune","key":"C","scale":"chromatic","speed":1,"humanize":0,"mix":1},{"effect":"distortion","drive":0.6,"mode":"overdrive","pre_gain":25,"post_gain":-16,"soft_clip":true,"mix":0.4},{"effect":"echo","delay_ms":250,"decay":0.38,"mix":0.2,"freq_shift":false,"max_delay_ms":400},{"effect":"freeverb","roomsize":0.2,"damp":0.6,"mix":0.15}],"level":0.8}'],
+  [1, '{"name":"Squeeze to tune","list":[{"effect":"autotune","key":"C","scale":"major","speed":"$handle","humanize":0.3,"mix":1},{"effect":"filter","filter":{"mode":"high_pass","frequency":150,"Q":0.7071},"mix":1},{"effect":"echo","max_delay_ms":400,"delay_ms":140,"decay":0.3,"mix":0.25}],"level":0.7}'],
+  [1, '{"name":"Squeeze for backups","list":[{"effect":"autotune","key":"C","scale":"chromatic","speed":0.7,"humanize":0.2,"mix":1},{"effect":"harmonizer","chord":"sus2","inversion":2,"octave":0,"level":"$handle"},{"effect":"echo","delay_ms":250,"decay":0.1,"mix":0.1,"freq_shift":false,"max_delay_ms":500}],"level":0.7}'],
+];
+const canon = v => Array.isArray(v) ? "["+v.map(canon).join(",")+"]"
+  : v && typeof v==="object" ? "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+canon(v[k])).join(",")+"}" : JSON.stringify(v);
+for (const [i, json] of OLD_DEFAULTS)
+  if (config.presets[i] && canon(config.presets[i])===canon(JSON.parse(json))){ config.presets[i] = clone(DEFAULT_CONFIG.presets[i]); save(); }
 try { setMode(localStorage.getItem(KEY+"-mode")==="adv"); } catch(e){ setMode(false); }
 render();
 renderSqueezeHint();
