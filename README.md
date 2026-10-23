@@ -31,8 +31,8 @@ A take replaces the slot's WAV. Grey plays it back.
 
 CircuitPython lets either the computer or the mic write files, never both at once.
 
-- **Normal power-on:** the mic can record. Your computer sees the drive as read-only.
-- **Hold TOP while powering on (edit mode):** your computer can save `config.json`, WAVs and
+- **Normal power-on (squeeze the handle):** the mic can record. Your computer sees the drive as read-only.
+- **Hold TOP (orange) while squeezing the handle to power on (edit mode):** your computer can save `config.json`, WAVs and
   firmware updates. Recording is off, and the red LEDs flash in record mode.
 
 `boot.py` only runs on power-on or a hard reset. If you ever get stuck, CircuitPython's safe mode
