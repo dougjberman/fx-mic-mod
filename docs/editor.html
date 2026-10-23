@@ -220,6 +220,14 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 .tryit .slider{grid-template-columns:62px minmax(0,1fr) 44px;gap:10px}
 .tryit .readout{grid-column:1/-1}
 @media (max-width:760px){.tryit{position:static}.tryit .controls{grid-template-columns:1fr}.tryit .slider{grid-template-columns:62px minmax(0,1fr) 44px}.tryit .slider label{grid-column:auto}}
+/* nudge toward the Squeeze slider on presets that use the handle */
+.squeeze-hint{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:14px;color:var(--accent-text);padding:8px 12px;border-radius:10px;background:var(--accent-soft)}
+.squeeze-hint[hidden]{display:none}
+.squeeze-hint b{color:var(--ink)}
+#try-squeeze-slot{border-radius:10px;padding:4px 8px;margin:-4px -8px;transition:box-shadow .2s}
+#try-squeeze-slot.nudge{box-shadow:inset 0 0 0 2px var(--accent);animation:nudge 1.6s ease-in-out infinite}
+@keyframes nudge{50%{box-shadow:inset 0 0 0 2px transparent}}
+@media (prefers-reduced-motion:reduce){#try-squeeze-slot.nudge{animation:none}}
 /* how-to strip */
 .howto{display:grid;gap:12px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;background:var(--panel);padding:16px 18px}
 .howto ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
@@ -322,6 +330,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
         <button class="btn stop" id="try-stop" hidden><span class="sq" aria-hidden="true"></span><span id="try-stop-label">Stop</span></button>
       </div>
     </div>
+    <div class="squeeze-hint" id="try-hint" hidden></div>
     <div id="try-controls" class="controls" hidden>
       <div class="talkbox">
         <button class="talk" id="try-talk" aria-pressed="true" title="Opens and closes the mic, like the handle on the real mic.">Mic open</button>
@@ -466,7 +475,7 @@ const PLAYMODES = [["oneshot","Tap to play"],["hold","Hold to play"],["startstop
 
 const STARTERS = [
   {name:"Hard tune", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"freeverb",roomsize:.4,damp:.6,mix:.25}]},
-  {name:"Squeeze to tune", list:[{effect:"autotune",key:"C",scale:"major",speed:"$handle",humanize:.3,mix:1},{effect:"filter",filter:{mode:"high_pass",frequency:150,Q:.7071},mix:1},{effect:"echo",max_delay_ms:400,delay_ms:140,decay:.3,mix:.25}]},
+  {name:"Squeeze for backups", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:.7,humanize:.2,mix:1},{effect:"harmonizer",chord:"sus2",inversion:2,octave:0,level:"$handle"},{effect:"echo",delay_ms:250,decay:.1,mix:.1,freq_shift:false,max_delay_ms:500}]},
   {name:"Stadium tune", list:[{effect:"autotune",key:"A",scale:"minor",speed:.7,humanize:.2,mix:1},{effect:"chorus",max_delay_ms:50,delay_ms:20,voices:2,mix:.35},{effect:"freeverb",roomsize:.85,damp:.4,mix:.45}]},
   {name:"Radio", list:[{effect:"filter",filter:{mode:"band_pass",frequency:1500,Q:1.2},mix:1},{effect:"distortion",drive:.5,pre_gain:12,post_gain:-10,mode:"clip",soft_clip:true,mix:1}]},
   {name:"Chipmunk space", list:[{effect:"filter",filter:{mode:"high_pass",frequency:200,Q:.7071},mix:1},{effect:"granular_pitch_shift",semitones:8,density:3},{effect:"echo",max_delay_ms:1200,delay_ms:750,decay:.45,mix:.35,freq_shift:true},{effect:"freeverb",roomsize:.75,damp:.55,mix:.6}]},
@@ -475,8 +484,7 @@ const STARTERS = [
   {name:"Snap crackle pop", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"distortion",drive:.6,mode:"overdrive",pre_gain:25,post_gain:-16,soft_clip:true,mix:.4},{effect:"echo",delay_ms:250,decay:.38,mix:.2,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.2,damp:.6,mix:.15}]},
 ];
 STARTERS.push(
-  {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.8,damp:.5,mix:.4}]},
-  {name:"Squeeze for harmony", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:.9,humanize:.1,mix:1},{effect:"harmonizer",chord:"maj7",inversion:0,octave:0,level:"$handle"},{effect:"freeverb",roomsize:.5,damp:.5,mix:.25}]});
+  {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.8,damp:.5,mix:.4}]});
 const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.8],[STARTERS[1],.7],[STARTERS[4],1],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Match volume
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"hold"},{file:"4.wav",playmode:"startstop"}]};
 
@@ -578,7 +586,7 @@ function chainSummary(p){
 }
 function renderSlots(){
   const root = $("#slots"); root.replaceChildren();
-  config.presets.forEach((p,i) => root.append(h("button",{class:"slot","aria-pressed":String(i===selected), onclick:()=>{selected=i; addOpen=false; render(); tryPreset();}},
+  config.presets.forEach((p,i) => root.append(h("button",{class:"slot","aria-pressed":String(i===selected), onclick:()=>{selected=i; addOpen=false; render(); tryPreset(); renderSqueezeHint();}},
     h("div",{class:"top"}, h("span",{class:"led"}), h("span",{class:"num"}, "PRESET "+(i+1))),
     h("span",{class:"name"}, p.name || "Untitled"),
     h("span",{class:"chain"}, chainSummary(p)))));
@@ -1037,7 +1045,7 @@ function render(){
   renderSlots(); renderEditor(); renderSamples(); renderJSON();
 }
 function renderJSON(){ $("#json-out").textContent = formatJSON(serialize()); }
-function changed(){ save(); render(); tryPreset(); }
+function changed(){ save(); render(); tryPreset(); renderSqueezeHint(); }
 function changedQuiet(){ save(); renderJSON(); renderSlotsLight(); tryPreset(); }
 function renderSlotsLight(){ renderSlots(); const m=$("#editor .meter"); if (m && config.presets[selected]) m.replaceWith(loadMeter(config.presets[selected])); }
 
@@ -1232,6 +1240,7 @@ function tryRender(){
   $("#try-singer").setAttribute("aria-pressed", String(kind === "singer"));
   $("#try-talk").setAttribute("aria-pressed", String(tryState.open || tryState.held));
   $("#try-talk").textContent = tryState.held ? "Squeezed" : tryState.open ? "Mic open" : "Mic closed";
+  renderSqueezeHint();
 }
 const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 function noteName(midi){ const m = Math.round(midi); return NOTE_NAMES[((m%12)+12)%12] + (Math.floor(m/12)-1); }
@@ -1255,6 +1264,38 @@ $("#try-singer").addEventListener("click", ()=>tryStart("singer"));
 $("#try-stop").addEventListener("click", tryStop);
 $("#try-talk").addEventListener("click", ()=>{ tryState.open = !tryState.open; trySend({g:tryG()}); tryRender(); });
 $("#try-squeeze-slot").append(sliderEl({label:"Squeeze",min:0,max:1,step:.01,}, 0, v=>{ tryState.squeeze=v; trySend({g:tryG()}); }));
+// The handle only shows what a preset does when you move it, so presets that use it point at the slider.
+const squeezeInput = $("#try-squeeze-slot input");
+let sweepTimer = null, squeezeTried = new Set();
+function squeezeJob(p){
+  if (!p || !JSON.stringify(p).includes("$handle")) return null;
+  const at = p.list.find(f=>f.effect==="autotune"), hz = p.list.find(f=>f.effect==="harmonizer");
+  if (hz && hz.enabled!==false && JSON.stringify(hz).includes("$handle")) return "the backing vocals come in";
+  if (at && at.speed==="$handle") return "the tuning tighten up";
+  if (at && (at.squeeze_key!=null || at.squeeze_scale!=null)) return "the key change";
+  return "what the squeeze does";
+}
+function setSqueeze(v){ squeezeInput.value = v; squeezeInput.dispatchEvent(new Event("input")); }
+function stopSweep(){ if (sweepTimer){ cancelAnimationFrame(sweepTimer); sweepTimer = null; } }
+function sweepSqueeze(){
+  stopSweep(); const t0 = performance.now();
+  // up over 2 s, hold 1.5 s, down over 2 s
+  const step = (t) => { const s = (t - t0)/1000;
+    setSqueeze(Math.round(100 * (s < 2 ? s/2 : s < 3.5 ? 1 : Math.max(0, 1 - (s-3.5)/2))) / 100);
+    sweepTimer = s < 5.5 ? requestAnimationFrame(step) : null; };
+  sweepTimer = requestAnimationFrame(step);
+}
+squeezeInput.addEventListener("input", (e)=>{ if (e.isTrusted){ stopSweep(); squeezeTried.add(selected); renderSqueezeHint(); } });
+function renderSqueezeHint(){
+  const hint = $("#try-hint"), job = squeezeJob(config.presets[selected]);
+  hint.hidden = !job;
+  $("#try-squeeze-slot").classList.toggle("nudge", !!job && tryState.running && !squeezeTried.has(selected));
+  if (!job) return;
+  hint.replaceChildren(tryState.running
+    ? h("span",{}, "This preset changes as you squeeze. Drag ", h("b",{},"Squeeze"), " while it plays and hear "+job+".")
+    : h("span",{}, "This preset changes as you squeeze. Press ", h("b",{},"Play sample singer"), ", then drag ", h("b",{},"Squeeze"), " to hear "+job+"."),
+    ...(tryState.running ? [h("button",{class:"btn small", onclick:sweepSqueeze}, "Squeeze it for me")] : []));
+}
 $("#try-level-slot").append(sliderEl({label:"Volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }));
 
 function setHowto(show){ $("#howto").hidden=!show; $("#howto-show").hidden=show; try { localStorage.setItem(KEY+"-howto", show?"1":"0"); } catch(e){} }
@@ -1264,8 +1305,12 @@ try { if (localStorage.getItem(KEY+"-howto")==="0") setHowto(false); } catch(e){
 
 /* ------------------------------ boot ------------------------------- */
 config = restore() || normalizeConfig(DEFAULT_CONFIG);
+// Preset 2 used to default to "Squeeze to tune". Visitors who never changed it get its replacement.
+const OLD_PRESET_2 = '[{"effect":"autotune","key":"C","scale":"major","speed":"$handle","humanize":0.3,"mix":1},{"effect":"filter","filter":{"mode":"high_pass","frequency":150,"Q":0.7071},"mix":1},{"effect":"echo","max_delay_ms":400,"delay_ms":140,"decay":0.3,"mix":0.25}]';
+if (config.presets[1] && config.presets[1].name==="Squeeze to tune" && JSON.stringify(config.presets[1].list)===OLD_PRESET_2){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); }
 try { setMode(localStorage.getItem(KEY+"-mode")==="adv"); } catch(e){ setMode(false); }
 render();
+renderSqueezeHint();
 </script>
 <script src="site-motion.js"></script>
 </body>

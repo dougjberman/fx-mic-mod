@@ -11,12 +11,13 @@
       ]
     },
     {
-      "name": "Squeeze to tune",
-      "comment": "Natural correction at a light squeeze, hard snap when squeezed all the way. Slap-back echo.",
+      "name": "Squeeze for backups",
+      "comment": "Light autotune. Squeeze and the backing vocals come in: a sus2 chord in 2nd inversion around your voice. A short echo.",
+      "level": 0.7,
       "list": [
-        {"effect": "autotune", "key": "C", "scale": "major", "speed": "$handle", "humanize": 0.3, "mix": 1.0},
-        {"effect": "filter", "filter": {"mode": "high_pass", "frequency": 150, "Q": 0.7071}, "mix": 1},
-        {"effect": "echo", "max_delay_ms": 400, "delay_ms": 140, "decay": 0.3, "mix": 0.25}
+        {"effect": "autotune", "key": "C", "scale": "chromatic", "speed": 0.7, "humanize": 0.2, "mix": 1},
+        {"effect": "harmonizer", "chord": "sus2", "inversion": 2, "octave": 0, "level": "$handle"},
+        {"effect": "echo", "delay_ms": 250, "decay": 0.1, "mix": 0.1, "freq_shift": false, "max_delay_ms": 500}
       ]
     },
     {
