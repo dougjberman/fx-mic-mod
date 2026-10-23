@@ -374,7 +374,7 @@ const STARTERS = [
   {name:"Key flip", list:[{effect:"autotune",key:"C",scale:"major",squeeze_scale:"minor",speed:.85,humanize:.1,mix:1},{effect:"echo",max_delay_ms:500,delay_ms:250,decay:.3,mix:.2},{effect:"freeverb",roomsize:.6,damp:.5,mix:.3}]},
   {name:"Snap crackle pop", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"distortion",drive:.6,mode:"overdrive",pre_gain:25,post_gain:-16,soft_clip:true,mix:.4},{effect:"echo",delay_ms:250,decay:.38,mix:.2,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.2,damp:.6,mix:.15}]},
 ];
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[STARTERS[7],STARTERS[1],STARTERS[4],STARTERS[5]].map(clone),
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.8],[STARTERS[1],.7],[STARTERS[4],1],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Match volume
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"hold"},{file:"4.wav",playmode:"startstop"}]};
 
 /* ------------------------------ state ------------------------------ */
