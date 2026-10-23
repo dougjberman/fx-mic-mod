@@ -92,12 +92,6 @@ code{font-family:var(--f-mono);font-size:.92em}
 /* harmonizer drawing: the sung line plus the backing voices, and a listen button */
 .chordfig .seg{flex-wrap:wrap}
 #chordVoices path{transition:d .45s cubic-bezier(.16,1,.3,1)}
-.btn.hear{display:inline-flex;align-items:center;gap:8px;font-size:14px;padding:8px 14px;white-space:nowrap}
-.btn.hear svg{width:14px;height:14px;flex:none}
-.btn.hear .stop,.btn.hear[aria-pressed="true"] .play{display:none}
-.btn.hear[aria-pressed="true"] .stop{display:inline}
-.btn.hear[aria-pressed="true"]{border-color:var(--accent);color:var(--accent-text)}
-.small-note{font-size:13px;color:var(--muted)}
 .snap .note-lab{font:500 11px var(--f-mono);fill:var(--muted)}
 
 /* record mode: animated mic + step list */
@@ -326,11 +320,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
           <g id="chordVoices"></g>
           <path id="chordLead" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <div class="row" style="display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between">
-          <div class="legend"><span><i style="background:var(--accent)"></i>You</span><span><i style="background:var(--accent);opacity:.45"></i>Backing voices</span></div>
-          <button type="button" class="btn hear" id="hearChord" aria-pressed="false"><svg class="ic" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path class="play" d="M3 1.5v11l9-5.5z" fill="currentColor"/><path class="stop" d="M2.5 2.5h9v9h-9z" fill="currentColor"/></svg><span>Hear it on a singer</span></button>
-        </div>
-        <p class="small-note" id="hearNote" hidden></p>
+        <div class="legend"><span><i style="background:var(--accent)"></i>You</span><span><i style="background:var(--accent);opacity:.45"></i>Backing voices</span></div>
       </div>
       <div class="points" data-reveal-list>
         <div class="point"><span class="tag">Chords</span><h3>38 chords, any voicing</h3><p>Major and minor, sus2 and sus4, 6ths, every kind of 7th, add9, 9ths, 11ths, 13ths and the Hendrix 7♯9. The editor shows the exact notes before you pick.</p></div>
@@ -525,7 +515,6 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
 </main>
 <footer>fx-mic-mod is a fork of Adafruit's <a href="https://learn.adafruit.com/hacking-the-teenage-engineering-ep-2350-ting" target="_blank" rel="noopener">EP-2350 CircuitPython demo</a> by Tim Cocks, MIT licensed. Not affiliated with Teenage Engineering or Adafruit. Source on <a href="https://github.com/dougjberman/fx-mic-mod" target="_blank" rel="noopener">GitHub</a>.</footer>
 
-<script src="ting-dsp.js"></script>
 <script>
 /* ---------- autotune drawing: a sung line and its corrected version ---------- */
 (() => {
@@ -571,7 +560,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
   }));
 })();
 
-/* ---------- harmonizer drawing, and the sample singer through it ---------- */
+/* ---------- harmonizer drawing ---------- */
 (() => {
   const W=520, top=18, per=7.2, hi=81;                  // one semitone per 7.2 px, A5 (81) at the top row
   const ns="http://www.w3.org/2000/svg", toY=m=>top+(hi-m)*per;
@@ -586,7 +575,6 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
   const line=off=>tune.map(([x,m],i)=>{ const x1=i+1<tune.length?tune[i+1][0]:W-10, y=toY(m+off).toFixed(1);
     return (i?"L":"M")+x+" "+y+" L"+(x1-6)+" "+y; }).join(" ");
   document.getElementById("chordLead").setAttribute("d", line(0));
-  const LIB = typeof dspFactory==="function" ? dspFactory() : null;
   const CHORD={major:[0,4,7],minor:[0,3,7],sus2:[0,2,7],maj7:[0,4,7,11],"7#9":[0,4,10,15]};
   const voices=document.getElementById("chordVoices"), paths=[0,1,2].map(k=>{
     const p=document.createElementNS(ns,"path"); Object.entries({fill:"none",stroke:"var(--accent)","stroke-width":3,"stroke-linecap":"round","stroke-linejoin":"round",opacity:[.55,.4,.28][k]}).forEach(([a,v])=>p.setAttribute(a,v));
@@ -599,43 +587,8 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
   draw();
   document.querySelectorAll(".chordfig .seg button").forEach(b=>b.addEventListener("click",()=>{
     document.querySelectorAll(".chordfig .seg button").forEach(o=>o.setAttribute("aria-pressed",String(o===b)));
-    chord=b.dataset.chord; draw(); if (playing) play();
+    chord=b.dataset.chord; draw();
   }));
-
-  // Listen: the sample singer through autotune and the harmonizer, rendered by the same
-  // engine as the editor's Try it, then played. Changing the chord while it plays restarts it.
-  const btn=document.getElementById("hearChord"), note=document.getElementById("hearNote");
-  let ctx=null, singer=null, src=null, playing=false;
-  async function render(){
-    const rate=ctx.sampleRate, dsp=new LIB.TingDSP(rate);
-    dsp.set({g:{power:true,gate:true,handle:1,level:1}, preset:{list:[
-      {effect:"autotune",key:"C",scale:"chromatic",speed:.8,humanize:.2,mix:1},
-      {effect:"harmonizer",chord,inversion:0,octave:0,level:.7},
-      {effect:"freeverb",roomsize:.5,damp:.5,mix:.2}]}});
-    const inp=singer.getChannelData(0), n=Math.min(inp.length, rate*12), out=new Float32Array(n), N=256, blk=new Float32Array(N);
-    for(let i=0;i+N<=n;i+=N){ dsp.process(inp.subarray(i,i+N), blk); out.set(blk,i); }
-    let peak=0; for(let i=0;i<n;i++) peak=Math.max(peak,Math.abs(out[i]));
-    const g=peak>0?0.8/peak:1, buf=ctx.createBuffer(1,n,rate), ch=buf.getChannelData(0);
-    for(let i=0;i<n;i++) ch[i]=out[i]*g;
-    const fade=Math.round(rate*0.3); for(let i=0;i<fade;i++) ch[n-1-i]*=i/fade;
-    return buf;
-  }
-  function stop(){ if(src){ src.onended=null; try{ src.stop(); }catch(e){} src=null; } playing=false; btn.setAttribute("aria-pressed","false"); btn.querySelector("span").textContent="Hear it on a singer"; }
-  async function play(){
-    try {
-      if(!LIB) throw new Error("the audio engine didn't load");
-      ctx = ctx || new (window.AudioContext||window.webkitAudioContext)();
-      if(ctx.state==="suspended") await ctx.resume();
-      btn.querySelector("span").textContent="Rendering…";
-      if(!singer){ const r=await fetch("audio/sample-singer.mp3"); if(!r.ok) throw new Error("couldn't load the singer"); singer=await ctx.decodeAudioData(await r.arrayBuffer()); }
-      const buf=await render();
-      if(src){ src.onended=null; try{ src.stop(); }catch(e){} }
-      src=ctx.createBufferSource(); src.buffer=buf; src.connect(ctx.destination); src.onended=stop; src.start();
-      playing=true; btn.setAttribute("aria-pressed","true"); btn.querySelector("span").textContent="Stop"; note.hidden=false;
-      note.textContent="Janie Joelle singing, with "+document.querySelector('.chordfig .seg [aria-pressed="true"]').textContent+" backing voices. Pick another chord to hear it change.";
-    } catch(e){ stop(); note.hidden=false; note.textContent="Couldn't play it here ("+e.message+"). Try it in the editor instead."; }
-  }
-  btn.addEventListener("click",()=>{ if(playing) stop(); else play(); });
 })();
 
 /* ---------- record mode: the mic walks through the four steps ---------- */
