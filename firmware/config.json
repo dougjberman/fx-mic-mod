@@ -3,7 +3,7 @@
   "sample_fx": "preset",
   "presets": [
     {
-      "name": "Snapped and Crunched",
+      "name": "Snapped and crunched",
       "comment": "Hard autotune through crunchy overdrive. Squeeze harder for more echo.",
       "level": 0.6,
       "list": [

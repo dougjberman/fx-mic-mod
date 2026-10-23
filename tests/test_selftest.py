@@ -124,7 +124,7 @@ class SuiteTests(unittest.TestCase):
                          ["notes_off.wav", "notes_sine.wav", "silence.wav"])
         self.assertTrue(os.path.exists(os.path.join(root, "selftest.py")))
         # every preset in the starter pack builds and gives its memory back
-        for name in ("Snapped and Crunched", "Squeeze for backups", "Chipmunks in space", "Squeeze monster"):
+        for name in ("Snapped and crunched", "Squeeze for backups", "Chipmunks in space", "Squeeze monster"):
             self.assertRegex(report, r"\| 3\.8 \| Preset \d %s builds \| PASS" % name)
         self.assertIn("| 4.1 | Pitch detector finds the test notes | PASS", report)
         # the fake mic hears a steady tone, not its speaker
