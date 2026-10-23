@@ -136,6 +136,8 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .chips{display:flex;flex-wrap:wrap;gap:4px}
 .chips button{padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;font-size:13px;font-weight:600;color:var(--ink)}
 .chips button:hover{border-color:var(--muted)}
+.chips button:disabled{opacity:.4;cursor:default}
+.chips button:disabled:hover{border-color:var(--line)}
 .chips button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 .voicing{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px;padding:12px;border-radius:10px;background:var(--panel-2);border:1px solid var(--line)}
 .voicing .lead{font-size:13px;color:var(--muted);margin-right:6px;align-self:center}
@@ -443,14 +445,14 @@ const AUTOTUNE_COST = 30;
 // Harmonizer chords, in the families the picker shows. Tones match firmware/autotune.py CHORDS.
 const CHORD_FAMILIES = [
   ["In the key", [["key_third","3rd above"],["key_triad","Triad"],["key_seventh","7th chord"]]],
-  ["Octaves and 5ths", [["octave","Octave"],["fifth","5th"],["power","Power chord"]]],
+  ["Intervals", [["maj3","Major 3rd"],["min3","Minor 3rd"],["fifth","5th"],["octave","Octave"],["power","Power chord"]]],
   ["Triads", [["major","Major"],["minor","Minor"],["dim","Diminished"],["aug","Augmented"],["sus2","sus2"],["sus4","sus4"]]],
   ["6ths and 7ths", [["6","6"],["m6","m6"],["maj7","maj7"],["7","7"],["m7","m7"],["m_maj7","m(maj7)"],["m7b5","m7♭5"],["dim7","dim7"],["7sus4","7sus4"],["aug7","7♯5"],["aug_maj7","maj7♯5"]]],
   ["Added and extended", [["add9","add9"],["m_add9","m(add9)"],["add11","add11"],["6/9","6/9"],["maj9","maj9"],["9","9"],["m9","m9"],["7b9","7♭9"],["7#9","7♯9"],["maj7#11","maj7♯11"],["11","11"],["m11","m11"],["13","13"],["maj13","maj13"],["m13","m13"],["quartal","Quartal"]]],
 ];
 const CHORD_NOTES = {
   key_third:"A 3rd above you, in the autotune key.", key_triad:"Your note's chord in the key: major, minor or diminished as the scale makes it.", key_seventh:"Four-part harmony from the key, like a barbershop quartet.",
-  octave:"You, an octave up.", fifth:"A 5th above. Open and medieval.", power:"5th and octave. Big and rock.",
+  maj3:"A major 3rd above. Bright, close harmony.", min3:"A minor 3rd above. Darker, close harmony.", octave:"You, an octave up.", fifth:"A 5th above. Open and medieval.", power:"5th and octave. Big and rock.",
   dim:"Tense and spooky.", aug:"Dreamy and unresolved.", sus2:"Open, neither major nor minor.", sus4:"Hanging, wants to resolve.",
   "6":"Sweet, old-time major.", m6:"Minor with a bittersweet lift.", maj7:"Soft and jazzy.", "7":"Bluesy dominant 7th.", m7:"Smooth, soulful minor.",
   m_maj7:"Minor with a spy-movie edge.", m7b5:"Half-diminished, dark and jazzy.", dim7:"Silent-movie villain.", "7sus4":"Floating dominant.",
@@ -740,15 +742,20 @@ function harmonizerCard(p, fx){
   const tune = p.list.find(f=>f.effect==="autotune" && f.enabled!==false);
   const tones = harmonyTones(fx);
   const isKey = !!LIB.KEY_CHORDS[chord];
+  // key chords need a major or minor key: "Every note" doesn't say which 3rd is meant
+  const keyed = !!(tune && (tune.scale==="major" || tune.scale==="minor"));
 
   // chord picker
   const set = h("div",{class:"chordset", role:"group", "aria-label":"Chord"});
   CHORD_FAMILIES.forEach(([fam, chords]) => {
+    const off = fam==="In the key" && !keyed;
     set.append(h("div",{class:"chordfam"}, h("span",{}, fam),
-      h("div",{class:"chips"}, chords.map(([v,l]) => h("button",{"aria-pressed":String(chord===v), title:CHORD_NOTES[v]||null,
+      h("div",{class:"chips"}, chords.map(([v,l]) => h("button",{"aria-pressed":String(chord===v), disabled:(off && chord!==v)||null, title:CHORD_NOTES[v]||null,
         onclick:()=>{ fx.chord=v; const t=harmonyTones(fx); if ((fx.inversion||0) > LIB.maxInversion(t)) fx.inversion=0; changed(); }}, l)))));
   });
   body.append(set);
+  if (isKey && !keyed) body.append(h("p",{class:"small", style:"color:var(--warn)"}, "Key chords need autotune set to Major or Minor, so they know which 3rd to sing. Without that the mic uses C major. Pick a key in autotune above, or choose Major 3rd or Minor 3rd under Intervals."));
+  else if (!keyed) body.append(h("p",{class:"small muted"}, "In the key chords need autotune set to Major or Minor, so they know whether to sing a major or minor 3rd."));
   if (!tones){ body.append(h("p",{class:"small", style:"color:var(--warn)"}, "This editor doesn't know the chord \u201c"+chord+"\u201d. Pick one above.")); }
 
   if (tones){
@@ -803,8 +810,7 @@ function harmonizerCard(p, fx){
   }
 
   if (!tune) body.append(h("p",{class:"small muted"}, "This preset has no autotune, so the harmony follows your voice as you sing it. Add autotune for chords that land in tune."));
-  else if (isKey && tune.scale==="chromatic") body.append(h("p",{class:"small muted"}, "Key chords follow the autotune key. Autotune is on Every note, so they use C major. Pick Major or Minor there to choose a key."));
-  if (tones && tones.length===4 && !isKey) body.append(h("p",{class:"small muted"}, "Three harmony voices is the most the mic runs, so bigger chords keep their colour notes and leave out the 5th."));
+  if (["6/9","maj9","9","m9","7b9","7#9","maj7#11","11","m11","13","maj13","m13"].includes(chord)) body.append(h("p",{class:"small muted"}, "Three harmony voices is the most the mic runs, so bigger chords keep their colour notes and leave out the 5th."));
 
   return h("div",{class:"fx tune"+(fx.enabled===false?" off":"")},
     fxHead("Harmonizer", "Sings a chord with you, built on every note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);

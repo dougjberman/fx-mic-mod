@@ -69,6 +69,8 @@ INV_LN2 = 1.0 / math.log(2.0)
 # and 11ths and 13ths keep only their colour tones.
 CHORDS = (
     ("octave", (0, 12)),
+    ("maj3", (0, 4)),
+    ("min3", (0, 3)),
     ("fifth", (0, 7)),
     ("power", (0, 7, 12)),
     ("major", (0, 4, 7)),
@@ -107,7 +109,9 @@ CHORDS = (
 )
 # Chords built from the autotune key instead: scale steps above the note
 # autotune snapped to, so singing E in C major gives E minor, and F gives F
-# major. "Every note" (chromatic) uses the key's major scale.
+# major. They need a major or minor scale to say which 3rd is meant; with
+# "Every note" (chromatic) they fall back to the key's major scale, and the
+# editor offers them only with a major or minor key.
 KEY_CHORDS = (
     ("key_third", (0, 2)),
     ("key_triad", (0, 2, 4)),

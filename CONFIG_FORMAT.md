@@ -103,7 +103,7 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   corrected note. Without an `autotune` in the preset the voice is left untuned and the harmony
   follows it as sung.
 - At most one per preset. Not allowed in sample `effects`. Where it sits in `list` doesn't matter.
-- `chord` names (semitones above the sung note): `octave` 0 12, `fifth` 0 7, `power` 0 7 12,
+- `chord` names (semitones above the sung note): `octave` 0 12, `maj3` 0 4, `min3` 0 3, `fifth` 0 7, `power` 0 7 12,
   `major` 0 4 7, `minor` 0 3 7, `dim` 0 3 6, `aug` 0 4 8, `sus2` 0 2 7, `sus4` 0 5 7,
   `6` 0 4 7 9, `m6` 0 3 7 9, `6/9` 0 4 9 14, `maj7` 0 4 7 11, `7` 0 4 7 10, `m7` 0 3 7 10,
   `m_maj7` 0 3 7 11, `m7b5` 0 3 6 10, `dim7` 0 3 6 9, `7sus4` 0 5 7 10, `aug7` 0 4 8 10,
@@ -114,7 +114,9 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   the 5th.
 - Key chords follow the autotune key instead: `key_third` (a 3rd above in the scale),
   `key_triad`, `key_seventh`, built in scale steps on the note autotune snapped to (E in C major
-  gives E minor). "Every note" uses the key's major scale. A note outside the scale gets
+  gives E minor). They need autotune in a major or minor key to know which 3rd is meant; with
+  "Every note" (or no autotune) the firmware falls back to the key's major scale, and the editor
+  doesn't offer them. A note outside the scale gets
   0 4 7 10 shapes.
 - `inversion` n lifts the n lowest chord notes an octave, then drops the chord an octave, so the
   voice stays in the chord and n notes move below it: C major sung on C is E G above (0),
