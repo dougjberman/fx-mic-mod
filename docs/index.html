@@ -78,6 +78,7 @@ code{font-family:var(--f-mono);font-size:.92em}
 .point.wide{grid-column:1/-1}
 .opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:4px 0}
 @media (max-width:560px){.opts{grid-template-columns:1fr}}
+.opts div:nth-child(3):last-child{grid-column:1/-1}
 .opts div{background:var(--panel-2);border-radius:10px;padding:10px 12px}
 .opts b{font-size:15px}
 
@@ -278,10 +279,12 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
       <div class="points" data-reveal-list>
         <div class="point"><span class="tag">Key</span><h3>Every note, or your key</h3><p>Chromatic snaps to the nearest semitone. Pick major or minor in any of the 12 keys, and you only land on notes in that key.</p></div>
         <div class="point"><span class="tag">Strength</span><h3>Hard snap to natural</h3><p>One slider goes from the instant, robotic jump to a gentle glide that keeps your vibrato. Humanize leaves small wobbles alone.</p></div>
-        <div class="point wide"><span class="tag">Handle</span><h3>Make the squeeze do more</h3><p>Squeezing the handle always turns the mic on. In the editor you can give it one more job in each autotune preset, either of these:</p>
+        <div class="point wide"><span class="tag">Harmony</span><h3>Sing in chords</h3><p>Add the harmonizer and up to three more voices sing with you, built on every note: major and minor, 7ths and 9ths, sus and add9, even the Hendrix chord. Key chords follow your autotune key, so each note gets the chord the scale gives it. Inversions move the harmony below your voice.</p></div>
+        <div class="point wide"><span class="tag">Handle</span><h3>Make the squeeze do more</h3><p>Squeezing the handle always turns the mic on. In the editor you can give it one more job in each autotune preset, any one of these:</p>
           <div class="opts">
             <div><b>Tune harder</b><p>A light squeeze sounds natural. Clamp down for full robot.</p></div>
             <div><b>Change key</b><p>Sing in C major, squeeze hard for C minor, ease off to go back. Or go from every note to a locked key.</p></div>
+            <div><b>Bring in the harmony</b><p>Sing alone with a light squeeze, then clamp down and the chord joins you.</p></div>
           </div></div>
       </div>
     </div>

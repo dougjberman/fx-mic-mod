@@ -22,6 +22,29 @@ function dspFactory(){
   const norm=s=>String(s).replace(/([a-z0-9])([A-Z])/g,"$1_$2").toLowerCase().replace(/[ -]/g,"_");
   const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 
+  /* ---------- harmonizer chords, as firmware/autotune.py (CHORDS, KEY_CHORDS, voicing) ---------- */
+  const CHORDS={octave:[0,12], fifth:[0,7], power:[0,7,12], major:[0,4,7], minor:[0,3,7], dim:[0,3,6], aug:[0,4,8], sus2:[0,2,7], sus4:[0,5,7],
+    "6":[0,4,7,9], m6:[0,3,7,9], "6/9":[0,4,9,14], maj7:[0,4,7,11], "7":[0,4,7,10], m7:[0,3,7,10], m_maj7:[0,3,7,11], m7b5:[0,3,6,10],
+    dim7:[0,3,6,9], "7sus4":[0,5,7,10], aug7:[0,4,8,10], aug_maj7:[0,4,8,11], add9:[0,4,7,14], m_add9:[0,3,7,14], add11:[0,4,7,17],
+    maj9:[0,4,11,14], "9":[0,4,10,14], m9:[0,3,10,14], "7b9":[0,4,10,13], "7#9":[0,4,10,15], "maj7#11":[0,4,11,18],
+    "11":[0,10,14,17], m11:[0,3,10,17], "13":[0,4,10,21], maj13:[0,4,11,21], m13:[0,3,10,21], quartal:[0,5,10,15]};
+  const KEY_CHORDS={key_third:[0,2], key_triad:[0,2,4], key_seventh:[0,2,4,6]};
+  const OFF_KEY_SHAPE=[0,4,7,10];
+  const maxInversion=t=>t.slice(1).some(x=>x%12===0) ? 0 : t.length-1;
+  function voicing(tones, inversion, octave){
+    let t=tones.slice();
+    for(let k=0;k<inversion;k++) t.push(t.shift()+12);
+    if(inversion) t=t.map(x=>x-12);
+    t.splice(t.indexOf(0),1);
+    return t.map(x=>x+12*(octave||0));
+  }
+  function keyIntervals(note, snap, steps, inversion, octave){
+    const allowed=snap.allowed.length===12 ? SCALES.major : snap.allowed;
+    const pcs=allowed.map(pc=>(pc+snap.root)%12).sort((a,b)=>a-b), pc=((note%12)+12)%12, i=pcs.indexOf(pc), n=pcs.length;
+    const tones= i<0 ? OFF_KEY_SHAPE.slice(0,steps.length) : steps.map(st=>pcs[(i+st)%n]-pc+12*Math.floor((i+st)/n));
+    return voicing(tones, inversion, octave);
+  }
+
   /* ---------- blocks: numbers, {"block": ...}, "$name" ---------- */
   const SHAPES={sine:t=>Math.sin(2*Math.PI*t), triangle:t=>t<0.25?4*t:(t<0.75?2-4*t:4*t-4), square:t=>t<0.5?1:-1, saw:t=>2*t-1, ramp_down:t=>1-2*t};
   const WALIAS={ramp_up:"saw",sawtooth:"saw",ramp:"saw",reverse_saw:"ramp_down"};
@@ -184,6 +207,7 @@ function dspFactory(){
   /* ---------- effects ---------- */
   const PARAMS={
     autotune:["key","scale","speed","humanize","mix","grain_size","density","squeeze_key","squeeze_scale"],
+    harmonizer:["chord","inversion","octave","level"],
     pitch_shift:["semitones","mix","window","overlap"],
     granular_pitch_shift:["semitones","mix","grain_size","density","spread"],
     distortion:["drive","pre_gain","post_gain","mode","soft_clip","mix"],
@@ -194,12 +218,13 @@ function dspFactory(){
     multi_tap_delay:["max_delay_ms","delay_ms","decay","mix","taps"],
     freeverb:["roomsize","damp","mix"],
   };
-  const ALIASES={reverb:"freeverb",delay:"echo",multitap_delay:"multi_tap_delay",multitapdelay:"multi_tap_delay",pitchshift:"pitch_shift",granularpitchshift:"granular_pitch_shift",auto_tune:"autotune"};
+  const ALIASES={reverb:"freeverb",delay:"echo",multitap_delay:"multi_tap_delay",multitapdelay:"multi_tap_delay",pitchshift:"pitch_shift",granularpitchshift:"granular_pitch_shift",auto_tune:"autotune",harmony:"harmonizer"};
   function effectKey(name){ if(typeof name!=="string") throw new Error("effect name must be a string"); let k=norm(name); k=ALIASES[k]||k; if(!PARAMS[k]) throw new Error("unknown effect: "+name); return k; }
   const dbToGain=d=>Math.pow(10,d/20);
   const MIX_DEFAULT={autotune:1,pitch_shift:1,granular_pitch_shift:1,distortion:1,filter:1,phaser:0.5,chorus:0.5,echo:0.25,multi_tap_delay:0.25,freeverb:0.5}; // ASSUMED except autotune
 
-  function makeEffect(spec, ns, host){
+  // harm: the preset's harmonizer, which runs inside the autotune stage, {spec, correct}
+  function makeEffect(spec, ns, host, harm){
     if(!spec||typeof spec!=="object") throw new Error("effect config must be a dict");
     if(!("effect" in spec)) throw new Error('effect config is missing the "effect" key');
     const type=effectKey(spec.effect), sr=host.sr, S=sr/BASE;
@@ -233,9 +258,28 @@ function dspFactory(){
         const gsh=new GrainShifter(grain), lsh=new LockedShifter(grain);
         let target=0, corr=0, ratio=1;
         fx.latency=grain/2+2;
+        // harmonizer: one more grain shifter per harmony voice, summed with the corrected voice
+        const correct=!harm||harm.correct;
+        let voices=[], ivs=[], keyChord=null, inv=0, oct=0, levelF=null;
+        if(harm){
+          const hs=harm.spec;
+          for(const k in hs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.harmonizer.includes(k)) throw new Error("harmonizer has no parameter "+k);
+          const chord=hs.chord==null?"major":String(hs.chord);
+          const tones=CHORDS[chord]||KEY_CHORDS[chord];
+          if(!tones) throw new Error("unknown harmonizer chord: "+chord);
+          inv=hs.inversion==null?0:hs.inversion; oct=hs.octave==null?0:hs.octave;
+          if(!Number.isInteger(inv)||inv<0||inv>maxInversion(tones)) throw new Error("harmonizer "+chord+" has no inversion "+hs.inversion);
+          if(!Number.isInteger(oct)) throw new Error("harmonizer octave must be a whole number");
+          levelF=compile(hs.level??0.7,"harmonizer level",ns);
+          keyChord=KEY_CHORDS[chord]||null;
+          ivs=voicing(keyChord ? OFF_KEY_SHAPE.slice(0,tones.length) : tones, inv, oct);
+          voices=ivs.map(()=>new GrainShifter(grain));
+        }
+        let vRatios=ivs.map(iv=>Math.pow(2,iv/12));
         fx.process=(buf,env)=>{
           // speed s -> per-block rate 0.08 + 0.92 s^2; humanize h -> dead zone of h*30 cents (firmware autotune.py)
           const mix=clamp(mixF(env),0,1), s=clamp(speed(env),0,1), rate=0.08+0.92*s*s, dz=clamp(hum(env),0,1)*0.3;
+          const hl=levelF?clamp(levelF(env),0,1):0, hg=1/Math.sqrt(1+voices.length*hl*hl);   // keeps the sum about as loud as the voice alone
           const py=host.g.engine==="python";
           if(alt){
             const h=env.handle||0;
@@ -248,12 +292,20 @@ function dspFactory(){
               const hz=det.detect(), semis= hz>0 ? snap.correction(hz) : null;
               let cents=null;
               if(semis!==null){ cents=-semis*100; target= Math.abs(semis)<=dz ? 0 : semis-Math.sign(semis)*dz; } else target*=0.9;
+              if(!correct) target=0;
               corr+=(target-corr)*rate; ratio=Math.pow(2,corr/12);
+              if(keyChord&&snap.target!==null) ivs=keyIntervals(snap.target, snap, keyChord, inv, oct);
+              vRatios=ivs.map(iv=>Math.pow(2,(corr+iv)/12));
               if(py&&hz>0) lsh.lock(sr/hz); lsh.begin(det.BLOCK);
-              host.report({hz, cents, correction:corr, target:snap.target, midi: hz>0?12*log2(hz/440)+69:null, autotune:true, squeezed});
+              host.report({hz, cents: correct?cents:null, correction:corr, target: correct?snap.target:null, midi: hz>0?12*log2(hz/440)+69:null, autotune:correct, squeezed, harmony: voices.length?ivs.slice():null});
             }
             const y= py ? lsh.tick(x,ratio) : gsh.tick(x,ratio,grain,density);
-            buf[i]=x*(1-mix)+y*mix;
+            let out=x*(1-mix)+y*mix;
+            if(voices.length){
+              let hsum=0; for(let k=0;k<voices.length;k++) hsum+=voices[k].tick(x,vRatios[k],grain,density);
+              out=(out+hsum*hl)*hg;
+            }
+            buf[i]=out;
           }
         };
         break;
@@ -387,14 +439,24 @@ function dspFactory(){
     if(!Array.isArray(specs)) throw new Error('"list" must be a list of effects');
     const notes=[];
     let enabled=specs.filter((s,i)=>{ if(s&&"enabled" in s&&typeof s.enabled!=="boolean") throw new Error("specs["+i+"] enabled must be true or false"); return !(s&&s.enabled===false); });
-    const at=enabled.filter(s=>s&&typeof s.effect==="string"&&(()=>{ try{ return effectKey(s.effect)==="autotune"; }catch(e){ return false; } })());
+    const isType=t=>s=>s&&typeof s.effect==="string"&&(()=>{ try{ return effectKey(s.effect)===t; }catch(e){ return false; } })();
+    const at=enabled.filter(isType("autotune")), hz=enabled.filter(isType("harmonizer"));
     if(at.length){
       if(isSample) throw new Error("autotune is not allowed in sample effects");
       if(at.length>1) throw new Error("only one autotune per preset");
       if(enabled[0]!==at[0]){ enabled=[at[0]].concat(enabled.filter(s=>s!==at[0])); notes.push("autotune moved to the front of the chain, as the firmware does"); }
     }
+    let harm=null;
+    if(hz.length){
+      if(isSample) throw new Error("the harmonizer is not allowed in sample effects");
+      if(hz.length>1) throw new Error("only one harmonizer per preset");
+      // the harmonizer runs inside the autotune stage; without autotune the voice stays untuned
+      harm={spec:hz[0], correct:at.length>0};
+      enabled=enabled.filter(s=>s!==hz[0]);
+      if(!at.length) enabled=[{effect:"autotune"}].concat(enabled);
+    }
     const ns=new NS(defs, host.blocks);
-    return {fx:enabled.map(s=>makeEffect(s,ns,host)), notes};
+    return {fx:enabled.map((s,i)=>makeEffect(s,ns,host,i===0?harm:null)), notes};
   }
   function validateConfig(cfg){
     const issues=[];
@@ -495,7 +557,7 @@ function dspFactory(){
          recLeft:this.rec?1-this.rec.len/this.rec.buf.length:null, rec:this.recDone});
     }
   }
-  return {TingDSP, validateConfig, effectKey};
+  return {TingDSP, validateConfig, effectKey, CHORDS, KEY_CHORDS, voicing, maxInversion};
 }
 
 /* Build the audio engine: an AudioWorklet running TingDSP, or a ScriptProcessor

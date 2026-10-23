@@ -82,6 +82,12 @@ def main():
             for m in script.mixers[1:]
         ],
         "out_level": env["mixer"].voice[0].level,
+        # the harmonizer's mixer: the one whose voices play pitch shifters
+        "tune_mixer": next((
+            {"playing": [type(v.playing).__name__ for v in m.voice],
+             "levels": [v.level for v in m.voice]}
+            for m in script.mixers
+            if type(m.voice[0].playing).__name__ == "GranularPitchShift"), None),
         "red_counts": [
             [round(t, 3), sum(v for k, v in leds.items() if k.startswith("LED_RED"))]
             for t, leds in script.led_log

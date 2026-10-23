@@ -63,6 +63,94 @@ SCALES = (
 
 INV_LN2 = 1.0 / math.log(2.0)
 
+# Harmonizer chords: name -> semitones above the sung note, which is the root
+# and is included as 0. Four notes at most (the voice plus three harmony
+# voices), so five-note chords leave out their 5th, the usual jazz voicing,
+# and 11ths and 13ths keep only their colour tones.
+CHORDS = (
+    ("octave", (0, 12)),
+    ("fifth", (0, 7)),
+    ("power", (0, 7, 12)),
+    ("major", (0, 4, 7)),
+    ("minor", (0, 3, 7)),
+    ("dim", (0, 3, 6)),
+    ("aug", (0, 4, 8)),
+    ("sus2", (0, 2, 7)),
+    ("sus4", (0, 5, 7)),
+    ("6", (0, 4, 7, 9)),
+    ("m6", (0, 3, 7, 9)),
+    ("6/9", (0, 4, 9, 14)),
+    ("maj7", (0, 4, 7, 11)),
+    ("7", (0, 4, 7, 10)),
+    ("m7", (0, 3, 7, 10)),
+    ("m_maj7", (0, 3, 7, 11)),
+    ("m7b5", (0, 3, 6, 10)),
+    ("dim7", (0, 3, 6, 9)),
+    ("7sus4", (0, 5, 7, 10)),
+    ("aug7", (0, 4, 8, 10)),
+    ("aug_maj7", (0, 4, 8, 11)),
+    ("add9", (0, 4, 7, 14)),
+    ("m_add9", (0, 3, 7, 14)),
+    ("add11", (0, 4, 7, 17)),
+    ("maj9", (0, 4, 11, 14)),
+    ("9", (0, 4, 10, 14)),
+    ("m9", (0, 3, 10, 14)),
+    ("7b9", (0, 4, 10, 13)),
+    ("7#9", (0, 4, 10, 15)),
+    ("maj7#11", (0, 4, 11, 18)),
+    ("11", (0, 10, 14, 17)),
+    ("m11", (0, 3, 10, 17)),
+    ("13", (0, 4, 10, 21)),
+    ("maj13", (0, 4, 11, 21)),
+    ("m13", (0, 3, 10, 21)),
+    ("quartal", (0, 5, 10, 15)),
+)
+# Chords built from the autotune key instead: scale steps above the note
+# autotune snapped to, so singing E in C major gives E minor, and F gives F
+# major. "Every note" (chromatic) uses the key's major scale.
+KEY_CHORDS = (
+    ("key_third", (0, 2)),
+    ("key_triad", (0, 2, 4)),
+    ("key_seventh", (0, 2, 4, 6)),
+)
+# A key chord sung on a note outside the scale falls back to this shape.
+OFF_KEY_SHAPE = (0, 4, 7, 10)
+
+
+def chord_by_name(name):
+    """(tones, is_key_chord) for a harmonizer chord name."""
+    for chord_name, tones in CHORDS:
+        if chord_name == name:
+            return tones, False
+    for chord_name, steps in KEY_CHORDS:
+        if chord_name == name:
+            return steps, True
+    raise ValueError("unknown harmonizer chord %r" % (name,))
+
+
+def max_inversion(tones):
+    """Highest inversion a chord allows. Chords with an octave in them
+    (octave, power) only come in root position."""
+    return 0 if any(t % 12 == 0 for t in tones[1:]) else len(tones) - 1
+
+
+def voicing(tones, inversion=0, octave=0):
+    """Harmony intervals around the sung note for a chord in an inversion.
+
+    Inversion n lifts the lowest n chord tones an octave, then drops the
+    whole chord an octave, so the sung note is still in it and the harmony
+    moves below the voice: C major sung on C gives E, G above (root
+    position), E, G below (1st), or G below and E above (2nd). The sung note
+    itself is left out; ``octave`` moves the harmony by whole octaves.
+    """
+    tones = list(tones)
+    for _ in range(inversion):
+        tones.append(tones.pop(0) + 12)
+    if inversion:
+        tones = [t - 12 for t in tones]
+    tones.remove(0)
+    return [t + 12 * octave for t in tones]
+
 
 def log2(x):
     # math.log2 is not in every CircuitPython build
@@ -422,6 +510,12 @@ class Autotune:
       humanize   0..1, leaves small errors (vibrato, scoops) partly uncorrected
       mix        dry/corrected balance (number or synthio block)
       grain_size, density   native GranularPitchShift grain settings
+    and, from a "harmonizer" effect in the same preset:
+      harmony    a chord name from CHORDS or KEY_CHORDS, or None
+      inversion  0 = root position, 1 = 1st inversion ...
+      harmony_octave   moves the harmony voices by whole octaves
+      harmony_level    harmony volume against the voice (number or block)
+      correct    False runs the harmonizer without retuning the voice
     fmt is the shared audio format dict (sample_rate, bits_per_sample,
     samples_signed, channel_count, buffer_size). All but grain_size, density
     and engine can be changed later through the attributes / set_key_scale().
@@ -429,13 +523,15 @@ class Autotune:
 
     def __init__(self, mic, fmt, key="C", scale="chromatic", speed=1.0,
                  humanize=0.0, mix=1.0, grain_size=GRAIN_SIZE,
-                 density=GRAIN_DENSITY, engine=SHIFT_ENGINE):
+                 density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
+                 inversion=0, harmony_octave=0, harmony_level=0.7, correct=True):
         import audiocore
 
         self.mic = mic
         self.enabled = True
         self.speed = speed
         self.humanize = humanize
+        self.correct = correct
         self.snapper = NoteSnapper()
         self.set_key_scale(key, scale)
         self.hz = 0.0
@@ -474,6 +570,41 @@ class Autotune:
             self.output = self.shifter
         self._started = False
 
+        # Harmonizer: one more shifter per harmony voice, each fed the same
+        # blocks through its own RawSample over self._out, and all of them
+        # summed with the corrected voice on a mixer.
+        self.voices = []
+        self._feeds = []
+        self.mixer = None
+        self.harmony_level = harmony_level
+        self._level = None
+        self._intervals = []
+        self._key_chord = False
+        if harmony is not None:
+            tones, self._key_chord = chord_by_name(harmony)
+            if not 0 <= inversion <= max_inversion(tones):
+                raise ValueError("harmonizer %s has no inversion %r" % (harmony, inversion))
+            self._tones = tones
+            self._inversion = inversion
+            self._octave = harmony_octave
+            if not self._key_chord:
+                self._intervals = voicing(tones, inversion, harmony_octave)
+            if self.shifter is None:
+                print("harmonizer off: it needs audiodelays.GranularPitchShift")
+            else:
+                import audiodelays
+                import audiomixer
+                count = len(tones) - 1
+                self.mixer = audiomixer.Mixer(voice_count=count + 1, **fmt)
+                for _ in range(count):
+                    self._feeds.append(audiocore.RawSample(
+                        self._out, sample_rate=fmt["sample_rate"], single_buffer=False))
+                    self.voices.append(_make_native_shifter(
+                        audiodelays, fmt, 1.0, grain_size, density)[0])
+                if self._key_chord:
+                    self._intervals = voicing(OFF_KEY_SHAPE[:count + 1], inversion, harmony_octave)
+                self.output = self.mixer
+
     @property
     def mix(self):
         return self.shifter.mix if self.shifter is not None else 1.0
@@ -502,8 +633,47 @@ class Autotune:
         """Wire the feed into the shifter. Call after the downstream chain is
         wired, mirroring Adafruit's demo where the mic is connected last."""
         if self.shifter is not None and not self._started:
+            if self.mixer is not None:
+                self.mixer.voice[0].play(self.shifter, loop=True)
+                for index, voice in enumerate(self.voices):
+                    self.mixer.voice[index + 1].play(voice, loop=True)
+                self._set_levels()
+                for voice, feed in zip(self.voices, self._feeds):
+                    voice.play(feed, loop=True)
             self.shifter.play(self.feed, loop=True)
         self._started = True
+
+    def deinit(self):
+        self.stop_sample()
+        for part in [self.mixer, self.shifter] + self.voices + self._feeds + [self.feed]:
+            if part is not None:
+                part.deinit()
+
+    def _set_levels(self):
+        level = min(1.0, max(0.0, _value(self.harmony_level)))
+        if level == self._level:
+            return
+        self._level = level
+        # Keep the sum about as loud as the voice alone.
+        gain = 1.0 / math.sqrt(1.0 + len(self.voices) * level * level)
+        self.mixer.voice[0].level = gain
+        for index in range(len(self.voices)):
+            self.mixer.voice[index + 1].level = gain * level
+
+    def _key_intervals(self, note):
+        """Harmony intervals for a key chord on the snapped MIDI note."""
+        allowed = self.snapper.allowed
+        if len(allowed) == 12:
+            allowed = SCALES[1][1]
+        pcs = sorted((pc + self.snapper.root) % 12 for pc in allowed)
+        pc = note % 12
+        steps = self._tones
+        if pc in pcs:
+            i, n = pcs.index(pc), len(pcs)
+            tones = [pcs[(i + s) % n] - pc + 12 * ((i + s) // n) for s in steps]
+        else:
+            tones = OFF_KEY_SHAPE[:len(steps)]
+        return voicing(tones, self._inversion, self._octave)
 
     def step(self, speed_override=None):
         """Process one block. Blocks for BLOCK_SIZE samples of audio."""
@@ -527,7 +697,8 @@ class Autotune:
 
         self.cents = None
         self.hz = 0.0
-        if self.enabled:
+        # Without retuning, only a key chord needs to know the note.
+        if self.enabled and (self.correct or self._key_chord):
             self.hz = detect_pitch_autocorrelation(window)
             semis = self.snapper.correction_semitones(self.hz) if self.hz > 0 else None
             if semis is not None:
@@ -546,6 +717,8 @@ class Autotune:
         else:
             self._target = 0.0
             self.snapper.target = None
+        if not self.correct:
+            self._target = 0.0
 
         speed = _value(self.speed) if speed_override is None else speed_override
         speed = min(1.0, max(0.0, speed))
@@ -558,6 +731,12 @@ class Autotune:
             self.ola.process(block, BLOCK_SIZE, 2.0 ** (self.correction / 12.0))
         else:
             self.shifter.semitones = self.correction
+        if self.voices:
+            if self._key_chord and self.snapper.target is not None:
+                self._intervals = self._key_intervals(self.snapper.target)
+            for voice, interval in zip(self.voices, self._intervals):
+                voice.semitones = self.correction + interval
+            self._set_levels()
         start = (self._half ^ FEED_PHASE) * BLOCK_SIZE
         self._out[start:start + BLOCK_SIZE] = block
         self._half ^= 1

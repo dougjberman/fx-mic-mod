@@ -14,7 +14,19 @@ shifter. Presets without autotune hand the mic straight to the native chain, lik
 with no extra CPU. `speed` / `humanize` accept a number or `"$handle"`. With `squeeze_key` /
 `squeeze_scale`, the main loop switches the key when the handle passes 0.67 (two-thirds) and back at 0.5.
 
+## How the harmonizer runs
+A `harmonizer` effect adds one `GranularPitchShift` per harmony voice (up to three) to the autotune
+stage. Each reads the same Python-written blocks through its own `RawSample` over the same buffer,
+and an `audiomixer.Mixer` sums them with the corrected voice; that mixer is the stage's output.
+Each block sets every harmony shifter to the autotune correction plus its chord interval. Without
+autotune in the preset the stage runs with no correction (and skips pitch detection unless a key
+chord needs the note).
+
 ## Needs checking on the device
+- **Harmonizer CPU:** autotune plus three harmony voices is four granular shifters. Watch for
+  `overflow` with a four-note chord, and try `density` 1 on autotune if it can't keep up.
+- **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for
+  flamming or a comb sound on the harmony; if so, the shifters may need one shared feed.
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.

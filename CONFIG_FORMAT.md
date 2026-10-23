@@ -1,7 +1,7 @@
 # Shared preset format (proposal)
 
 One format for the firmware, the GUI and the browser preview: **Adafruit's `config.json`,
-plus one new effect type, `autotune`.** Adafruit's packs load unchanged.
+plus two new effect types, `autotune` and `harmonizer`.** Adafruit's packs load unchanged.
 
 Reference copies of Adafruit's files (MIT, Tim Cocks / Adafruit) are in
 `fork/adafruit-reference/`: `code.py`, `config_loader.py` (the source of truth for
@@ -66,6 +66,7 @@ Any numeric param marked (B) accepts a number, a block object, or `"$name"`.
 | type | params |
 |---|---|
 | `autotune` **(new)** | `key` "C".."B" (sharps, e.g. "F#"), `scale` "chromatic" / "major" / "minor", `speed` (B) 0 = natural .. 1 = hard snap, `humanize` 0..1, `mix` (B), `grain_size` int (default 512), `density` int (default 2), `squeeze_key` / `squeeze_scale` (same values as key/scale: the key used while the handle is fully squeezed) |
+| `harmonizer` **(new)** | `chord` (see below, default "major"), `inversion` int (default 0), `octave` int (default 0, moves the harmony by octaves), `level` (B) harmony volume against the voice, 0..1 (default 0.7) |
 | `pitch_shift` | `semitones` (B), `window` int, `overlap` int, `mix` (B) |
 | `granular_pitch_shift` | `semitones` (B), `grain_size` int, `density` int, `spread` float, `mix` (B) |
 | `distortion` | `drive` (B), `pre_gain` (B, dB), `post_gain` (B, dB), `mode` = an `audiofilters.DistortionMode` name, case-insensitive (e.g. "clip", "lofi", "overdrive", "wavefold"), `soft_clip` bool, `mix` (B) |
@@ -95,6 +96,34 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
 - `humanize` h is a dead zone of `h * 30` cents: errors inside it are left alone, larger errors
   are corrected by (error - dead zone). So h = 0 corrects fully, h = 1 leaves up to 30 cents
   (vibrato, scoops) untouched. Source of truth: `firmware/autotune.py` `Autotune.step()`.
+
+### harmonizer rules
+- Sings a chord on every note: the sung note is the root, and each other chord note is one more
+  pitch shifter fed the same voice. It runs inside the autotune stage, so the harmony follows the
+  corrected note. Without an `autotune` in the preset the voice is left untuned and the harmony
+  follows it as sung.
+- At most one per preset. Not allowed in sample `effects`. Where it sits in `list` doesn't matter.
+- `chord` names (semitones above the sung note): `octave` 0 12, `fifth` 0 7, `power` 0 7 12,
+  `major` 0 4 7, `minor` 0 3 7, `dim` 0 3 6, `aug` 0 4 8, `sus2` 0 2 7, `sus4` 0 5 7,
+  `6` 0 4 7 9, `m6` 0 3 7 9, `6/9` 0 4 9 14, `maj7` 0 4 7 11, `7` 0 4 7 10, `m7` 0 3 7 10,
+  `m_maj7` 0 3 7 11, `m7b5` 0 3 6 10, `dim7` 0 3 6 9, `7sus4` 0 5 7 10, `aug7` 0 4 8 10,
+  `aug_maj7` 0 4 8 11, `add9` 0 4 7 14, `m_add9` 0 3 7 14, `add11` 0 4 7 17, `maj9` 0 4 11 14,
+  `9` 0 4 10 14, `m9` 0 3 10 14, `7b9` 0 4 10 13, `7#9` 0 4 10 15, `maj7#11` 0 4 11 18,
+  `11` 0 10 14 17, `m11` 0 3 10 17, `13` 0 4 10 21, `maj13` 0 4 11 21, `m13` 0 3 10 21,
+  `quartal` 0 5 10 15. Four notes at most (three harmony voices), so five-note chords leave out
+  the 5th.
+- Key chords follow the autotune key instead: `key_third` (a 3rd above in the scale),
+  `key_triad`, `key_seventh`, built in scale steps on the note autotune snapped to (E in C major
+  gives E minor). "Every note" uses the key's major scale. A note outside the scale gets
+  0 4 7 10 shapes.
+- `inversion` n lifts the n lowest chord notes an octave, then drops the chord an octave, so the
+  voice stays in the chord and n notes move below it: C major sung on C is E G above (0),
+  E G below (1), G below and E above (2). Up to the number of harmony voices; chords with an
+  octave in them (`octave`, `power`) only allow 0.
+- `level` l: the voice plays at `1 / sqrt(1 + n * l * l)` and each of the n harmony voices at
+  l times that, so the sum stays about as loud as the voice alone. `"$handle"` brings the
+  harmony in with the squeeze, which can't be combined with `squeeze_key` / `squeeze_scale`.
+  Source of truth: `firmware/autotune.py` (`CHORDS`, `voicing`, `Autotune`).
 
 ## Firmware behaviour the preview mirrors
 - TOP+MIDDLE power-off hold is **0.8 s** (`SHUTDOWN_HOLD_SECONDS` in Adafruit's code.py; its

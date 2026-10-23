@@ -77,7 +77,7 @@ from autotune import Autotune, key_by_name, scale_by_name
 from config_loader import (
     create_effects,
     create_preset,
-    is_autotune,
+    uses_tune_stage,
     load_samples,
     preset_level,
     sample_routing,
@@ -361,10 +361,7 @@ def teardown(ctx):
         _effect.deinit()
     ctx.chain = []
     if ctx.tune is not None:
-        ctx.tune.stop_sample()
-        if ctx.tune.shifter is not None:
-            ctx.tune.shifter.deinit()
-        ctx.tune.feed.deinit()
+        ctx.tune.deinit()
         ctx.tune = None
     if ctx.recorder is not None:
         ctx.recorder.deinit()
@@ -408,7 +405,7 @@ def build(ctx, preset):
     # is what lets the wiring below run output-first.
     specs = preset.get("list", ()) if preset else ()
     ctx.level = preset_level(preset) if preset else 1.0
-    fmt = AUTOTUNE_FORMAT if any(is_autotune(spec) for spec in specs) else FORMAT
+    fmt = AUTOTUNE_FORMAT if any(uses_tune_stage(spec) for spec in specs) else FORMAT
     tune_args = None
     ctx.chain = []
     if preset:
@@ -421,7 +418,7 @@ def build(ctx, preset):
         # Python reads speed / humanize each block; "$handle" is offered to
         # them as the raw handle position, since a synthio Math block only
         # updates while an effect ticks it.
-        for name in ("speed", "humanize"):
+        for name in ("speed", "humanize", "harmony_level"):
             if tune_args.get(name) is handle_control:
                 tune_args[name] = handle_value
         # "squeeze_key" / "squeeze_scale": a second key and scale that take
@@ -514,7 +511,11 @@ def select_preset(ctx, index):
                 ctx.active,
                 len(PRESETS),
                 len(ctx.chain),
-                ", autotune via " + ctx.tune.shifter_name if ctx.tune else "",
+                ", {} via {}{}".format(
+                    "autotune" if ctx.tune.correct else "voice",
+                    ctx.tune.shifter_name,
+                    ", harmonizer {} voices".format(len(ctx.tune.voices)) if ctx.tune.voices else "",
+                ) if ctx.tune else "",
                 gc.mem_free(),
             )
         )

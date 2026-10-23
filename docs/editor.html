@@ -128,6 +128,22 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .keys{display:flex;flex-wrap:wrap;gap:4px}
 .keys button{min-width:38px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;font-family:var(--f-mono);font-size:13px}
 .keys button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+/* harmonizer chord picker: chips in labelled families, then the notes you'd get */
+.chordset{display:grid;gap:10px}
+.chordfam{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr);gap:6px 12px;align-items:start}
+@media (max-width:560px){.chordfam{grid-template-columns:1fr}}
+.chordfam > span{font-size:13px;color:var(--muted);padding-top:6px}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chips button{padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;font-size:13px;font-weight:600;color:var(--ink)}
+.chips button:hover{border-color:var(--muted)}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.voicing{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px;padding:12px;border-radius:10px;background:var(--panel-2);border:1px solid var(--line)}
+.voicing .lead{font-size:13px;color:var(--muted);margin-right:6px;align-self:center}
+.voicing .nt{display:grid;justify-items:center;gap:2px;min-width:44px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+.voicing .nt b{font-family:var(--f-mono);font-size:15px;font-weight:500}
+.voicing .nt span{font-size:11px;color:var(--muted)}
+.voicing .nt.you{border-color:var(--accent);background:var(--accent-soft)}
+.voicing .nt.you span{color:var(--accent-text)}
 .field{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr);gap:12px;align-items:center}
 .field > .seg{justify-self:start}
 /* Phones: segmented controls fill the row with equal parts instead of wrapping into a lumpy pill,
@@ -422,8 +438,27 @@ const EFFECTS = {
       mix:P({label:"Amount",min:0,max:1,step:.01,def:.35,simple:true}) }},
 };
 const ALIASES = {reverb:"freeverb", delay:"echo", multitap_delay:"multi_tap_delay", multitapdelay:"multi_tap_delay",
-  pitchshift:"pitch_shift", granularpitchshift:"granular_pitch_shift", auto_tune:"autotune"};
+  pitchshift:"pitch_shift", granularpitchshift:"granular_pitch_shift", auto_tune:"autotune", harmony:"harmonizer"};
 const AUTOTUNE_COST = 30;
+// Harmonizer chords, in the families the picker shows. Tones match firmware/autotune.py CHORDS.
+const CHORD_FAMILIES = [
+  ["In the key", [["key_third","3rd above"],["key_triad","Triad"],["key_seventh","7th chord"]]],
+  ["Octaves and 5ths", [["octave","Octave"],["fifth","5th"],["power","Power chord"]]],
+  ["Triads", [["major","Major"],["minor","Minor"],["dim","Diminished"],["aug","Augmented"],["sus2","sus2"],["sus4","sus4"]]],
+  ["6ths and 7ths", [["6","6"],["m6","m6"],["maj7","maj7"],["7","7"],["m7","m7"],["m_maj7","m(maj7)"],["m7b5","m7♭5"],["dim7","dim7"],["7sus4","7sus4"],["aug7","7♯5"],["aug_maj7","maj7♯5"]]],
+  ["Added and extended", [["add9","add9"],["m_add9","m(add9)"],["add11","add11"],["6/9","6/9"],["maj9","maj9"],["9","9"],["m9","m9"],["7b9","7♭9"],["7#9","7♯9"],["maj7#11","maj7♯11"],["11","11"],["m11","m11"],["13","13"],["maj13","maj13"],["m13","m13"],["quartal","Quartal"]]],
+];
+const CHORD_NOTES = {
+  key_third:"A 3rd above you, in the autotune key.", key_triad:"Your note's chord in the key: major, minor or diminished as the scale makes it.", key_seventh:"Four-part harmony from the key, like a barbershop quartet.",
+  octave:"You, an octave up.", fifth:"A 5th above. Open and medieval.", power:"5th and octave. Big and rock.",
+  dim:"Tense and spooky.", aug:"Dreamy and unresolved.", sus2:"Open, neither major nor minor.", sus4:"Hanging, wants to resolve.",
+  "6":"Sweet, old-time major.", m6:"Minor with a bittersweet lift.", maj7:"Soft and jazzy.", "7":"Bluesy dominant 7th.", m7:"Smooth, soulful minor.",
+  m_maj7:"Minor with a spy-movie edge.", m7b5:"Half-diminished, dark and jazzy.", dim7:"Silent-movie villain.", "7sus4":"Floating dominant.",
+  aug7:"Dominant with a twist.", aug_maj7:"Glassy and strange.", add9:"Major with sparkle.", m_add9:"Minor with sparkle.", add11:"Major with a suspended 4th on top.",
+  "6/9":"Lush and resolved, leaves out the 5th.", maj9:"Lush major, leaves out the 5th.", "9":"Funky dominant 9th, leaves out the 5th.", m9:"Lush minor, leaves out the 5th.",
+  "7b9":"Dark dominant, leaves out the 5th.", "7#9":"The Hendrix chord.", "maj7#11":"Bright and floaty, Lydian.", "11":"7th, 9th and 11th over you.", m11:"Minor 3rd, 7th and 11th.",
+  "13":"3rd, 7th and 13th over you.", maj13:"3rd, maj7th and 13th.", m13:"Minor 3rd, 7th and 13th.", quartal:"Stacked 4ths. Modern and open."};
+const HARMONY_VOICE_COST = 12;
 const FILTER_MODES = [["high_pass","Thin (cut lows)"],["low_pass","Muffle (cut highs)"],["band_pass","Telephone (band)"],["notch","Notch"]];
 const PLAYMODES = [["oneshot","Tap to play"],["hold","Hold to play"],["startstop","Tap start / stop"]];
 
@@ -437,6 +472,9 @@ const STARTERS = [
   {name:"Key flip", list:[{effect:"autotune",key:"C",scale:"major",squeeze_scale:"minor",speed:.85,humanize:.1,mix:1},{effect:"echo",max_delay_ms:500,delay_ms:250,decay:.3,mix:.2},{effect:"freeverb",roomsize:.6,damp:.5,mix:.3}]},
   {name:"Snap crackle pop", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"distortion",drive:.6,mode:"overdrive",pre_gain:25,post_gain:-16,soft_clip:true,mix:.4},{effect:"echo",delay_ms:250,decay:.38,mix:.2,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.2,damp:.6,mix:.15}]},
 ];
+STARTERS.push(
+  {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.8,damp:.5,mix:.4}]},
+  {name:"Squeeze for harmony", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:.9,humanize:.1,mix:1},{effect:"harmonizer",chord:"maj7",inversion:0,octave:0,level:"$handle"},{effect:"freeverb",roomsize:.5,damp:.5,mix:.25}]});
 const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.8],[STARTERS[1],.7],[STARTERS[4],1],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Match volume
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"hold"},{file:"4.wav",playmode:"startstop"}]};
 
@@ -459,8 +497,10 @@ function normalizeConfig(c){
   (Array.isArray(c.presets) ? c.presets : []).slice(0,4).forEach(p => {
     const list = Array.isArray(p && p.list) ? p.list.map(fx => Object.assign({}, fx, {effect: normName(fx.effect) || fx.effect})) : [];
     // autotune always heads the chain
-    const tunes = list.filter(fx => fx.effect === "autotune"), rest = list.filter(fx => fx.effect !== "autotune");
-    out.presets.push(Object.assign({}, p, {list: tunes.slice(0,1).concat(rest)}));
+    // autotune always heads the chain, and the harmonizer runs alongside it
+    const tunes = list.filter(fx => fx.effect === "autotune"), harms = list.filter(fx => fx.effect === "harmonizer");
+    const rest = list.filter(fx => fx.effect !== "autotune" && fx.effect !== "harmonizer");
+    out.presets.push(Object.assign({}, p, {list: tunes.slice(0,1).concat(harms.slice(0,1), rest)}));
   });
   (Array.isArray(c.samples) ? c.samples : []).slice(0,4).forEach(s => out.samples.push(Object.assign({playmode:"oneshot"}, s)));
   while (out.samples.length < 4) out.samples.push({file:(out.samples.length+1)+".wav", playmode:"oneshot"});
@@ -531,7 +571,7 @@ function sliderEl(meta, value, onInput){
 
 /* --------------------------- rendering ----------------------------- */
 function chainSummary(p){
-  const names = p.list.filter(fx=>fx.enabled!==false).map(fx => fx.effect==="autotune" ? "Autotune" : (EFFECTS[fx.effect]?EFFECTS[fx.effect].label:fx.effect));
+  const names = p.list.filter(fx=>fx.enabled!==false).map(fx => fx.effect==="autotune" ? "Autotune" : fx.effect==="harmonizer" ? "Harmonizer" : (EFFECTS[fx.effect]?EFFECTS[fx.effect].label:fx.effect));
   return names.length ? names.join(" → ") : "No effects";
 }
 function renderSlots(){
@@ -569,7 +609,9 @@ function renderEditor(){
   chain.append(tuneIdx>=0 ? autotuneCard(p, p.list[tuneIdx]) : h("div",{class:"fx tune"},
     h("div",{class:"fx-head"}, h("div",{class:"grow"}, h("h3",{},"Autotune"), h("div",{class:"what"},"Snaps your voice to the nearest note. Always runs first.")),
       h("button",{class:"btn small primary", onclick:()=>{ p.list.unshift({effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1}); changed(); }}, "Add autotune"))));
-  p.list.forEach((fx,i) => { if (fx.effect!=="autotune") chain.append(effectCard(p.list, i, p)); });
+  const harm = p.list.find(fx=>fx.effect==="harmonizer");
+  if (harm) chain.append(harmonizerCard(p, harm));
+  p.list.forEach((fx,i) => { if (fx.effect!=="autotune" && fx.effect!=="harmonizer") chain.append(effectCard(p.list, i, p)); });
   root.append(chain);
   root.append(addEffectBlock(p.list, false));
 
@@ -583,7 +625,9 @@ function movePreset(d){ const j=selected+d; const a=config.presets; [a[selected]
 
 function loadMeter(p){
   let cost=0, ramKB=0;
+  const tuned = p.list.some(fx=>fx.effect==="autotune" && fx.enabled!==false);
   p.list.forEach(fx => { if (fx.enabled===false) return; if (fx.effect==="autotune"){ cost+=AUTOTUNE_COST; return; }
+    if (fx.effect==="harmonizer"){ cost += harmonyVoices(fx).length*HARMONY_VOICE_COST + (tuned ? 0 : AUTOTUNE_COST-10); return; }
     const e=EFFECTS[fx.effect]; if(!e) return; cost+=e.cost; if (e.ram){ const ms = typeof fx.max_delay_ms==="number"?fx.max_delay_ms:e.params.max_delay_ms.def; ramKB += ms*32/1000; } });
   const pct = Math.min(100, cost);
   const cls = cost>90?"bad":cost>70?"warn":"";
@@ -597,7 +641,7 @@ function loadMeter(p){
 function fxHead(title, what, list, i, fx, extra){
   const id = nid("en");
   const n = list.length;
-  const isFirstMovable = i===0 || (list[i-1] && list[i-1].effect==="autotune");
+  const isFirstMovable = i===0 || (list[i-1] && (list[i-1].effect==="autotune" || list[i-1].effect==="harmonizer"));
   return h("div",{class:"fx-head"},
     h("label",{class:"switch", for:id, title:"Turn this effect on or off"},
       h("input",{type:"checkbox", id, "aria-label":"Turn "+title+" on or off", checked:fx.enabled!==false||null, onchange:(e)=>{ if(e.target.checked) delete fx.enabled; else fx.enabled=false; changed(); }}),
@@ -675,6 +719,95 @@ function autotuneCard(p, fx){
   const list = p.list;
   return h("div",{class:"fx tune"+(fx.enabled===false?" off":"")},
     fxHead("Autotune", "Snaps your voice to the nearest note.", list, null, fx, h("span",{class:"pin"},"Always first")), body);
+}
+
+const LIB = dspFactory();
+function harmonyTones(fx){
+  const chord = fx.chord || "major";
+  return LIB.CHORDS[chord] || LIB.KEY_CHORDS[chord] || null;
+}
+function harmonyVoices(fx){ const t = harmonyTones(fx); return t ? t.slice(1) : []; }
+const INTERVAL_NAMES = {0:"unison",1:"♭2",2:"2nd",3:"♭3",4:"3rd",5:"4th",6:"♭5",7:"5th",8:"♯5",9:"6th",10:"♭7",11:"7th"};
+function intervalName(st){
+  const a = Math.abs(st), base = INTERVAL_NAMES[a % 12];
+  const ext = {13:"♭9",14:"9th",15:"♯9",17:"11th",18:"♯11",21:"13th"}[a];
+  if (a === 12) return "octave";
+  return ext || base;
+}
+function harmonizerCard(p, fx){
+  const body = h("div",{class:"fx-body"});
+  const chord = fx.chord || "major";
+  const tune = p.list.find(f=>f.effect==="autotune" && f.enabled!==false);
+  const tones = harmonyTones(fx);
+  const isKey = !!LIB.KEY_CHORDS[chord];
+
+  // chord picker
+  const set = h("div",{class:"chordset", role:"group", "aria-label":"Chord"});
+  CHORD_FAMILIES.forEach(([fam, chords]) => {
+    set.append(h("div",{class:"chordfam"}, h("span",{}, fam),
+      h("div",{class:"chips"}, chords.map(([v,l]) => h("button",{"aria-pressed":String(chord===v), title:CHORD_NOTES[v]||null,
+        onclick:()=>{ fx.chord=v; const t=harmonyTones(fx); if ((fx.inversion||0) > LIB.maxInversion(t)) fx.inversion=0; changed(); }}, l)))));
+  });
+  body.append(set);
+  if (!tones){ body.append(h("p",{class:"small", style:"color:var(--warn)"}, "This editor doesn't know the chord \u201c"+chord+"\u201d. Pick one above.")); }
+
+  if (tones){
+    // what you'd hear: sing the key's root (or C) and list the notes, low to high
+    const inv = fx.inversion||0, oct = fx.octave||0;
+    const key = tune && tune.scale && tune.scale!=="chromatic" ? normKey(tune.key||"C") : "C";
+    const scale = tune && tune.scale==="minor" ? "minor" : "major";
+    const root = NOTES.indexOf(key);
+    let chordTones = tones;
+    if (isKey){
+      const steps = {major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10]}[scale];
+      chordTones = tones.map(st => steps[st % 7] + 12*Math.floor(st/7));
+    }
+    const ivs = LIB.voicing(chordTones, inv, oct);
+    // label each note by its job in the chord (3rd, 7th, 9th...), whichever octave it lands in
+    const role = {}; chordTones.forEach(t => { role[t % 12] = intervalName(t); });
+    const roleOf = st => role[((st % 12) + 12) % 12] || intervalName(st);
+    const all = [0].concat(ivs).sort((a,b)=>a-b);
+    const name = st => NOTES[((root+st)%12+12)%12];
+    body.append(h("div",{class:"voicing", "aria-label":"Notes you would hear"},
+      h("span",{class:"lead"}, "Sing "+key+(isKey?" in "+key+" "+scale:"")+", hear"),
+      all.map(st => h("div",{class:"nt"+(st===0?" you":"")}, h("b",{}, name(st)), h("span",{}, st===0 ? "you" : (st<0?"↓ ":"↑ ")+roleOf(st))))));
+    const blurb = CHORD_NOTES[chord];
+    if (blurb) body.append(h("p",{class:"small muted"}, blurb));
+
+    const maxInv = LIB.maxInversion(tones);
+    if (maxInv > 0){
+      const labels = ["Root","1st","2nd","3rd"];
+      body.append(h("div",{class:"field"}, h("label",{}, "Inversion"),
+        h("div",{class:"seg", role:"group", "aria-label":"Inversion"},
+          labels.slice(0, maxInv+1).map((l,k)=>h("button",{"aria-pressed":String(inv===k), onclick:()=>{ fx.inversion=k; changed(); }}, l)))));
+      body.append(h("p",{class:"small muted"}, "Root keeps the harmony above you. Each inversion moves another chord note below your voice, so you end up on top of the chord."));
+    }
+    body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
+      h("div",{class:"seg", role:"group", "aria-label":"Harmony octave"},
+        [[-1,"Down"],[0,"As shown"],[1,"Up"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
+  }
+
+  // level: fixed, or brought in by the squeeze
+  const keyJob = tune && (tune.squeeze_key!=null || tune.squeeze_scale!=null);
+  const squeezed = fx.level==="$handle";
+  if (squeezed) body.append(h("div",{class:"squeeze"},
+    h("div",{class:"row spread"}, h("b",{class:"small"}, "The harmony comes in as you squeeze"),
+      h("button",{class:"btn small ghost", onclick:()=>{ fx.level=.7; changed(); }}, "Use a fixed level")),
+    h("p",{class:"small muted"}, "A light squeeze is you alone, a full squeeze is the whole chord.")));
+  else {
+    body.append(sliderEl({label:"Harmony level",min:0,max:1,step:.01}, typeof fx.level==="number" ? fx.level : .7, v=>{ fx.level=v; changedQuiet(); }));
+    const id = nid("hsq");
+    body.append(h("label",{class:"switch small", for:id, style:"margin-left:2px"},
+      h("input",{type:"checkbox", id, disabled:keyJob||null, onchange:()=>{ fx.level="$handle"; changed(); }}), h("span",{class:"track"}),
+      h("span",{class:"muted"}, keyJob ? "Squeeze for harmony (the squeeze already changes the key)" : "Squeeze to bring in the harmony")));
+  }
+
+  if (!tune) body.append(h("p",{class:"small muted"}, "This preset has no autotune, so the harmony follows your voice as you sing it. Add autotune for chords that land in tune."));
+  else if (isKey && tune.scale==="chromatic") body.append(h("p",{class:"small muted"}, "Key chords follow the autotune key. Autotune is on Every note, so they use C major. Pick Major or Minor there to choose a key."));
+  if (tones && tones.length===4 && !isKey) body.append(h("p",{class:"small muted"}, "Three harmony voices is the most the mic runs, so bigger chords keep their colour notes and leave out the 5th."));
+
+  return h("div",{class:"fx tune"+(fx.enabled===false?" off":"")},
+    fxHead("Harmonizer", "Sings a chord with you, built on every note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
 }
 
 function effectCard(list, i, owner){
@@ -778,6 +911,11 @@ function addEffectBlock(list, forSample){
   wrap.append(h("button",{class:"btn", style:"justify-self:start", "aria-expanded":String(addOpen===list), onclick:()=>{ addOpen = addOpen===list?false:list; render(); }}, addOpen===list ? "Close" : "+ Add effect"));
   if (addOpen===list){
     const menu = h("div",{class:"addmenu"});
+    if (!forSample && !list.some(fx=>fx.effect==="harmonizer"))
+      menu.append(h("button",{onclick:()=>{
+        const at = list.findIndex(fx=>fx.effect==="autotune");
+        list.splice(at+1, 0, {effect:"harmonizer", chord:"major", inversion:0, octave:0, level:.7}); addOpen=false; changed(); }},
+        h("b",{}, "Harmonizer"), h("span",{}, "Sings a chord with you on every note: major, minor, 7ths, 9ths and more.")));
     for (const [key, def] of Object.entries(EFFECTS)){
       menu.append(h("button",{onclick:()=>{
         const fx = {effect:key};
@@ -1099,6 +1237,7 @@ function tryInfo(info){
     parts.push(h("span",{}, "You sang ", h("b",{}, noteName(info.midi)+" "+(((info.midi-Math.round(info.midi))*100)>=0?"+":"")+Math.round((info.midi-Math.round(info.midi))*100)+"¢")));
     if (info.autotune) parts.push(h("span",{}, "Autotune moved it ", h("b",{}, (info.correction>=0?"+":"")+info.correction.toFixed(2)+" st")));
     if (info.squeezed) parts.push(h("b",{style:"color:var(--accent-text)"}, "Squeezed key"));
+    if (info.harmony && info.harmony.length) parts.push(h("span",{}, "Harmony ", h("b",{}, info.harmony.map(iv=>noteName(info.midi+info.correction+iv)).join(" "))));
   } else parts.push(h("span",{}, "No note heard"));
   ro.replaceChildren(...parts);
 }

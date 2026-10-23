@@ -148,6 +148,50 @@ class LoaderTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.cl.preset_level({"level": bad, "list": []})
 
+    def test_harmonizer_joins_the_autotune_stage(self):
+        tune, effects = self.cl.create_preset({"list": [
+            {"effect": "autotune", "key": "C", "scale": "major"},
+            {"effect": "echo"},
+            {"effect": "harmonizer", "chord": "maj7", "inversion": 1, "octave": -1, "level": 0.5}]})
+        self.assertEqual(tune, {"key": "C", "scale": "major", "harmony": "maj7",
+                                "inversion": 1, "harmony_octave": -1, "harmony_level": 0.5})
+        self.assertEqual(len(effects), 1)
+
+    def test_harmonizer_without_autotune_leaves_the_voice_untuned(self):
+        tune, effects = self.cl.create_preset({"list": [{"effect": "Harmonizer"}]})
+        self.assertEqual(tune, {"correct": False, "harmony": "major"})
+        self.assertEqual(effects, [])
+
+    def test_harmonizer_checks(self):
+        with self.assertRaises(ValueError):
+            self.cl.create_preset({"list": [{"effect": "harmonizer"}, {"effect": "harmony"}]})
+        with self.assertRaises(ValueError):
+            self.cl.create_preset({"list": [{"effect": "harmonizer", "voices": 3}]})
+        with self.assertRaises(ValueError):
+            self.cl.create_preset({"list": [
+                {"effect": "autotune", "squeeze_scale": "minor"},
+                {"effect": "harmonizer", "level": "$handle"}]}, blocks={"handle": 0.5})
+        with self.assertRaises(ValueError):
+            self.cl.create_effects({"list": [{"effect": "harmonizer"}]})
+
+    def test_chord_voicings(self):
+        import autotune
+        v = autotune.voicing
+        major = autotune.chord_by_name("major")[0]
+        self.assertEqual(v(major), [4, 7])
+        self.assertEqual(v(major, 1), [-8, -5])
+        self.assertEqual(v(major, 2), [-5, 4])
+        self.assertEqual(v(major, 0, -1), [-8, -5])
+        self.assertEqual(v(autotune.chord_by_name("maj7")[0], 3), [-1, 4, 7])
+        self.assertEqual(autotune.max_inversion(autotune.chord_by_name("power")[0]), 0)
+        names = [name for name, _ in autotune.CHORDS]
+        self.assertEqual(len(names), len(set(names)))
+        for name, tones in autotune.CHORDS:
+            self.assertLessEqual(len(tones), 4, name)
+            self.assertEqual(tones[0], 0, name)
+        with self.assertRaises(ValueError):
+            autotune.chord_by_name("maj6")
+
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
             self.cl.create_effects({"list": [{"effect": "autotune"}]})
@@ -220,6 +264,33 @@ class DeviceScenarioTests(unittest.TestCase):
         through["presets"][1]["level"] = 0.6
         root, out, s = run("through", through, tone=(340.0, 1.0))
         self.assertEqual(s["out_level"], 0.6)
+
+    def test_harmonizer_voices_follow_the_tuned_note(self):
+        config = {"name": "H", "presets": [{"list": [
+            {"effect": "autotune", "key": "A", "scale": "minor", "speed": 1.0},
+            {"effect": "harmonizer", "chord": "minor", "level": 0.8},
+            {"effect": "reverb", "mix": 0.3}]}], "samples": []}
+        root, out, s = run("level", config)
+        self.assertIn("harmonizer 2 voices", out)
+        lead, third, fifth = s["shifters"]
+        # 207 Hz snaps down to G3 (-0.95 st); the harmony sits a minor 3rd and a 5th above it
+        self.assertAlmostEqual(lead["min"], -0.95, delta=0.05)
+        self.assertAlmostEqual(third["min"], 3 - 0.95, delta=0.05)
+        self.assertAlmostEqual(fifth["min"], 7 - 0.95, delta=0.05)
+        mixer = s["tune_mixer"]
+        self.assertEqual(mixer["playing"], ["GranularPitchShift"] * 3)
+        self.assertAlmostEqual(mixer["levels"][1] / mixer["levels"][0], 0.8, delta=0.01)
+
+    def test_key_harmonizer_without_autotune(self):
+        config = {"name": "H", "presets": [{"list": [
+            {"effect": "harmonizer", "chord": "key_triad"}]}], "samples": []}
+        root, out, s = run("level", config)
+        self.assertIn("voice via GranularPitchShift, harmonizer 2 voices", out)
+        lead, third, fifth = s["shifters"]
+        # the voice stays untuned; 207 Hz is nearest G in C major, so the harmony is B and D above
+        self.assertEqual((lead["min"], lead["max"]), (0.0, 0.0))
+        self.assertEqual(third["max"], 4.0)
+        self.assertEqual(fifth["max"], 7.0)
 
     def test_edit_mode_never_writes(self):
         root, out, s = run("readonly")

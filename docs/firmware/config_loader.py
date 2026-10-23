@@ -690,6 +690,36 @@ AUTOTUNE_PARAMS = {
 }
 
 
+# The harmonizer runs inside the autotune stage, which already holds the
+# voice block by block: its harmony voices are more shifters fed the same
+# blocks. A preset may have one; without autotune, the stage runs with the
+# voice left untuned.
+HARMONIZER_NAMES = ("harmonizer", "harmony")
+
+# parameter -> (converter, autotune.Autotune keyword)
+HARMONIZER_PARAMS = {
+    "chord": (_str, "harmony"),
+    "inversion": (_int, "inversion"),
+    "octave": (_int, "harmony_octave"),
+    "level": (_block, "harmony_level"),
+}
+
+
+def _effect_key(spec):
+    if not isinstance(spec, dict) or not isinstance(spec.get("effect"), str):
+        return None
+    return spec["effect"].lower().replace(" ", "_").replace("-", "_")
+
+
+def is_harmonizer(spec):
+    return _effect_key(spec) in HARMONIZER_NAMES
+
+
+def uses_tune_stage(spec):
+    """Whether a spec runs in the Python autotune stage (autotune or harmonizer)."""
+    return is_autotune(spec) or is_harmonizer(spec)
+
+
 def is_autotune(spec):
     if not isinstance(spec, dict) or not isinstance(spec.get("effect"), str):
         return False
@@ -734,16 +764,21 @@ def create_preset(preset, blocks=None, **format_args):
     namespace = _namespace(definitions, blocks)
 
     tune_specs = []
+    harmony_specs = []
     rest = []
     for index, spec in enumerate(specs):
         if not _is_enabled(spec, "specs[{}]".format(index)):
             continue
         if is_autotune(spec):
             tune_specs.append(spec)
+        elif is_harmonizer(spec):
+            harmony_specs.append(spec)
         else:
             rest.append(spec)
     if len(tune_specs) > 1:
         raise ValueError("a preset can have only one autotune")
+    if len(harmony_specs) > 1:
+        raise ValueError("a preset can have only one harmonizer")
 
     tune = None
     if tune_specs:
@@ -762,6 +797,25 @@ def create_preset(preset, blocks=None, **format_args):
             if name not in AUTOTUNE_PARAMS:
                 raise ValueError("autotune has no parameter {}".format(name))
             tune[name] = AUTOTUNE_PARAMS[name](value, name, namespace)
+
+    if harmony_specs:
+        spec = harmony_specs[0]
+        if tune is None:
+            tune = {"correct": False}
+        elif "squeeze_key" in tune or "squeeze_scale" in tune:
+            defs = definitions if isinstance(definitions, dict) else {}
+            if _uses_handle(spec.get("level"), defs):
+                raise ValueError(
+                    "harmonizer: the handle can change the key or drive the level, not both"
+                )
+        tune["harmony"] = "major"
+        for name, value in spec.items():
+            if name in ("effect", "enabled") or name in FORMAT_ARGS:
+                continue
+            if name not in HARMONIZER_PARAMS:
+                raise ValueError("harmonizer has no parameter {}".format(name))
+            convert, keyword = HARMONIZER_PARAMS[name]
+            tune[keyword] = convert(value, name, namespace)
 
     effects = [create_effect(spec, blocks=namespace, **format_args) for spec in rest]
     return tune, effects
