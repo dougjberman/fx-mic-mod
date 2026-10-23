@@ -24,7 +24,7 @@ parameter names and types) and the demo `config.json`.
 - Up to 4 samples (MIDDLE selects, white LEDs; BOTTOM plays).
 - `sample_fx` **(new, optional)**: where samples get their effects.
   - `"own"` (default, Adafruit's behaviour): each sample runs through its own `effects`.
-  - `"preset"`: samples play dry into the selected preset, mixed with the mic ahead of the
+  - `"preset"`: samples play dry into the effect preset currently selected on the mic (TOP button), mixed with the mic ahead of the
     whole chain, autotune included. The handle still gates only the mic. Sample `effects` are
     ignored. On clean and in record mode samples play dry. On autotune presets the firmware
     streams the WAV into autotune itself, so the file must be 16-bit mono 16 kHz (the
