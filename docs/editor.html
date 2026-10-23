@@ -123,6 +123,11 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .match p{margin:0;max-width:78ch}
 @media (max-width:560px){.match{grid-template-columns:1fr}}
 .levelrow{border-top:1px solid var(--line);padding-top:10px}
+.slot-player{gap:8px;margin-top:8px}
+.grey-key{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px 4px 6px;font-weight:600;font-size:13px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--ink)}
+.grey-key .dot{width:20px;height:20px;border-radius:50%;background:#b5b6b8;border:1px solid rgba(0,0,0,.25);transition:transform .08s}
+.grey-key:active .dot{transform:scale(.88)}
+.grey-key:disabled{opacity:.45;cursor:default}
 .credit{margin:24px 0 0;font-size:12px;color:var(--muted)}
 .credit a{color:inherit;text-decoration-color:var(--line);text-underline-offset:2px}
 @media (max-width:560px){.field{grid-template-columns:1fr}}
@@ -267,7 +272,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <section id="editor" style="display:grid;gap:14px"></section>
 
   <section class="panel" style="display:grid;gap:12px">
-    <div class="row spread"><h2>Samples · white and grey buttons</h2></div>
+    <div class="row spread"><h2>Samples · white and grey buttons</h2><button class="btn small" id="btn-load-samples" title="Read 1.wav to 4.wav from the mic's drive so you can hear them here">Load samples from the mic</button></div>
     <p class="small muted">White picks a slot, grey plays it. To record a slot on the mic, step the orange button past preset 4 into Record mode, pick the slot with white, and hold the handle while you talk (up to 4 seconds).</p>
     <div id="sample-fx" style="display:grid;gap:6px"></div>
     <div class="samples" id="samples"></div>
@@ -744,7 +749,8 @@ function renderSamples(){
       h("div",{class:"row spread"},
         h("div",{class:"row"}, h("b",{}, "Slot "+(i+1)), h("input",{class:"text mono", id:"sample-file-"+i, value:s.file, "aria-label":"Slot "+(i+1)+" file name", size:"10",
           oninput:(e)=>{ s.file=e.target.value.trim()||((i+1)+".wav"); changedQuiet(); }})),
-        h("div",{class:"seg", role:"group", "aria-label":"Slot "+(i+1)+" playback"}, PLAYMODES.map(([v,l])=>h("button",{"aria-pressed":String((s.playmode||"oneshot")===v), onclick:()=>{ s.playmode=v; changed(); }}, l)))));
+        h("div",{class:"seg", role:"group", "aria-label":"Slot "+(i+1)+" playback"}, PLAYMODES.map(([v,l])=>h("button",{"aria-pressed":String((s.playmode||"oneshot")===v), onclick:()=>{ s.playmode=v; changed(); }}, l)))),
+      slotPlayer(i));
     if (through){
       if (s.effects.length) body.append(h("p",{class:"small muted"}, s.effects.length+" effect"+(s.effects.length>1?"s":"")+" kept for \u201cEach slot's own effects\u201d, unused now."));
     } else {
@@ -758,6 +764,68 @@ function renderSamples(){
     root.append(h("div",{class:"sample"}, h("span",{class:"wled"}), body));
   });
 }
+
+/* Hearing the slots here: load a WAV per slot (or all four from the mic's
+ * drive) and play it through the same engine as the Try-it bar, so it gets the
+ * slot's own effects or the selected preset, as "sample_fx" says. */
+const slotAudio = [null, null, null, null];
+function slotPayload(){
+  return config.samples.map((s,i) => slotAudio[i] ? {data: slotAudio[i].data, effects: s.effects||[], blocks: s.blocks} : null);
+}
+async function loadSlot(i, buf, name){
+  await tryEnsure();
+  const b = await tryState.ctx.decodeAudioData(buf);
+  slotAudio[i] = {data: b.getChannelData(0).slice(), name, sec: b.duration};
+  trySend({samples: slotPayload()});
+}
+async function playSlot(i, loop){
+  await tryEnsure(); await tryState.ctx.resume();
+  trySend({samples: slotPayload(), sampleFx: config.sample_fx || "own"});
+  trySend({play: {idx: i, loop}});
+}
+// The grey button, per the slot's playmode, as the firmware does it:
+// tap to play = once from the top; hold to play = loops while held; tap start / stop = toggles a loop.
+let slotLooping = null;
+function greyDown(i){
+  const mode = config.samples[i].playmode || "oneshot";
+  if (mode === "startstop" && slotLooping === i){ trySend({stopSample:true}); slotLooping = null; return; }
+  slotLooping = mode === "oneshot" ? null : i;
+  playSlot(i, mode !== "oneshot");
+}
+function greyUp(i){
+  if ((config.samples[i].playmode || "oneshot") === "hold" && slotLooping === i){ trySend({stopSample:true}); slotLooping = null; }
+}
+function slotPlayer(i){
+  const a = slotAudio[i], id = "slot-wav-"+i;
+  const input = h("input",{type:"file", id, accept:".wav,audio/wav,audio/x-wav", hidden:true, onchange: async (e)=>{
+    const f = e.target.files[0]; if (!f) return;
+    try { await loadSlot(i, await f.arrayBuffer(), f.name); renderSamples(); }
+    catch(err){ toast("Couldn't read "+f.name+": "+err.message); }
+  }});
+  return h("div",{class:"row slot-player"},
+    h("button",{class:"grey-key", disabled: a ? null : true, title:"Works like the grey button on the mic, using this slot's playback setting",
+      "aria-label":"Grey button: play slot "+(i+1),
+      onpointerdown:(e)=>{ e.preventDefault(); greyDown(i); }, onpointerup:()=>greyUp(i), onpointerleave:()=>greyUp(i), onpointercancel:()=>greyUp(i),
+      onkeydown:(e)=>{ if ((e.key===" "||e.key==="Enter") && !e.repeat){ e.preventDefault(); greyDown(i); } },
+      onkeyup:(e)=>{ if (e.key===" "||e.key==="Enter") greyUp(i); }}, h("span",{class:"dot","aria-hidden":"true"}), "Grey"),
+    h("button",{class:"btn small ghost", disabled: a ? null : true, onclick:()=>{ trySend({stopSample:true}); slotLooping = null; }, "aria-label":"Stop slot "+(i+1)}, "Stop"),
+    h("label",{class:"btn small ghost", for:id}, a ? "Replace WAV" : "Load a WAV"), input,
+    h("span",{class:"small muted mono"}, a ? a.name+" \u00b7 "+a.sec.toFixed(1)+" s" : "Nothing loaded to hear here yet"));
+}
+$("#btn-load-samples").addEventListener("click", async ()=>{
+  if (!canPickFolder){ toast("This browser can't open the mic's drive. Use Load a WAV on each slot instead."); return; }
+  let dir;
+  try { dir = await window.showDirectoryPicker({id:"circuitpy", mode:"read"}); }
+  catch(e){ if (e.name!=="AbortError") toast("Couldn't open the folder picker: "+e.message); return; }
+  const found = [];
+  for (let i = 0; i < config.samples.length; i++){
+    const name = config.samples[i].file;
+    try { const f = await (await dir.getFileHandle(name)).getFile(); await loadSlot(i, await f.arrayBuffer(), name); found.push(name); }
+    catch(e){}
+  }
+  renderSamples();
+  toast(found.length ? "Loaded "+found.join(", ") : "No slot files found there. Pick the mic's drive (CIRCUITPY).");
+});
 
 function render(){
   $("#pack-name").value = config.name || "";
@@ -838,6 +906,7 @@ function trySend(msg){ if (tryState.engine) tryState.engine.set(msg); }
 function tryG(){ return {power:true, gate:tryState.open || tryState.held, handle:tryState.held ? 1 : tryState.squeeze, level:tryState.level}; }
 function tryPreset(){
   if (!tryState.engine) return;
+  if (slotAudio.some(Boolean)) trySend({samples: slotPayload()});
   clearTimeout(tryState.timer);
   tryState.timer = setTimeout(()=>{ const p = serialize().presets[selected]; trySend({preset: p || null, sampleFx: config.sample_fx || "own"}); }, 60);
 }
