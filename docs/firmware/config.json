@@ -5,6 +5,7 @@
     {
       "name": "Hard tune",
       "comment": "Robotic snap to the nearest note, with a little room.",
+      "level": 0.5,
       "list": [
         {"effect": "autotune", "key": "C", "scale": "chromatic", "speed": 1.0, "humanize": 0.0, "mix": 1.0},
         {"effect": "freeverb", "roomsize": 0.4, "damp": 0.6, "mix": 0.25}
@@ -13,7 +14,7 @@
     {
       "name": "Squeeze for backups",
       "comment": "Light autotune. Squeeze and the backing vocals come in: a sus2 chord in 2nd inversion around your voice. A short echo.",
-      "level": 0.6,
+      "level": 0.45,
       "list": [
         {"effect": "autotune", "key": "C", "scale": "chromatic", "speed": 0.7, "humanize": 0.2, "mix": 1},
         {"effect": "harmonizer", "chord": "sus2", "inversion": 2, "octave": 0, "level": "$handle"},
@@ -34,6 +35,7 @@
     {
       "name": "Squeeze monster",
       "comment": "From Adafruit's demo pack: the handle bends pitch from -12 to +12 semitones.",
+      "level": 0.2,
       "list": [
         {"effect": "pitch_shift", "semitones": {"block": "math", "operation": "constrained_lerp", "a": -12, "b": 12, "c": "$handle"}, "mix": 1, "window": 1024, "overlap": 128},
         {"effect": "distortion", "drive": 0.6, "pre_gain": 12, "post_gain": -8, "mode": "overdrive", "soft_clip": true, "mix": 1},

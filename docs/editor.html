@@ -485,7 +485,7 @@ const STARTERS = [
 ];
 STARTERS.push(
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.8,damp:.5,mix:.4}]});
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.8],[STARTERS[1],.6],[STARTERS[4],1],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Match volume
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.6],[STARTERS[1],.45],[STARTERS[4],1],[STARTERS[5],.2]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Match volume
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"hold"},{file:"4.wav",playmode:"startstop"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -1323,6 +1323,11 @@ const OLD_DEFAULTS = [
 ];
 const canon = v => Array.isArray(v) ? "["+v.map(canon).join(",")+"]"
   : v && typeof v==="object" ? "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+canon(v[k])).join(",")+"}" : JSON.stringify(v);
+// Levels the current defaults had before the last Match volume pass; same presets, old level -> new level.
+const PREV_LEVELS = [.8, .6, 1, .25];
+const withoutLevel = p => { const q = Object.assign({}, p); delete q.level; return canon(q); };
+config.presets.forEach((p, i) => { const d = DEFAULT_CONFIG.presets[i];
+  if (d && withoutLevel(p)===withoutLevel(d) && (p.level ?? 1)===PREV_LEVELS[i]){ config.presets[i] = clone(d); save(); } });
 for (const [i, json] of OLD_DEFAULTS)
   if (config.presets[i] && canon(config.presets[i])===canon(JSON.parse(json))){ config.presets[i] = clone(DEFAULT_CONFIG.presets[i]); save(); }
 try { setMode(localStorage.getItem(KEY+"-mode")==="adv"); } catch(e){ setMode(false); }
