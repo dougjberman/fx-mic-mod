@@ -24,8 +24,9 @@ chord needs the note).
 
 ## Needs checking on the device
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
-  `HANDLE_DEAD_ZONE` (0.1). The console prints "handle opens the mic at 0.xx" on each squeeze; check
-  it settles near the real click, and tune `HANDLE_OPEN_GUESS` / `HANDLE_DEAD_ZONE` to taste.
+  the dead zone (0.15, or `"handle_dead_zone"` in config.json). The console prints "handle opens the
+  mic at 0.xx" on each squeeze; check it settles near the real click, then try dead zones from about
+  0.1 to 0.25 and keep whichever lets you sing with a light squeeze without nudging the effect.
 - **Harmonizer CPU:** autotune plus three harmony voices is four granular shifters. Watch for
   `overflow` with a four-note chord, and try `density` 1 on autotune if it can't keep up.
 - **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for

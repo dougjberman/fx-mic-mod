@@ -136,8 +136,9 @@ HANDLE_SMOOTHING = 0.25
 # for singing with a light squeeze, reads 0, and the rest of the travel sweeps
 # 0 to 1. The click point is learned each time the paddle closes, starting
 # from HANDLE_OPEN_GUESS; the serial console prints it.
+# A config.json can set its own dead zone with "handle_dead_zone".
 HANDLE_OPEN_GUESS = 0.15
-HANDLE_DEAD_ZONE = 0.1
+HANDLE_DEAD_ZONE = 0.15
 
 # --- Record mode ---
 
@@ -301,6 +302,13 @@ try:
 except ValueError as error:
     print("config: {}".format(error))
     THROUGH_PRESET = False
+
+# "handle_dead_zone": how much travel past the mic-open click still reads 0.
+_dead_zone = CONFIG.get("handle_dead_zone", HANDLE_DEAD_ZONE)
+if isinstance(_dead_zone, (int, float)) and not isinstance(_dead_zone, bool) and 0 <= _dead_zone <= 0.5:
+    HANDLE_DEAD_ZONE = _dead_zone
+else:
+    print("handle_dead_zone must be a number from 0 to 0.5; using {}".format(HANDLE_DEAD_ZONE))
 
 # The cycle position of record mode: one past the last preset.
 RECORD_SPOT = len(PRESETS) + 1
