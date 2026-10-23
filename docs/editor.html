@@ -1232,7 +1232,7 @@ function tryRender(){
   $("#try-controls").hidden = !tryState.running;
   $("#try-stop").hidden = !tryState.running;
   const kind = tryState.running ? tryState.kind : null;
-  $("#try-stop-label").textContent = kind === "mic" ? "Stop mic" : "Stop singer";
+  $("#try-stop-label").textContent = kind === "mic" ? "Stop mic" : "Stop this terrible singer";
   // The running source shows as live; the mic button drops its orange so Stop leads.
   $("#try-mic").classList.toggle("primary", !kind);
   $("#try-mic").classList.toggle("live", kind === "mic");
