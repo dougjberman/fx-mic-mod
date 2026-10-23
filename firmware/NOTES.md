@@ -6,6 +6,7 @@
 - `autotune.py`: pitch detect + snap + native shifter stage (from this project's autotune firmware).
 - `recorder.py`: RAM recorder and WAV writer.
 - `boot.py`: picks record mode or edit mode at power-on.
+- `selftest.py`: on-device checks for `tools/ting_test.py`; never runs at power-on.
 
 ## How an autotune preset runs
 Python calls `mic.record()` every 16 ms, detects pitch, and writes the block into a double-buffered

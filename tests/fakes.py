@@ -265,7 +265,8 @@ ROOT = None
 
 
 def _map(path):
-    if isinstance(path, str) and path.startswith("/") and "/" not in path[1:]:
+    if isinstance(path, str) and path.startswith("/") and (
+            "/" not in path[1:] or path.startswith("/selftest/")):
         return ROOT + path
     return path
 

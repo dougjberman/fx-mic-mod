@@ -75,6 +75,29 @@ python3 -m unittest discover tests
 Needs `numpy`. The tests run `firmware/code.py` against fake hardware (`tests/fakes.py`): an
 autotune preset, two recorded takes, the LED countdown and edit mode.
 
+## Testing on a real mic
+
+`tools/ting_test.py` runs the automatic part of the hardware test plan over USB serial. Power the
+mic on normally (not edit mode), plug it in, then:
+
+```
+pip install pyserial numpy
+python3 tools/ting_test.py check            # no hands needed, about 5 minutes
+python3 tools/ting_test.py check --stress 50
+python3 tools/ting_test.py guided           # LEDs, buttons, handle and knob, with prompts
+python3 tools/ting_test.py install          # copy firmware/ to the mic
+python3 tools/ting_test.py backup ~/Desktop # copy the mic's drive to a folder
+```
+
+`check` stops code.py, puts `selftest.py` and three test WAVs on the drive, and drives
+`firmware/selftest.py` from the raw REPL. Audio checks are an acoustic loopback: a test WAV goes
+through a preset in place of the mic, plays out of the speaker, and the mic records it. The
+computer then measures the recordings: whether autotune lands within 15 cents, whether each
+harmony voice is at its interval, whether pitch shifts move by the right amount, how much of
+each 16 ms block autotune's Python needs, how much CPU the native effects leave, memory leaks
+across rebuilds, and how loud each preset is. Run it somewhere quiet with headphones unplugged.
+Results, recordings and the raw log go to `test-results/<date-time>/`.
+
 ## License
 
 MIT. Adafruit's original files keep their copyright headers. See `LICENSE` and `LICENSE-ADAFRUIT`.
