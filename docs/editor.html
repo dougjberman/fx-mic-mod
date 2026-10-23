@@ -161,6 +161,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 }
 .match{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 16px;align-items:start;border-top:1px solid var(--line);padding-top:12px}
 .match p{margin:0;max-width:78ch}
+.try-note{margin:4px 0 0}
 @media (max-width:560px){.match{grid-template-columns:1fr}}
 .levelrow{border-top:1px solid var(--line);padding-top:10px}
 .slot-player{gap:8px;margin-top:8px}
@@ -215,9 +216,9 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 .tryit .controls{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:10px 28px;align-items:center;padding-top:12px;border-top:1px solid var(--line)}
 .tryit .controls[hidden]{display:none}
 .tryit .talkbox{display:flex;align-items:center;gap:10px}
-.tryit .slider{grid-template-columns:62px minmax(0,1fr) 44px;gap:10px}
+.tryit .slider{grid-template-columns:112px minmax(0,1fr) 44px;gap:10px}
 .tryit .readout{grid-column:1/-1}
-@media (max-width:760px){.tryit{position:static}.tryit .controls{grid-template-columns:1fr}.tryit .slider{grid-template-columns:62px minmax(0,1fr) 44px}.tryit .slider label{grid-column:auto}}
+@media (max-width:760px){.tryit{position:static}.tryit .controls{grid-template-columns:1fr}.tryit .slider{grid-template-columns:112px minmax(0,1fr) 44px}.tryit .slider label{grid-column:auto}}
 /* nudge toward the Squeeze slider on presets that use the handle */
 .squeeze-hint{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:14px;color:var(--accent-text);padding:8px 12px;border-radius:10px;background:var(--accent-soft)}
 .squeeze-hint[hidden]{display:none}
@@ -1300,7 +1301,8 @@ function renderSqueezeHint(){
     : h("span",{}, "This preset changes as you squeeze. Press ", h("b",{},"Use my mic"), " or ", h("b",{},"Play sample singer"), ", then drag ", h("b",{},"Squeeze"), " to hear "+job+"."),
     ...(tryState.running ? [h("button",{class:"btn small", onclick:sweepSqueeze}, "Squeeze it for me")] : []));
 }
-$("#try-level-slot").append(sliderEl({label:"Volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }));
+$("#try-level-slot").append(sliderEl({label:"Preview volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }),
+  h("p",{class:"small muted try-note"}, "Only sets how loud it plays in your browser. Not saved to the mic."));
 
 function setHowto(show){ $("#howto").hidden=!show; $("#howto-show").hidden=show; try { localStorage.setItem(KEY+"-howto", show?"1":"0"); } catch(e){} }
 $("#howto-hide").addEventListener("click", ()=>setHowto(false));
