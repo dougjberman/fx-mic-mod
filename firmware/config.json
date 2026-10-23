@@ -13,11 +13,11 @@
     },
     {
       "name": "Squeeze for backups",
-      "comment": "Light autotune. Squeeze and the backing vocals come in: a sus2 chord in 2nd inversion around your voice. A short echo.",
+      "comment": "Light autotune in C major. Squeeze and the backing vocals come in: the key's own triad on each note, in 2nd inversion around your voice. A short echo.",
       "level": 0.45,
       "list": [
-        {"effect": "autotune", "key": "C", "scale": "chromatic", "speed": 0.7, "humanize": 0.2, "mix": 1},
-        {"effect": "harmonizer", "chord": "sus2", "inversion": 2, "octave": 0, "level": "$handle"},
+        {"effect": "autotune", "key": "C", "scale": "major", "speed": 0.7, "humanize": 0.2, "mix": 1},
+        {"effect": "harmonizer", "chord": "key_triad", "inversion": 2, "octave": 0, "level": "$handle"},
         {"effect": "echo", "delay_ms": 250, "decay": 0.1, "mix": 0.1, "freq_shift": false, "max_delay_ms": 500}
       ]
     },
