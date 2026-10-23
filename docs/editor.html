@@ -57,6 +57,15 @@ a{color:var(--accent-text)}
 .btn{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:7px 14px;cursor:pointer;font-weight:600;font-size:14px}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--accent-btn);border-color:var(--accent-btn);color:var(--accent-ink)}
+/* While the mic or the singer is running, Stop is the button to find. */
+.btn.stop{display:inline-flex;align-items:center;gap:8px;background:var(--ink);border-color:var(--ink);color:var(--bg);padding:7px 16px;animation:stop-ring 1.8s ease-out infinite}
+.btn.stop[hidden]{display:none}
+.btn.stop .sq{width:10px;height:10px;border-radius:2px;background:currentColor}
+.btn.live{box-shadow:inset 0 0 0 1px var(--accent-text);color:var(--accent-text)}
+.btn.live::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent-btn);margin-right:7px;vertical-align:1px;animation:live-dot 1.2s ease-in-out infinite}
+@keyframes stop-ring{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ink) 35%,transparent)}70%,100%{box-shadow:0 0 0 8px transparent}}
+@keyframes live-dot{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.btn.stop,.btn.live::before{animation:none}}
 .btn.ghost{background:transparent}
 .btn.small{padding:4px 10px;font-size:13px}
 .btn:disabled{opacity:.45;cursor:default}
@@ -243,7 +252,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       <div class="row">
         <button class="btn primary" id="try-mic">Use my mic</button>
         <button class="btn" id="try-singer">Play sample singer</button>
-        <button class="btn ghost" id="try-stop" hidden>Stop</button>
+        <button class="btn stop" id="try-stop" hidden><span class="sq" aria-hidden="true"></span><span id="try-stop-label">Stop</span></button>
       </div>
     </div>
     <div id="try-controls" class="controls" hidden>
@@ -946,6 +955,7 @@ async function tryStart(kind){
     tryStatus(b.recorded ? "Looping Janie Joelle's a cappella vocal through the preset. Try hard snap on her blue notes." : "Looping a slightly off-pitch singer through the preset.");
   }
   tryState.src.connect(tryState.engine.node);
+  tryState.kind = kind === "mic" ? "mic" : "singer";
   tryState.running = true; tryRender();
 }
 /* Match volume: run each preset offline on the sample singer, measure its
@@ -1016,6 +1026,14 @@ function tryStatus(t, bad){ const el=$("#try-status"); el.textContent=t; el.styl
 function tryRender(){
   $("#try-controls").hidden = !tryState.running;
   $("#try-stop").hidden = !tryState.running;
+  const kind = tryState.running ? tryState.kind : null;
+  $("#try-stop-label").textContent = kind === "mic" ? "Stop mic" : "Stop singer";
+  // The running source shows as live; the mic button drops its orange so Stop leads.
+  $("#try-mic").classList.toggle("primary", !kind);
+  $("#try-mic").classList.toggle("live", kind === "mic");
+  $("#try-singer").classList.toggle("live", kind === "singer");
+  $("#try-mic").setAttribute("aria-pressed", String(kind === "mic"));
+  $("#try-singer").setAttribute("aria-pressed", String(kind === "singer"));
   $("#try-talk").setAttribute("aria-pressed", String(tryState.open || tryState.held));
   $("#try-talk").textContent = tryState.held ? "Squeezed" : tryState.open ? "Mic open" : "Mic closed";
 }
