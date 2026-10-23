@@ -11,7 +11,7 @@
       ]
     },
     {
-      "name": "Squeeze tune",
+      "name": "Squeeze to tune",
       "comment": "Natural correction at a light squeeze, hard snap when squeezed all the way. Slap-back echo.",
       "list": [
         {"effect": "autotune", "key": "C", "scale": "major", "speed": "$handle", "humanize": 0.3, "mix": 1.0},
