@@ -49,20 +49,6 @@ code{font-family:var(--f-mono);font-size:.92em}
 .eyebrow.accent{color:var(--accent-text)}
 .hero > .pair, .hero > .cta{margin-top:6px}
 .hero{position:relative}
-.hero-dev{position:absolute;right:calc((100% - 615px) / 2 - 82px);top:58px;width:min(16%,165px);height:auto;transform:rotate(9deg);pointer-events:none}
-@media (max-width:980px){.hero-dev{display:none}}
-.hero-dev .blink{animation:heroBlink 1s steps(1,end) infinite}
-@keyframes heroBlink{50%{opacity:0}}
-/* On load the mic powers up into record mode: a squeeze, the four red lights in turn, then the slot blinks */
-.motion .hero-handle{transform-box:view-box;animation:heroSqueeze .7s .25s cubic-bezier(.3,.7,.3,1) both}
-@keyframes heroSqueeze{45%{transform:translate(30px,4px) rotate(2deg)}}
-.motion .hero-dev .hl{animation:heroLed .25s ease-out both}
-.motion .hero-dev .hl:nth-child(1){animation-delay:.65s}.motion .hero-dev .hl:nth-child(2){animation-delay:.8s}
-.motion .hero-dev .hl:nth-child(3){animation-delay:.95s}.motion .hero-dev .hl:nth-child(4){animation-delay:1.1s}
-@keyframes heroLed{from{opacity:0}}
-.motion .hero-dev .blink{animation:heroIn .2s 1.35s both,heroBlink 1s 1.55s steps(1,end) infinite}
-@keyframes heroIn{from{opacity:0}}
-@media (prefers-reduced-motion:reduce){.hero-dev .blink{animation:none}}
 .cta{display:flex;flex-wrap:wrap;gap:10px}
 .btn{display:inline-block;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:10px 18px;font-weight:700;text-decoration:none;font:inherit;font-weight:700;cursor:pointer}
 .btn.primary{background:var(--accent-btn);border-color:var(--accent-btn);color:var(--accent-ink)}
@@ -207,7 +193,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
 <main>
   <section class="hero page-head">
     <span class="eyebrow">EP–2350 Ting / FX Mic · free firmware</span>
-    <svg class="dev hero-dev" viewBox="282 -4 296 418" aria-hidden="true">
+    <svg class="dev hero-dev intro" viewBox="282 -4 296 418" aria-hidden="true">
       <defs>
         <pattern id="holesHero" x="341" y="3" width="14.1" height="14.1" patternUnits="userSpaceOnUse"><circle cx="7" cy="7" r="5.2" fill="var(--hole)"/></pattern>
         <filter id="glowRHero" x="-150%" y="-150%" width="400%" height="400%"><feGaussianBlur stdDeviation="3" result="b"/><feFlood flood-color="#ff3b2f" flood-opacity=".9"/><feComposite in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
