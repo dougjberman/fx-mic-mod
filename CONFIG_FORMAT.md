@@ -61,7 +61,9 @@ It can only turn a preset down, because a mixer voice can't go above 1.0.
 
 Every effect: `"effect": <type>`, optional `"mix"` (0..1), optional `"enabled": false`.
 Any numeric param marked (B) accepts a number, a block object, or `"$name"`.
-`"$handle"` is supplied by the firmware: handle travel 0.0 (out) .. 1.0 (squeezed).
+`"$handle"` is supplied by the firmware: 0.0 from rest until the squeeze has opened the mic and
+gone a little further (the paddle click point plus a 0.1 dead zone, so you can sing with a light
+squeeze), then up to 1.0 fully squeezed. The firmware learns the click point as you play.
 
 | type | params |
 |---|---|

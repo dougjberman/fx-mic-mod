@@ -627,7 +627,7 @@ function renderEditor(){
 
   root.append(h("div",{class:"panel adv", style:"gap:8px"},
     h("h2",{},"Shared blocks (LFOs, math)"),
-    h("p",{class:"small muted"},'Name a block here and use it as "$name" in any parameter. "$handle" is always the handle travel, 0 at rest to 1 squeezed.'),
+    h("p",{class:"small muted"},'Name a block here and use it as "$name" in any parameter. "$handle" is always the squeeze: 0 when you have just opened the mic, 1 squeezed all the way.'),
     jsonArea(p.blocks||{}, (v)=>{ p.blocks=v; })));
 }
 

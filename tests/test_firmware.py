@@ -213,6 +213,8 @@ class DeviceScenarioTests(unittest.TestCase):
     def test_autotune_preset_then_record_two_takes(self):
         root, out, s = run("record")
         self.assertIn("autotune via GranularPitchShift", out)
+        # "$handle" starts where the paddle click opens the mic, learned on each squeeze
+        self.assertIn("handle opens the mic at", out)
         # squeezing the handle in switches A minor -> C major, releasing switches back
         self.assertIn("autotune now C major", out)
         self.assertLess(out.index("autotune now C major"), out.index("autotune now A minor"))

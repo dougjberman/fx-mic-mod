@@ -131,6 +131,14 @@ HANDLE_IN_COUNTS = 29850  # squeezed fully in
 HANDLE_SAMPLES = 16
 HANDLE_SMOOTHING = 0.25
 
+# "$handle" starts where the mic opens, not at rest. The paddle switch clicks
+# partway into the squeeze, so the travel up to that click, plus a dead zone
+# for singing with a light squeeze, reads 0, and the rest of the travel sweeps
+# 0 to 1. The click point is learned each time the paddle closes, starting
+# from HANDLE_OPEN_GUESS; the serial console prints it.
+HANDLE_OPEN_GUESS = 0.15
+HANDLE_DEAD_ZONE = 0.1
+
 # --- Record mode ---
 
 # Longest take, in seconds. Held in RAM (32 KB per second at 16 kHz) and
@@ -886,16 +894,39 @@ def apply_volume(ctx, force=False):
     print("volume {:+.1f} dB".format(codec.dac_volume))
 
 
+# Raw handle travel, 0.0 out to 1.0 in, and the travel at which the paddle
+# switch opens the mic.
+handle_travel = 0.0
+handle_open = HANDLE_OPEN_GUESS
+
+
 def read_handle():
-    """Update `handle_control` from the handle position, 0.0 out to 1.0 in."""
+    """Update `handle_control` from the handle position: 0.0 until the
+    squeeze passes the mic-open click plus HANDLE_DEAD_ZONE, 1.0 fully in."""
+    global handle_travel
     total = 0
     for _ in range(HANDLE_SAMPLES):
         total += handle_pot.value
     raw = total / HANDLE_SAMPLES
 
     fraction = (HANDLE_OUT_COUNTS - raw) / (HANDLE_OUT_COUNTS - HANDLE_IN_COUNTS)
+    handle_travel = min(1.0, max(0.0, fraction))
+    start = handle_open + HANDLE_DEAD_ZONE
+    fraction = (handle_travel - start) / (1.0 - start)
     fraction = min(1.0, max(0.0, fraction))
     handle_control.a += (fraction - handle_control.a) * HANDLE_SMOOTHING
+
+
+def learn_handle_open():
+    """Called as the paddle closes: move the mic-open point toward the travel
+    just read. A lower reading is taken at once; a higher one (a fast squeeze
+    overshoots the click before the next read) only a quarter of the way."""
+    global handle_open
+    if handle_travel < handle_open:
+        handle_open = handle_travel
+    else:
+        handle_open += (min(handle_travel, 0.6) - handle_open) * 0.25
+    print("handle opens the mic at {:.2f} of its travel".format(handle_open))
 
 
 # --- Main demo setup and loop ---
@@ -984,6 +1015,8 @@ try:
             data_context.paddle_held = held
             data_context.paddle_changed = now
             print("paddle {}".format("pressed" if held else "released"))
+            if held:
+                learn_handle_open()
             recorder = data_context.recorder
             if not held and recorder is not None and recorder.recording:
                 recorder.stop()  # at once: the release click stays out
