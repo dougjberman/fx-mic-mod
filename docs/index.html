@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <title>fx-mic-mod</title>
-<meta name="description" content="Custom firmware for the Teenage Engineering EP-2350 (Ting and FX Mic): autotune that stacks with every effect, and samples you record on the mic itself.">
+<meta name="description" content="Custom firmware for the Teenage Engineering EP-2350 (Ting and FX Mic): autotune that stacks with every effect, a harmonizer that sings chords with you, and samples you record on the mic itself.">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Barlow:wght@300;400&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -57,8 +57,8 @@ code{font-family:var(--f-mono);font-size:.92em}
 .status b{color:var(--ink)}
 
 /* the two headline features, as a pair of cards under the headline */
-.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-@media (max-width:720px){.pair{grid-template-columns:1fr}}
+.pair{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:980px){.pair{grid-template-columns:1fr}}
 .pick{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px;text-decoration:none;color:inherit;transition:border-color .15s}
 .pick:hover{border-color:var(--accent)}
 .pick .ico{grid-row:span 2;width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:grid;place-items:center;color:var(--accent)}
@@ -91,6 +91,15 @@ code{font-family:var(--f-mono);font-size:.92em}
 .seg button{font:inherit;font-size:13px;font-weight:600;border:0;background:transparent;color:var(--muted);border-radius:999px;padding:6px 12px;cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 #tuned{transition:d .45s ease}
+/* harmonizer drawing: the sung line plus the backing voices, and a listen button */
+.chordfig .seg{flex-wrap:wrap}
+#chordVoices path{transition:d .45s cubic-bezier(.16,1,.3,1)}
+.btn.hear{display:inline-flex;align-items:center;gap:8px;font-size:14px;padding:8px 14px;white-space:nowrap}
+.btn.hear svg{width:14px;height:14px;flex:none}
+.btn.hear .stop,.btn.hear[aria-pressed="true"] .play{display:none}
+.btn.hear[aria-pressed="true"] .stop{display:inline}
+.btn.hear[aria-pressed="true"]{border-color:var(--accent);color:var(--accent-text)}
+.small-note{font-size:13px;color:var(--muted)}
 .snap .note-lab{font:500 11px var(--f-mono);fill:var(--muted)}
 
 /* record mode: animated mic + step list */
@@ -232,12 +241,17 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
       </g>
     </svg>
     <h1>Autotune your voice. <span>Record your own samples.</span> All on the mic.</h1>
-    <p class="lede">fx-mic-mod gives Teenage Engineering's little fx mic two new tricks. Autotune now stacks with distortion, reverb, echo and the rest. Record mode captures new samples straight into the mic, with no computer involved.</p>
+    <p class="lede">fx-mic-mod gives Teenage Engineering's little fx mic three new tricks. Autotune now stacks with distortion, reverb, echo and the rest. A harmonizer adds backing singers in any chord. Record mode captures new samples straight into the mic, with no computer involved.</p>
     <div class="pair">
       <a class="pick" href="#autotune">
         <span class="ico" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16h4v-5h5v-4h4v6h5"/></svg></span>
         <b>Autotune that stacks</b>
         <span>Snap to every note or lock to a key, from a hard robot snap to a gentle nudge. You can even map the snap strength or key changes to the handle.</span>
+      </a>
+      <a class="pick" href="#harmony">
+        <span class="ico" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h5v-3h5v-3h5"/><path d="M3 13h5v-3h5V7h5" opacity=".55"/><path d="M3 8h5V5h5V2h5" opacity=".3"/></svg></span>
+        <b>Backing singers on tap</b>
+        <span>Pick a chord, from plain major to maj7, 9ths and the Hendrix chord, and up to three voices sing it with you on every note.</span>
       </a>
       <a class="pick" href="#record">
         <span class="ico" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span>
@@ -279,7 +293,6 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
       <div class="points" data-reveal-list>
         <div class="point"><span class="tag">Key</span><h3>Every note, or your key</h3><p>Chromatic snaps to the nearest semitone. Pick major or minor in any of the 12 keys, and you only land on notes in that key.</p></div>
         <div class="point"><span class="tag">Strength</span><h3>Hard snap to natural</h3><p>One slider goes from the instant, robotic jump to a gentle glide that keeps your vibrato. Humanize leaves small wobbles alone.</p></div>
-        <div class="point wide"><span class="tag">Harmony</span><h3>Sing in chords</h3><p>Add the harmonizer and up to three more voices sing with you, built on every note: major and minor, 7ths and 9ths, sus and add9, even the Hendrix chord. Key chords follow your autotune key, so each note gets the chord the scale gives it. Inversions move the harmony below your voice.</p></div>
         <div class="point wide"><span class="tag">Handle</span><h3>Make the squeeze do more</h3><p>Squeezing the handle always turns the mic on. In the editor you can give it one more job in each autotune preset, any one of these:</p>
           <div class="opts">
             <div><b>Tune harder</b><p>A light squeeze sounds natural. Clamp down for full robot.</p></div>
@@ -291,10 +304,51 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
     <div class="cta"><a class="btn" href="editor.html">Try autotune with your computer mic</a></div>
   </section>
 
+  <!-- ===================== HARMONIZER ===================== -->
+  <section class="band" id="harmony">
+    <div class="band-head" data-reveal>
+      <span class="eyebrow accent">Feature 2 · Harmonizer</span>
+      <h2>Bring your own backing singers.</h2>
+      <p class="lede">Pick a chord and up to three more voices sing it with you, built on every note you sing. They follow autotune, so the harmony lands in tune, and the squeeze can bring them in only when you want them.</p>
+    </div>
+    <div class="split">
+      <div class="snap chordfig">
+        <div class="row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+          <b style="font-family:var(--f-display)">One sung line, four voices</b>
+          <div class="seg" role="group" aria-label="Chord">
+            <button type="button" aria-pressed="false" data-chord="major">Major</button>
+            <button type="button" aria-pressed="false" data-chord="minor">Minor</button>
+            <button type="button" aria-pressed="true" data-chord="sus2">sus2</button>
+            <button type="button" aria-pressed="false" data-chord="maj7">maj7</button>
+            <button type="button" aria-pressed="false" data-chord="7#9">7♯9</button>
+          </div>
+        </div>
+        <svg viewBox="0 0 520 220" role="img" aria-labelledby="chordTitle">
+          <title id="chordTitle">A sung melody with harmony lines following it a chord's notes above</title>
+          <g id="chordGrid"></g>
+          <g id="chordVoices"></g>
+          <path id="chordLead" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="row" style="display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between">
+          <div class="legend"><span><i style="background:var(--accent)"></i>You</span><span><i style="background:var(--accent);opacity:.45"></i>Backing voices</span></div>
+          <button type="button" class="btn hear" id="hearChord" aria-pressed="false"><svg class="ic" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path class="play" d="M3 1.5v11l9-5.5z" fill="currentColor"/><path class="stop" d="M2.5 2.5h9v9h-9z" fill="currentColor"/></svg><span>Hear it on a singer</span></button>
+        </div>
+        <p class="small-note" id="hearNote" hidden></p>
+      </div>
+      <div class="points" data-reveal-list>
+        <div class="point"><span class="tag">Chords</span><h3>38 chords, any voicing</h3><p>Major and minor, sus2 and sus4, 6ths, every kind of 7th, add9, 9ths, 11ths, 13ths and the Hendrix 7♯9. The editor shows the exact notes before you pick.</p></div>
+        <div class="point"><span class="tag">In the key</span><h3>Harmony that knows the key</h3><p>Set autotune to a key and the chord follows the scale, like a real vocal harmonizer: sing E in C major and you get E minor, sing F and you get F major.</p></div>
+        <div class="point"><span class="tag">Voicing</span><h3>Above you or under you</h3><p>Inversions tuck chord notes below your voice so you sing the top line. An octave switch moves the whole choir up or down.</p></div>
+        <div class="point"><span class="tag">Squeeze</span><h3>Squeeze for backups</h3><p>Sing alone with a light squeeze, clamp down and the choir comes in. Preset 2 in the editor is set up this way.</p></div>
+      </div>
+    </div>
+    <div class="cta"><a class="btn" href="editor.html">Build a harmony in the editor</a></div>
+  </section>
+
   <!-- ===================== RECORD MODE ===================== -->
   <section class="band" id="record">
     <div class="band-head" data-reveal>
-      <span class="eyebrow accent">Feature 2 · Record mode</span>
+      <span class="eyebrow accent">Feature 3 · Record mode</span>
       <h2>Sample anything, right on the mic.</h2>
       <p class="lede">The stock mic only plays samples you copy over from a computer. With fx-mic-mod you can fill its four sample slots out in the world: a friend's laugh, a beatbox loop, a door slam. The mic's own lights walk you through it.</p>
     </div>
@@ -474,6 +528,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
 </main>
 <footer>fx-mic-mod is a fork of Adafruit's <a href="https://learn.adafruit.com/hacking-the-teenage-engineering-ep-2350-ting" target="_blank" rel="noopener">EP-2350 CircuitPython demo</a> by Tim Cocks, MIT licensed. Not affiliated with Teenage Engineering or Adafruit. Source on <a href="https://github.com/dougjberman/fx-mic-mod" target="_blank" rel="noopener">GitHub</a>.</footer>
 
+<script src="ting-dsp.js"></script>
 <script>
 /* ---------- autotune drawing: a sung line and its corrected version ---------- */
 (() => {
@@ -509,14 +564,81 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
   if(!matchMedia("(prefers-reduced-motion: reduce)").matches && "IntersectionObserver" in window){
     tuned.setAttribute("d", document.getElementById("voice").getAttribute("d"));
     const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ io.disconnect();
-      setTimeout(()=>{ tuned.style.transition="d .8s cubic-bezier(.16,1,.3,1)"; const on=document.querySelector('.snap .seg [aria-pressed="true"]'); draw(on?+on.dataset.speed:1);
+      setTimeout(()=>{ tuned.style.transition="d .8s cubic-bezier(.16,1,.3,1)"; const on=document.querySelector('.snap:not(.chordfig) .seg [aria-pressed="true"]'); draw(on?+on.dataset.speed:1);
         setTimeout(()=>tuned.style.transition="",900); },350); } },{threshold:.6});
     io.observe(svg);
   }
-  document.querySelectorAll(".snap .seg button").forEach(b=>b.addEventListener("click",()=>{
-    document.querySelectorAll(".snap .seg button").forEach(o=>o.setAttribute("aria-pressed",String(o===b)));
+  document.querySelectorAll(".snap:not(.chordfig) .seg button").forEach(b=>b.addEventListener("click",()=>{
+    document.querySelectorAll(".snap:not(.chordfig) .seg button").forEach(o=>o.setAttribute("aria-pressed",String(o===b)));
     draw(+b.dataset.speed);
   }));
+})();
+
+/* ---------- harmonizer drawing, and the sample singer through it ---------- */
+(() => {
+  const W=520, top=18, per=7.2, hi=81;                  // one semitone per 7.2 px, A5 (81) at the top row
+  const ns="http://www.w3.org/2000/svg", toY=m=>top+(hi-m)*per;
+  const grid=document.getElementById("chordGrid");
+  [[81,"A5"],[76,"E5"],[72,"C5"],[67,"G4"],[64,"E4"],[60,"C4"]].forEach(([m,n])=>{
+    const y=toY(m);
+    const l=document.createElementNS(ns,"line"); Object.entries({x1:34,x2:W-6,y1:y,y2:y,stroke:"var(--grid)","stroke-width":1.5}).forEach(([k,v])=>l.setAttribute(k,v)); grid.append(l);
+    const t=document.createElementNS(ns,"text"); t.setAttribute("x",0); t.setAttribute("y",y+4); t.setAttribute("class","note-lab"); t.textContent=n; grid.append(t);
+  });
+  // a tuned melody in C: [start x, MIDI note]
+  const tune=[[40,60],[96,64],[150,62],[196,65],[250,64],[300,67],[370,65],[420,64],[470,60]];
+  const line=off=>tune.map(([x,m],i)=>{ const x1=i+1<tune.length?tune[i+1][0]:W-10, y=toY(m+off).toFixed(1);
+    return (i?"L":"M")+x+" "+y+" L"+(x1-6)+" "+y; }).join(" ");
+  document.getElementById("chordLead").setAttribute("d", line(0));
+  const LIB = typeof dspFactory==="function" ? dspFactory() : null;
+  const CHORD={major:[0,4,7],minor:[0,3,7],sus2:[0,2,7],maj7:[0,4,7,11],"7#9":[0,4,10,15]};
+  const voices=document.getElementById("chordVoices"), paths=[0,1,2].map(k=>{
+    const p=document.createElementNS(ns,"path"); Object.entries({fill:"none",stroke:"var(--accent)","stroke-width":3,"stroke-linecap":"round","stroke-linejoin":"round",opacity:[.55,.4,.28][k]}).forEach(([a,v])=>p.setAttribute(a,v));
+    voices.append(p); return p; });
+  let chord="sus2";
+  function draw(){
+    const ivs=CHORD[chord].slice(1);
+    paths.forEach((p,k)=>{ const iv=ivs[k]; p.setAttribute("d", line(iv===undefined ? ivs[ivs.length-1] : iv)); p.style.visibility = iv===undefined ? "hidden" : ""; });
+  }
+  draw();
+  document.querySelectorAll(".chordfig .seg button").forEach(b=>b.addEventListener("click",()=>{
+    document.querySelectorAll(".chordfig .seg button").forEach(o=>o.setAttribute("aria-pressed",String(o===b)));
+    chord=b.dataset.chord; draw(); if (playing) play();
+  }));
+
+  // Listen: the sample singer through autotune and the harmonizer, rendered by the same
+  // engine as the editor's Try it, then played. Changing the chord while it plays restarts it.
+  const btn=document.getElementById("hearChord"), note=document.getElementById("hearNote");
+  let ctx=null, singer=null, src=null, playing=false;
+  async function render(){
+    const rate=ctx.sampleRate, dsp=new LIB.TingDSP(rate);
+    dsp.set({g:{power:true,gate:true,handle:1,level:1}, preset:{list:[
+      {effect:"autotune",key:"C",scale:"chromatic",speed:.8,humanize:.2,mix:1},
+      {effect:"harmonizer",chord,inversion:0,octave:0,level:.7},
+      {effect:"freeverb",roomsize:.5,damp:.5,mix:.2}]}});
+    const inp=singer.getChannelData(0), n=Math.min(inp.length, rate*12), out=new Float32Array(n), N=256, blk=new Float32Array(N);
+    for(let i=0;i+N<=n;i+=N){ dsp.process(inp.subarray(i,i+N), blk); out.set(blk,i); }
+    let peak=0; for(let i=0;i<n;i++) peak=Math.max(peak,Math.abs(out[i]));
+    const g=peak>0?0.8/peak:1, buf=ctx.createBuffer(1,n,rate), ch=buf.getChannelData(0);
+    for(let i=0;i<n;i++) ch[i]=out[i]*g;
+    const fade=Math.round(rate*0.3); for(let i=0;i<fade;i++) ch[n-1-i]*=i/fade;
+    return buf;
+  }
+  function stop(){ if(src){ src.onended=null; try{ src.stop(); }catch(e){} src=null; } playing=false; btn.setAttribute("aria-pressed","false"); btn.querySelector("span").textContent="Hear it on a singer"; }
+  async function play(){
+    try {
+      if(!LIB) throw new Error("the audio engine didn't load");
+      ctx = ctx || new (window.AudioContext||window.webkitAudioContext)();
+      if(ctx.state==="suspended") await ctx.resume();
+      btn.querySelector("span").textContent="Rendering…";
+      if(!singer){ const r=await fetch("audio/sample-singer.mp3"); if(!r.ok) throw new Error("couldn't load the singer"); singer=await ctx.decodeAudioData(await r.arrayBuffer()); }
+      const buf=await render();
+      if(src){ src.onended=null; try{ src.stop(); }catch(e){} }
+      src=ctx.createBufferSource(); src.buffer=buf; src.connect(ctx.destination); src.onended=stop; src.start();
+      playing=true; btn.setAttribute("aria-pressed","true"); btn.querySelector("span").textContent="Stop"; note.hidden=false;
+      note.textContent="Janie Joelle singing, with "+document.querySelector('.chordfig .seg [aria-pressed="true"]').textContent+" backing voices. Pick another chord to hear it change.";
+    } catch(e){ stop(); note.hidden=false; note.textContent="Couldn't play it here ("+e.message+"). Try it in the editor instead."; }
+  }
+  btn.addEventListener("click",()=>{ if(playing) stop(); else play(); });
 })();
 
 /* ---------- record mode: the mic walks through the four steps ---------- */
