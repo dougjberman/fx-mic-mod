@@ -1297,7 +1297,7 @@ function renderSqueezeHint(){
   if (!job) return;
   hint.replaceChildren(tryState.running
     ? h("span",{}, "This preset changes as you squeeze. Drag ", h("b",{},"Squeeze"), " while it plays and hear "+job+".")
-    : h("span",{}, "This preset changes as you squeeze. Press ", h("b",{},"Play sample singer"), ", then drag ", h("b",{},"Squeeze"), " to hear "+job+"."),
+    : h("span",{}, "This preset changes as you squeeze. Press ", h("b",{},"Use my mic"), " or ", h("b",{},"Play sample singer"), ", then drag ", h("b",{},"Squeeze"), " to hear "+job+"."),
     ...(tryState.running ? [h("button",{class:"btn small", onclick:sweepSqueeze}, "Squeeze it for me")] : []));
 }
 $("#try-level-slot").append(sliderEl({label:"Volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }));
