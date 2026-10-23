@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="site-nav.css">
+<link rel="stylesheet" href="site-motion.css">
 <style>
 /* Layout: sticky step rail on the left, one column of numbered bench steps on the right; collapses to a single column on phones.
    Adapted from this project's Ting Flash Bench, in the fx-mic-mod site palette. */
@@ -71,6 +72,11 @@ nav.rail a:hover { background: var(--panel); }
 nav.rail .n { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
 nav.rail .dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--line); }
 nav.rail a.done .dot { background: var(--green); border-color: var(--green); }
+nav.rail a { transition: background-color .2s, color .2s; }
+nav.rail a[aria-current="step"] { background: var(--panel); box-shadow: inset 2px 0 0 var(--accent); }
+nav.rail a[aria-current="step"] .n { color: var(--accent-text); }
+nav.rail .dot.pop { animation: dotPop .4s cubic-bezier(.16,1,.3,1); }
+@keyframes dotPop { 0% { transform: scale(.4); } 60% { transform: scale(1.35); } 100% { transform: scale(1); } }
 .support { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 8px; font-size: 13px; }
 .support div { display: flex; justify-content: space-between; gap: 8px; }
 .chip { font-family: var(--f-mono); font-size: 11px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap; }
@@ -239,7 +245,7 @@ picotool save -a ting-full-flash.bin</pre>
     <!-- 03 -->
     <section class="step" id="boot" data-step="boot">
       <div class="step-head"><span class="step-num">03</span><h2>Put the mic in boot mode</h2><label class="mark"><input type="checkbox" data-done="boot"> Done</label></div>
-      <div class="gesture">
+      <div class="gesture" data-reveal-list>
         <div>
           <b>1 · Squeeze</b>
           <svg class="dev" viewBox="0 0 200 140" role="img" aria-label="The orange handle pressed all the way into the side of the mic">
@@ -495,8 +501,20 @@ while True:
   }
   document.querySelectorAll("[data-done]").forEach(cb => {
     cb.checked = !!done[cb.dataset.done];
-    cb.addEventListener("change", () => { done[cb.dataset.done] = cb.checked; store.set("done", done); paintRail(); });
+    cb.addEventListener("change", () => {
+      done[cb.dataset.done] = cb.checked; store.set("done", done); paintRail();
+      const dot = document.querySelector(`#railList a[href="#${cb.dataset.done}"] .dot`);
+      if (dot && cb.checked) { dot.classList.remove("pop"); void dot.offsetWidth; dot.classList.add("pop"); }
+    });
   });
+  // Highlight the step you're reading in the rail.
+  if ("IntersectionObserver" in window) {
+    const links = new Map([...document.querySelectorAll("#railList a")].map(a => [a.getAttribute("href").slice(1), a]));
+    const spy = new IntersectionObserver(es => {
+      for (const e of es) if (e.isIntersecting) links.forEach((a, id) => id === e.target.id ? a.setAttribute("aria-current", "step") : a.removeAttribute("aria-current"));
+    }, { rootMargin: "-35% 0px -60% 0px" });
+    links.forEach((a, id) => { const sec = document.getElementById(id); if (sec) spy.observe(sec); });
+  }
   function markDone(k) {
     done[k] = true; store.set("done", done); paintRail();
     const cb = document.querySelector(`[data-done="${k}"]`); if (cb) cb.checked = true;
@@ -800,4 +818,5 @@ while True:
 })();
 </script>
 
+<script src="site-motion.js"></script>
 </body></html>

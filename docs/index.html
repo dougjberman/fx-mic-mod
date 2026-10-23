@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Barlow:wght@300;400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="site-nav.css">
+<link rel="stylesheet" href="site-motion.css">
 <style>
 /* Layout: one reading column. The hero names both features side by side, then each
    feature gets its own band: autotune with a pitch-snap drawing, record mode with the
@@ -52,6 +53,15 @@ code{font-family:var(--f-mono);font-size:.92em}
 @media (max-width:980px){.hero-dev{display:none}}
 .hero-dev .blink{animation:heroBlink 1s steps(1,end) infinite}
 @keyframes heroBlink{50%{opacity:0}}
+/* On load the mic powers up into record mode: a squeeze, the four red lights in turn, then the slot blinks */
+.motion .hero-handle{transform-box:view-box;animation:heroSqueeze .7s .25s cubic-bezier(.3,.7,.3,1) both}
+@keyframes heroSqueeze{45%{transform:translate(30px,4px) rotate(2deg)}}
+.motion .hero-dev .hl{animation:heroLed .25s ease-out both}
+.motion .hero-dev .hl:nth-child(1){animation-delay:.65s}.motion .hero-dev .hl:nth-child(2){animation-delay:.8s}
+.motion .hero-dev .hl:nth-child(3){animation-delay:.95s}.motion .hero-dev .hl:nth-child(4){animation-delay:1.1s}
+@keyframes heroLed{from{opacity:0}}
+.motion .hero-dev .blink{animation:heroIn .2s 1.35s both,heroBlink 1s 1.55s steps(1,end) infinite}
+@keyframes heroIn{from{opacity:0}}
 @media (prefers-reduced-motion:reduce){.hero-dev .blink{animation:none}}
 .cta{display:flex;flex-wrap:wrap;gap:10px}
 .btn{display:inline-block;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:10px 18px;font-weight:700;text-decoration:none;font:inherit;font-weight:700;cursor:pointer}
@@ -210,7 +220,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
         <rect x="384" y="366" width="28" height="7" rx="2" fill="#b8babd"/><rect x="384" y="380" width="28" height="7" rx="2" fill="#b8babd"/>
         <rect x="384" y="394" width="28" height="7" rx="2" fill="#b8babd"/>
       </g>
-      <path d="M346 44 L304 52 Q288 56 292 72 L330 240 L346 240 Z" fill="var(--orange)" stroke="var(--outline)" stroke-width="1.2"/>
+      <path class="hero-handle" d="M346 44 L304 52 Q288 56 292 72 L330 240 L346 240 Z" fill="var(--orange)" stroke="var(--outline)" stroke-width="1.2"/>
       <g stroke="var(--outline)" stroke-width="1.2">
         <path d="M540 37 h20 a6 6 0 0 1 6 6 v18 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--orange)"/>
         <path d="M540 114 h20 a6 6 0 0 1 6 6 v20 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--bw)"/>
@@ -229,7 +239,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
       <rect x="511" y="20" width="18" height="64" rx="9" fill="var(--grill)" stroke="var(--outline)" stroke-width="1.2"/>
       <rect x="511" y="98" width="18" height="64" rx="9" fill="var(--grill)" stroke="var(--outline)" stroke-width="1.2"/>
       <g stroke="var(--outline)" stroke-width="1">
-        <g fill="#ff3b2f" filter="url(#glowRHero)"><circle cx="520" cy="31" r="4"/><circle cx="520" cy="45" r="4"/><circle cx="520" cy="59" r="4"/><circle cx="520" cy="73" r="4"/></g>
+        <g fill="#ff3b2f" filter="url(#glowRHero)"><circle class="hl" cx="520" cy="31" r="4"/><circle class="hl" cx="520" cy="45" r="4"/><circle class="hl" cx="520" cy="59" r="4"/><circle class="hl" cx="520" cy="73" r="4"/></g>
         <circle cx="520" cy="109" r="4" fill="var(--grill)"/><circle class="blink" cx="520" cy="109" r="4" fill="#ffffff" filter="url(#glowWHero)"/><circle cx="520" cy="123" r="4" fill="var(--grill)"/><circle cx="520" cy="137" r="4" fill="var(--grill)"/><circle cx="520" cy="151" r="4" fill="var(--grill)"/>
       </g>
     </svg>
@@ -256,7 +266,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
 
   <!-- ===================== AUTOTUNE ===================== -->
   <section class="band" id="autotune">
-    <div class="band-head">
+    <div class="band-head" data-reveal>
       <span class="eyebrow accent">Feature 1 · Autotune</span>
       <h2>Pitch-perfect, then as weird as you like.</h2>
       <p class="lede">Autotune listens to your voice and pulls it onto the right note. It always runs first, so every effect after it gets a voice that's already in tune. Then pile on distortion, a harmony, a long echo or a huge reverb.</p>
@@ -278,7 +288,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
         </svg>
         <div class="legend"><span><i style="background:var(--voice)"></i>What you sang</span><span><i style="background:var(--accent)"></i>What comes out, in C major</span></div>
       </div>
-      <div class="points">
+      <div class="points" data-reveal-list>
         <div class="point"><span class="tag">Key</span><h3>Every note, or your key</h3><p>Chromatic snaps to the nearest semitone. Pick major or minor in any of the 12 keys, and you only land on notes in that key.</p></div>
         <div class="point"><span class="tag">Strength</span><h3>Hard snap to natural</h3><p>One slider goes from the instant, robotic jump to a gentle glide that keeps your vibrato. Humanize leaves small wobbles alone.</p></div>
         <div class="point wide"><span class="tag">Handle</span><h3>Make the squeeze do more</h3><p>Squeezing the handle always turns the mic on. In the editor you can give it one more job in each autotune preset, either of these:</p>
@@ -293,7 +303,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
 
   <!-- ===================== RECORD MODE ===================== -->
   <section class="band" id="record">
-    <div class="band-head">
+    <div class="band-head" data-reveal>
       <span class="eyebrow accent">Feature 2 · Record mode</span>
       <h2>Sample anything, right on the mic.</h2>
       <p class="lede">The stock mic only plays samples you copy over from a computer. With fx-mic-mod you can fill its four sample slots out in the world: a friend's laugh, a beatbox loop, a door slam. The mic's own lights walk you through it.</p>
@@ -399,8 +409,8 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
 
   <!-- ===================== SETUP ===================== -->
   <section class="band">
-    <div class="band-head"><h2>How it fits together</h2></div>
-    <div class="steps">
+    <div class="band-head" data-reveal><h2>How it fits together</h2></div>
+    <div class="steps" data-reveal-list>
       <article class="step">
         <span class="num">STEP 1 · ONCE</span>
         <h3>Install the firmware</h3>
@@ -440,7 +450,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
   <section class="two" id="controls">
     <div style="display:grid;gap:14px">
       <h2>On the mic</h2>
-      <div class="controls">
+      <div class="controls" data-reveal-list>
         <div class="ctl"><span class="key orange" aria-hidden="true"></span><div><b>Orange: next preset</b><span>Clean → preset 1 to 4 → record mode → clean. The red lights show which preset is on.</span></div></div>
         <div class="ctl"><span class="key white" aria-hidden="true"></span><div><b>White: next sample slot</b><span>Slots 1 to 4, shown on the white lights.</span></div></div>
         <div class="ctl"><span class="key grey" aria-hidden="true"></span><div><b>Grey: play the sample</b><span>Tap to play, hold to play, or tap start/stop, set per slot in the editor.</span></div></div>
@@ -450,7 +460,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
     </div>
     <div style="display:grid;gap:14px">
       <h2>Saving files to the mic</h2>
-      <div class="facts modes">
+      <div class="facts modes" data-reveal-list>
         <div>
           <b>Mic recording enabled (Normal mode)</b>
           <p class="how">Normal power-on</p>
@@ -505,6 +515,14 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
     tuned.setAttribute("d", xs.map((x,i)=>{ const target=Math.round(ys[i]); y+=(target-y)*rate; const keep=speed<1? (ys[i]-target)*0.25:0; return (i?"L":"M")+x+" "+toY(y+keep).toFixed(1); }).join(" "));
   }
   draw(1);
+  const svg=tuned.ownerSVGElement;
+  if(!matchMedia("(prefers-reduced-motion: reduce)").matches && "IntersectionObserver" in window){
+    tuned.setAttribute("d", document.getElementById("voice").getAttribute("d"));
+    const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ io.disconnect();
+      setTimeout(()=>{ tuned.style.transition="d .8s cubic-bezier(.16,1,.3,1)"; const on=document.querySelector('.snap .seg [aria-pressed="true"]'); draw(on?+on.dataset.speed:1);
+        setTimeout(()=>tuned.style.transition="",900); },350); } },{threshold:.6});
+    io.observe(svg);
+  }
   document.querySelectorAll(".snap .seg button").forEach(b=>b.addEventListener("click",()=>{
     document.querySelectorAll(".snap .seg button").forEach(o=>o.setAttribute("aria-pressed",String(o===b)));
     draw(+b.dataset.speed);
@@ -602,5 +620,6 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
   go(0);
 })();
 </script>
+<script src="site-motion.js"></script>
 </body>
 </html>

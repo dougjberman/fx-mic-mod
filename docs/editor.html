@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="site-nav.css">
+<link rel="stylesheet" href="site-motion.css">
 <style>
 /* Layout: a pedalboard. Preset slots run across the top like the mic's red LEDs; the
    selected preset's chain reads top to bottom, autotune pinned first; samples sit below. */
@@ -117,6 +118,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .keys button{min-width:38px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;font-family:var(--f-mono);font-size:13px}
 .keys button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 .field{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr);gap:12px;align-items:center}
+.field > .seg{justify-self:start}
 @media (max-width:560px){.field{grid-template-columns:1fr}}
 .field > label{font-size:14px;font-weight:600}
 .squeeze{display:grid;gap:8px;padding:10px 12px;border-radius:10px;background:var(--panel-2);border:1px dashed var(--line)}
@@ -908,5 +910,6 @@ config = restore() || normalizeConfig(DEFAULT_CONFIG);
 try { setMode(localStorage.getItem(KEY+"-mode")==="adv"); } catch(e){ setMode(false); }
 render();
 </script>
+<script src="site-motion.js"></script>
 </body>
 </html>
