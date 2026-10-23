@@ -15,3 +15,6 @@
 .page-head h1{font-family:"Archivo","Helvetica Neue",Arial,sans-serif;font-weight:800;font-size:clamp(34px,5.5vw,56px);line-height:1.02;letter-spacing:-.03em;margin:0;text-wrap:balance;max-width:20ch}
 .page-head h1 span{color:var(--accent)}
 .page-head .lede{font-size:clamp(17px,2vw,19px);line-height:1.5;color:var(--muted);max-width:64ch;margin:0}
+
+/* Phones: keep all four tabs on one line under the brand. */
+@media (max-width:420px){.site-nav ul{gap:0}.site-nav a.tab{padding:6px 9px;font-size:13.5px}}

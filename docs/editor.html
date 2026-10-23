@@ -108,7 +108,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .slot[aria-pressed="true"] .led{background:var(--led-r);box-shadow:0 0 8px var(--led-r)}
 .slot .num{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
 .slot .name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.slot .chain{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot .chain{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .slot.add{place-content:center;justify-items:center;color:var(--muted);border-style:dashed;background:transparent}
 
 /* effect cards */
@@ -130,6 +130,17 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .keys button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 .field{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr);gap:12px;align-items:center}
 .field > .seg{justify-self:start}
+/* Phones: segmented controls fill the row with equal parts instead of wrapping into a lumpy pill,
+   effect headers keep their buttons on the title line, and the preset tools stack. */
+@media (max-width:560px){
+  .panel .seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);width:100%;border-radius:12px}
+  .panel .seg button{border-radius:10px;padding:6px 8px;line-height:1.25}
+  .fx-head{flex-wrap:nowrap;gap:8px;padding:12px}
+  .fx-head .grow{flex:1 1 0}
+  .preset-tools{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;width:100%}
+  .preset-tools label{grid-column:1/-1}
+  .preset-tools .btn{grid-column:1/-1;justify-self:start}
+}
 .match{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 16px;align-items:start;border-top:1px solid var(--line);padding-top:12px}
 .match p{margin:0;max-width:78ch}
 @media (max-width:560px){.match{grid-template-columns:1fr}}
@@ -169,7 +180,7 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 /* samples */
 .samples{display:grid;gap:10px}
 .sample{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 14px;align-items:start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
-.sample .wled{width:9px;height:9px;border-radius:50%;background:#fff;border:1px solid var(--line);margin-top:8px}
+.sample .wled{width:9px;height:9px;border-radius:50%;background:#fff;border:1px solid var(--line);margin-top:12px}
 .sample .body{display:grid;gap:8px;min-width:0}
 
 .notice{border-radius:10px;padding:10px 14px;font-size:14px;border:1px solid var(--line);background:var(--panel-2)}
@@ -541,7 +552,7 @@ function renderEditor(){
     h("div",{class:"row spread"},
       h("div",{style:"flex:1 1 240px;min-width:0"}, h("input",{class:"name", id:"preset-name", value:p.name||"", placeholder:"Preset name", "aria-label":"Preset name", maxlength:"40",
         oninput:(e)=>{ p.name=e.target.value; changedQuiet(); renderSlots(); }})),
-      h("div",{class:"row"},
+      h("div",{class:"row preset-tools"},
         h("label",{class:"small muted", for:"starter"}, "Start from"),
         h("select",{class:"text", id:"starter", onchange:(e)=>{ if(e.target.value==="") return; const s=clone(STARTERS[+e.target.value]); config.presets[selected]=s; changed(); }},
           h("option",{value:""},"Choose…"), STARTERS.map((s,i)=>h("option",{value:i}, s.name))),

@@ -175,6 +175,7 @@ code{font-family:var(--f-mono);font-size:.92em}
 .modes b{font-family:var(--f-display);font-size:18px}
 .modes .how{margin:0;display:flex;align-items:center;gap:8px;font-style:italic;font-weight:600;color:var(--ink)}
 .modes .how .key{width:16px;height:16px;flex:none;border-radius:50%;border:1px solid var(--accent);display:inline-block}
+.modes .how .key.handle{width:22px;height:12px;border-radius:6px}
 .modes ul{margin:0;padding-left:18px;display:grid;gap:4px;font-size:15px;color:var(--muted)}
 footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
@@ -449,7 +450,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
       <div class="facts modes" data-reveal-list>
         <div>
           <b>Mic recording enabled (Normal mode)</b>
-          <p class="how">Power on normally: squeeze the handle</p>
+          <p class="how"><span class="key handle" aria-hidden="true"></span>Power on normally: squeeze the handle</p>
           <ul>
             <li>Samples can be recorded through the mic</li>
             <li>If connected, your computer sees the mic drive as read-only</li>
