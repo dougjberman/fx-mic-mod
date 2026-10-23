@@ -376,7 +376,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       <li>Turn the mic off and on again normally to play, and to record samples.</li>
     </ol>
   </section>
-  <p class="credit">Sample singer: <a href="https://freesound.org/s/108856/" target="_blank" rel="noopener">Janie Joelle, "All Night Long"</a>, recorded by juskiddink on <a href="https://freesound.org" target="_blank" rel="noopener">Freesound</a>.</p>
+  <p class="credit">Sample singer: Doug, singing to the tune of "Amazing Grace" (traditional).</p>
 </main>
 <div class="toast" id="toast" hidden></div>
 
@@ -1159,7 +1159,7 @@ async function tryStart(kind){
   } else {
     const b = await trySingerBuffer();
     tryState.src = tryState.ctx.createBufferSource(); tryState.src.buffer = b; tryState.src.loop = true; tryState.src.start();
-    tryStatus(b.recorded ? "Looping Janie Joelle's a cappella vocal through the preset. Try hard snap on her blue notes." : "Looping a slightly off-pitch singer through the preset.");
+    tryStatus(b.recorded ? "Looping Doug singing to the tune of Amazing Grace, in D major, through the preset. Try hard snap on the long notes." : "Looping a slightly off-pitch singer through the preset.");
   }
   tryState.src.connect(tryState.engine.node);
   tryState.kind = kind === "mic" ? "mic" : "singer";
