@@ -47,7 +47,7 @@ firmware ignores them; we show `name` in the GUI.
 `level` **(new, optional)**: the preset's output level, `0.0` to `1.0`, default `1.0`. The
 firmware sets the output mixer voice to it whenever the mic is open on this preset (with
 `sample_fx: "preset"` it scales the sample too). It's how a loud chain, like distortion, is
-brought down to match the others. The editor's **Match volume** button sets it by running the
+brought down to match the others. The editor's **Balance preset volume outputs** button sets it by running the
 sample singer through each preset and turning the louder ones down to match the quietest.
 It can only turn a preset down, because a mixer voice can't go above 1.0.
 
