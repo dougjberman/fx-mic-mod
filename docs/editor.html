@@ -354,6 +354,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
         <button class="btn primary ico-btn" id="try-mic"><span class="ico rec" aria-hidden="true"></span>Use my mic</button>
         <button class="btn ico-btn" id="try-singer"><span class="ico play" aria-hidden="true"></span>Play sample singer</button>
         <button class="btn stop" id="try-stop" hidden><span class="sq" aria-hidden="true"></span><span id="try-stop-label">Stop</span></button>
+        <label class="switch" title="Shapes your computer's mic like the Ting's own: a 16 kHz system with a small capsule, so thinner and darker than your computer. Turn off to compare."><input type="checkbox" id="try-character" checked><span class="track"></span>Sound like the mic</label>
       </div>
     </div>
     <div class="squeeze-hint" id="try-hint" hidden></div>
@@ -1191,7 +1192,26 @@ $("#pack-name").addEventListener("input", e=>{ config.name = e.target.value.toUp
  * mic's 16 kHz where the browser allows it. The button acts as the
  * handle: open/closed gates the mic, the Squeeze slider is "$handle".
  * ------------------------------------------------------------------- */
-const tryState = {ctx:null, engine:null, src:null, stream:null, running:false, open:true, squeeze:0, held:false, level:0.5, timer:0};
+const tryState = {ctx:null, engine:null, src:null, stream:null, running:false, open:true, squeeze:0, held:false, level:0.5, timer:0, character:null};
+/* The mic's own sound, ahead of the presets: the firmware's 120 Hz high-pass,
+ * the 16 kHz system's top end (nothing above ~7 kHz), and a small capsule's
+ * thin low end and upper-mid push. An estimate, to be tuned against
+ * recordings from a real Ting. */
+function tryCharacter(ctx){
+  const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 120; hp.Q.value = 0.7;
+  const low = ctx.createBiquadFilter(); low.type = "lowshelf"; low.frequency.value = 300; low.gain.value = -4;
+  const mid = ctx.createBiquadFilter(); mid.type = "peaking"; mid.frequency.value = 2500; mid.Q.value = 0.8; mid.gain.value = 3;
+  const lp1 = ctx.createBiquadFilter(); lp1.type = "lowpass"; lp1.frequency.value = 6800; lp1.Q.value = 0.7;
+  const lp2 = ctx.createBiquadFilter(); lp2.type = "lowpass"; lp2.frequency.value = 6800; lp2.Q.value = 0.7;
+  hp.connect(low); low.connect(mid); mid.connect(lp1); lp1.connect(lp2);
+  return {input: hp, output: lp2};
+}
+function tryRoute(){
+  if (!tryState.src) return;
+  tryState.src.disconnect();
+  const on = $("#try-character").checked;
+  tryState.src.connect(on ? tryState.character.input : tryState.engine.node);
+}
 function trySend(msg){ if (tryState.engine) tryState.engine.set(msg); }
 function tryG(){ return {power:true, gate:tryState.open || tryState.held, handle:tryState.held ? 1 : tryState.squeeze, level:tryState.level}; }
 function tryPreset(){
@@ -1210,6 +1230,8 @@ async function tryEnsure(){
   tryState.engine = await makeTingEngine(ctx);
   tryState.engine.onInfo = tryInfo;
   tryState.engine.node.connect(ctx.destination);
+  tryState.character = tryCharacter(ctx);
+  tryState.character.output.connect(tryState.engine.node);
   trySend({g:tryG()});
   trySend({preset: serialize().presets[selected] || null, sampleFx: config.sample_fx || "own"});
 }
@@ -1235,7 +1257,7 @@ async function tryStart(kind){
     tryState.src = tryState.ctx.createBufferSource(); tryState.src.buffer = b; tryState.src.loop = true; tryState.src.start();
     tryStatus(b.recorded ? "Looping the sample singer through the preset." : "Looping a slightly off-pitch singer through the preset.");
   }
-  tryState.src.connect(tryState.engine.node);
+  tryRoute();
   tryState.kind = kind === "mic" ? "mic" : "singer";
   tryState.running = true; tryRender();
 }
@@ -1338,6 +1360,7 @@ function tryInfo(info){
 }
 $("#try-mic").addEventListener("click", ()=>tryStart("mic"));
 $("#try-singer").addEventListener("click", ()=>tryStart("singer"));
+$("#try-character").addEventListener("change", ()=>{ tryRoute(); if (window.track) track("try-character-" + ($("#try-character").checked ? "on" : "off")); });
 $("#try-stop").addEventListener("click", tryStop);
 $("#try-talk").addEventListener("click", ()=>{ tryState.open = !tryState.open; trySend({g:tryG()}); tryRender(); });
 $("#try-squeeze-slot").append(sliderEl({label:"Squeeze",min:0,max:1,step:.01,}, 0, v=>{ tryState.squeeze=v; trySend({g:tryG()}); }));
