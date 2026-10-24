@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import math
 import wave
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -292,6 +293,30 @@ class DeviceScenarioTests(unittest.TestCase):
         through["presets"][1]["level"] = 0.6
         root, out, s = run("through", through, tone=(340.0, 1.0))
         self.assertEqual(s["out_level"], 0.6)
+
+    def test_detector_at_every_rate(self):
+        import autotune
+        try:
+            for rate in autotune.RATES:
+                autotune.set_rate(rate)
+                for hz in (82.4, 147.0, 262.0, 494.0):
+                    buf = [int(6000 * math.sin(2 * math.pi * hz * i / rate)) for i in range(autotune.BUFFER_SIZE)]
+                    found = autotune.detect_pitch_autocorrelation(buf)
+                    self.assertAlmostEqual(1200 * math.log2(found / hz), 0, delta=3, msg=(rate, hz))
+            with self.assertRaises(ValueError):
+                autotune.set_rate(44100)
+        finally:
+            autotune.set_rate(16000)
+
+    def test_runs_at_32k(self):
+        config = {"name": "H", "sample_rate": 32000, "presets": [{"list": [
+            {"effect": "autotune", "key": "A", "scale": "minor", "speed": 1.0, "grain_size": 512},
+            {"effect": "harmonizer", "chord": "minor", "level": 0.8}]}], "samples": []}
+        root, out, s = run("level", config)
+        lead = s["shifters"][0]
+        # 207 Hz still snaps down to G3, and the grains keep their length in time
+        self.assertAlmostEqual(lead["min"], -0.95, delta=0.05)
+        self.assertEqual((lead["sample_rate"], lead["grain_size"]), (32000, 1024))
 
     def test_harmonizer_voices_follow_the_tuned_note(self):
         config = {"name": "H", "presets": [{"list": [

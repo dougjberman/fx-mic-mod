@@ -71,7 +71,9 @@ def main():
             {"log_len": len(s.semitone_log),
              "min": min(s.semitone_log) if s.semitone_log else None,
              "max": max(s.semitone_log) if s.semitone_log else None,
-             "kwargs": sorted(k for k in s.kwargs)}
+             "kwargs": sorted(k for k in s.kwargs),
+             "grain_size": s.kwargs.get("grain_size"),
+             "sample_rate": s.kwargs.get("sample_rate")}
             for s in script.shifters
         ],
         "mic_reads": script.mic_reads,

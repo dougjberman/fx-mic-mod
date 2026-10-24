@@ -29,7 +29,11 @@ except ImportError:
 # Settings
 # ---------------------------------------------------------------------------
 
-SAMPLE_RATE = 16000     # also what the codec clocking in adafruit_nau88l21 expects
+# The rate the mic runs at. code.py calls set_rate() with config.json's
+# "sample_rate" before building anything; the sizes below are for 16 kHz and
+# set_rate() scales them, so a block stays 16 ms and the window 32 ms.
+SAMPLE_RATE = 16000
+RATES = (16000, 24000, 32000, 48000)  # multiples of 8 kHz, so the detector can decimate evenly
 BUFFER_SIZE = 512       # pitch analysis window (32 ms)
 BLOCK_SIZE = 256        # audio hop per loop pass (16 ms); BUFFER_SIZE must be 2x this
 
@@ -43,7 +47,7 @@ MIN_RMS = 250           # below this input level (int16 units) treat as silence
 # "native": audiodelays.GranularPitchShift (or PitchShift on older firmware)
 # "python": pure-Python OLA shifter below (reference, likely too slow)
 SHIFT_ENGINE = "native"
-GRAIN_SIZE = 512        # native grain length in samples; bigger = smoother, more latency
+GRAIN_SIZE = 512        # native grain length in samples (at 16 kHz); bigger = smoother, more latency
 GRAIN_DENSITY = 2       # native overlapping grains (1..8)
 
 # If the output crackles steadily, flip this between 0 and 1. It picks which
@@ -189,16 +193,40 @@ def log2(x):
 #     4 kHz and the refine at 8 kHz, and Autotune only detects every
 #     DETECT_EVERY blocks.
 
-_COARSE = 4                                     # search at 16 kHz / 4 = 4 kHz
-_FINE = 2                                       # refine at 8 kHz
-_RATE_F = SAMPLE_RATE / _FINE
-_MIN_LAG_F = int(_RATE_F / MAX_HZ)              # 16 at 8 kHz
-_MAX_LAG_F = int(_RATE_F / MIN_HZ)              # 100
-_N_D = BUFFER_SIZE // _COARSE                   # 128 samples at 4 kHz
-_MAX_LAG_D = _MAX_LAG_F * _FINE // _COARSE + 1  # 51
-_MIN_LAG_D = max(2, _MIN_LAG_F * _FINE // _COARSE)
-_WIN_D = _N_D - _MAX_LAG_D                      # samples compared per lag at 4 kHz
-_WIN_F = BUFFER_SIZE // _FINE - _MAX_LAG_F - 3  # samples compared per lag at 8 kHz
+_COARSE = 4     # search at SAMPLE_RATE / _COARSE = 4 kHz
+_FINE = 2       # refine at 8 kHz
+
+
+def _set_detector():
+    global _COARSE, _FINE, _RATE_F, _MIN_LAG_F, _MAX_LAG_F, _N_D
+    global _MAX_LAG_D, _MIN_LAG_D, _WIN_D, _WIN_F
+    _COARSE = SAMPLE_RATE // 4000
+    _FINE = SAMPLE_RATE // 8000
+    _RATE_F = SAMPLE_RATE / _FINE
+    _MIN_LAG_F = int(_RATE_F / MAX_HZ)              # 16 at 8 kHz
+    _MAX_LAG_F = int(_RATE_F / MIN_HZ)              # 100
+    _N_D = BUFFER_SIZE // _COARSE                   # 128 samples at 4 kHz
+    _MAX_LAG_D = _MAX_LAG_F * _FINE // _COARSE + 1  # 51
+    _MIN_LAG_D = max(2, _MIN_LAG_F * _FINE // _COARSE)
+    _WIN_D = _N_D - _MAX_LAG_D                      # samples compared per lag at 4 kHz
+    _WIN_F = BUFFER_SIZE // _FINE - _MAX_LAG_F - 3  # samples compared per lag at 8 kHz
+
+
+_set_detector()
+
+
+def set_rate(rate):
+    """Run at ``rate`` Hz, one of RATES. Call before making an Autotune."""
+    global SAMPLE_RATE, BUFFER_SIZE, BLOCK_SIZE, GRAIN_SIZE
+    if rate not in RATES:
+        raise ValueError("sample_rate must be one of {}".format(RATES))
+    scale = rate // 16000 if rate % 16000 == 0 else rate / 16000
+    BLOCK_SIZE = int(256 * scale)
+    BUFFER_SIZE = 2 * BLOCK_SIZE
+    GRAIN_SIZE = int(512 * scale)
+    SAMPLE_RATE = rate
+    _set_detector()
+
 
 _FLOAT = getattr(np, "float", None) or getattr(np, "float32", None) if np else None
 _CONVOLVE = np is not None and hasattr(np, "convolve")
@@ -224,19 +252,36 @@ def _halve(x):
     return [(x[i] + x[i + 1]) * 0.5 for i in range(0, len(x) - 1, 2)]
 
 
+def _third(x):
+    """Crude low-pass and decimate by 3."""
+    if np is not None:
+        return (x[0::3] + x[1::3] + x[2::3]) * (1.0 / 3.0)
+    return [(x[i] + x[i + 1] + x[i + 2]) / 3.0 for i in range(0, len(x) - 2, 3)]
+
+
+def _decimate(x, factor):
+    """Decimate by ``factor`` (1, 2, 3, 4, 6 or 8) in halving and third steps."""
+    while factor > 1:
+        if factor % 2 == 0:
+            x, factor = _halve(x), factor // 2
+        else:
+            x, factor = _third(x), factor // 3
+    return x
+
+
 def detect_pitch_autocorrelation(buffer):
     """Return the fundamental in Hz of the last BUFFER_SIZE samples, or 0.0.
 
     `buffer` is an int16 array (or list) of BUFFER_SIZE samples.
     """
     if np is not None:
-        xf = _halve(np.array(buffer, dtype=_FLOAT))   # 8 kHz
-        xd = _halve(xf)                               # 4 kHz
+        xf = _decimate(np.array(buffer, dtype=_FLOAT), _FINE)   # 8 kHz
+        xd = _halve(xf)                                         # 4 kHz
         xd = xd - np.mean(xd)
         sq = (xd * xd).tolist()
         diff = _diff_at
     else:
-        xf = _halve(list(buffer))
+        xf = _decimate(list(buffer), _FINE)
         xd = _halve(xf)
         mean = sum(xd) / len(xd)
         xd = [s - mean for s in xd]
@@ -568,11 +613,13 @@ class Autotune:
     """
 
     def __init__(self, mic, fmt, key="C", scale="chromatic", speed=1.0,
-                 humanize=0.0, mix=1.0, grain_size=GRAIN_SIZE,
+                 humanize=0.0, mix=1.0, grain_size=None,
                  density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
                  inversion=0, harmony_octave=0, harmony_level=0.7, correct=True):
         import audiocore
 
+        if grain_size is None:
+            grain_size = GRAIN_SIZE
         self.mic = mic
         self.enabled = True
         self.speed = speed

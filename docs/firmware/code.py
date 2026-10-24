@@ -75,6 +75,7 @@ import storage
 import synthio
 
 import adafruit_nau88l21
+import autotune
 from autotune import KEYS, Autotune, key_by_name, scale_by_name
 from config_loader import (
     create_effects,
@@ -86,10 +87,44 @@ from config_loader import (
 )
 from recorder import Recorder
 
-RATE = 16000  # frame rate on the wire; also what the codec's FLL expects
-
 # Where to look for the preset config
 CONFIG_PATHS = ("/config.json", "/ep2350_circuitpython_config.json")
+
+def load_config():
+    """Read and parse the JSON config file.
+
+    Tries `CONFIG_PATHS` in order; an unreadable or malformed file at a given
+    path is not fatal, it just moves on to the next one.
+
+    :return: The parsed config dict, or ``{}`` if none of the paths worked --
+        which leaves the demo with nothing but the clean spot in its preset
+        cycle and no samples to play.
+    """
+    for path in CONFIG_PATHS:
+        try:
+            with open(path, "r") as file:
+                return json.load(file)
+        except (OSError, ValueError) as error:
+            print("config {}: {}".format(path, error))
+    return {}
+
+
+CONFIG = load_config()
+
+# Frame rate of the whole audio path: the codec, the mic, every effect and
+# the samples. config.json's "sample_rate" picks it from autotune.RATES; the
+# codec's FLL follows the bit clock, so any of them works there.
+RATE = CONFIG.get("sample_rate", 16000)
+try:
+    autotune.set_rate(RATE)
+except ValueError as error:
+    print("config: {}; using 16000".format(error))
+    RATE = 16000
+    autotune.set_rate(RATE)
+# Sample counts in config.json (grain sizes, pitch_shift windows) are written
+# for 16 kHz, so they keep their length in time at other rates.
+RATE_SCALE = RATE / 16000
+SAMPLE_COUNT_PARAMS = ("grain_size", "window", "overlap")
 
 MAX_PRESETS = 4
 MAX_SAMPLES = 4
@@ -170,7 +205,7 @@ HPF_HZ = 120
 # Audio format of the chain. Passed to every effect config_loader builds; the
 # JSON only describes the sound-affecting parameters, never the format ones.
 FORMAT = {
-    "buffer_size": 1024,
+    "buffer_size": int(1024 * RATE_SCALE),
     "sample_rate": RATE,
     "bits_per_sample": 16,
     "samples_signed": True,
@@ -180,7 +215,7 @@ FORMAT = {
 # Autotune hands the chain 256-sample blocks (16 ms), so presets that use it
 # build their effects with a matching 512-byte buffer. Untested on the device
 # against Adafruit's 1024; see NOTES.md.
-AUTOTUNE_FORMAT = dict(FORMAT, buffer_size=512)
+AUTOTUNE_FORMAT = dict(FORMAT, buffer_size=2 * autotune.BLOCK_SIZE)
 
 
 # --- Mutable state container ---
@@ -273,27 +308,6 @@ class DataContext:
 
 # --- Preset config ---
 
-
-def load_config():
-    """Read and parse the JSON config file.
-
-    Tries `CONFIG_PATHS` in order; an unreadable or malformed file at a given
-    path is not fatal, it just moves on to the next one.
-
-    :return: The parsed config dict, or ``{}`` if none of the paths worked --
-        which leaves the demo with nothing but the clean spot in its preset
-        cycle and no samples to play.
-    """
-    for path in CONFIG_PATHS:
-        try:
-            with open(path, "r") as file:
-                return json.load(file)
-        except (OSError, ValueError) as error:
-            print("config {}: {}".format(path, error))
-    return {}
-
-
-CONFIG = load_config()
 PACK_NAME = CONFIG.get("name", "none")
 
 # Presets are passed to config_loader whole, since a preset is more than its
@@ -301,9 +315,30 @@ PACK_NAME = CONFIG.get("name", "none")
 # its effects refer to by name.
 PRESETS = list(CONFIG.get("presets", ())[:MAX_PRESETS])
 
+
+def at_rate(effects):
+    """``effects`` with their sample-count parameters scaled to RATE."""
+    if RATE == 16000 or not isinstance(effects, list):
+        return effects
+    out = []
+    for spec in effects:
+        if isinstance(spec, dict) and any(
+                isinstance(spec.get(k), int) and not isinstance(spec.get(k), bool)
+                for k in SAMPLE_COUNT_PARAMS):
+            spec = dict(spec)
+            for k in SAMPLE_COUNT_PARAMS:
+                if isinstance(spec.get(k), int) and not isinstance(spec[k], bool):
+                    spec[k] = int(spec[k] * RATE_SCALE)
+        out.append(spec)
+    return out
+
+
+PRESETS = [dict(p, list=at_rate(p.get("list"))) if isinstance(p, dict) else p for p in PRESETS]
+
 # One wave file per white LED slot, each with a playmode telling the BOTTOM
 # button how to play it back. See config_loader.load_samples().
 SAMPLES = load_samples(CONFIG, max_samples=MAX_SAMPLES)
+SAMPLES = [dict(e, effects=at_rate(e.get("effects"))) for e in SAMPLES]
 
 # "preset": samples play dry into the selected preset, like the mic does.
 # "own": each sample keeps its own effects (Adafruit's behaviour).

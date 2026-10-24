@@ -57,7 +57,7 @@ It can only turn a preset down, because a mixer voice can't go above 1.0.
 {"file": "1.wav", "playmode": "oneshot|hold|startstop", "blocks": {...}, "effects": [EFFECT, ...]}
 ```
 
-Samples must be 16-bit mono WAVs at 16 kHz. The install guide's step 05 converts other WAVs.
+Samples must be 16-bit mono WAVs at the mic's `sample_rate` (16 kHz unless set). The install guide's step 05 converts other WAVs to 16 kHz.
 
 ## Effect
 
@@ -74,6 +74,11 @@ Any numeric param marked (B) accepts a number, a block object, or `"$name"`.
 gone a little further (the paddle click point plus a dead zone, so you can sing with a light squeeze), then up to
 1.0 fully squeezed. The firmware learns the click point as you play. The dead zone is 0.25 of
 the travel; a top-level `"handle_dead_zone": 0..0.5` in config.json changes it.
+
+A top-level `"sample_rate"` sets the rate the whole mic runs at: 16000 (the default), 24000, 32000
+or 48000. Higher rates keep more of the top end and cost more CPU and memory. Samples must be WAVs at
+that rate, and sample counts in presets (`grain_size`, `window`, `overlap`) are written for 16 kHz:
+the mic scales them, so a grain keeps its length in time.
 
 | type | params |
 |---|---|

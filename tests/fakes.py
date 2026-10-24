@@ -163,11 +163,12 @@ class I2SIn(_Obj):
     def record(self, buf, count):
         s = SCRIPT
         s.mic_reads += 1
-        step = 2 * math.pi * s.tone_hz / 16000
+        rate = self.kwargs.get("sample_rate", 16000)
+        step = 2 * math.pi * s.tone_hz / rate
         for i in range(count):
             buf[i] = int(8000 * math.sin(s.phase))
             s.phase += step
-        s.clock.t += count / 16000
+        s.clock.t += count / rate
         if s.clock.t >= s.end:
             raise KeyboardInterrupt
         return count
