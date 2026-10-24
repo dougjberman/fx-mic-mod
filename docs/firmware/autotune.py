@@ -713,6 +713,11 @@ class Autotune:
             tones = OFF_KEY_SHAPE[:len(steps)]
         return voicing(tones, self._inversion, self._octave)
 
+    def _feed_block(self, block):
+        start = (self._half ^ FEED_PHASE) * BLOCK_SIZE
+        self._out[start:start + BLOCK_SIZE] = block
+        self._half ^= 1
+
     def step(self, speed_override=None):
         """Process one block. Blocks for BLOCK_SIZE samples of audio."""
         block = self._block
@@ -730,6 +735,14 @@ class Autotune:
                 block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
             if sample.done:
                 self.stop_sample()
+        # Hand the block to the pitch shifter straight away, at the same
+        # moment every pass. Writing it after the pitch search made the write
+        # land at a different point in the playing buffer on detect and
+        # non-detect passes, sometimes in the half being played: crackle.
+        # The shift amount set below applies from the next grain. (The Python
+        # OLA fallback shifts the block itself, so it still writes at the end.)
+        if self.ola is None:
+            self._feed_block(block)
         window = self._window
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]
         window[BLOCK_SIZE:BUFFER_SIZE] = block
@@ -772,6 +785,7 @@ class Autotune:
             if self.hz > 0:
                 self.ola.lock_to_period(SAMPLE_RATE / self.hz)
             self.ola.process(block, BLOCK_SIZE, 2.0 ** (self.correction / 12.0))
+            self._feed_block(block)
         else:
             self.shifter.semitones = self.correction
         if self.voices:
@@ -780,9 +794,6 @@ class Autotune:
             for voice, interval in zip(self.voices, self._intervals):
                 voice.semitones = self.correction + interval
             self._set_levels()
-        start = (self._half ^ FEED_PHASE) * BLOCK_SIZE
-        self._out[start:start + BLOCK_SIZE] = block
-        self._half ^= 1
         # Python time this block took, in ms. Over ~16 ms (one block of audio)
         # and the mic overflows; code.py prints it with each overflow.
         self.busy_ms = (time.monotonic_ns() - began) / 1e6
