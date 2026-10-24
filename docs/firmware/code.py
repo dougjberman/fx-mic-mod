@@ -75,7 +75,7 @@ import storage
 import synthio
 
 import adafruit_nau88l21
-from autotune import Autotune, key_by_name, scale_by_name
+from autotune import KEYS, Autotune, key_by_name, scale_by_name
 from config_loader import (
     create_effects,
     create_preset,
@@ -264,6 +264,8 @@ class DataContext:
         self.paddle_changed = None
         # Handle travel last printed while squeezed.
         self.handle_shown = -1.0
+        # The autotune note last printed while squeezed, or None.
+        self.note_shown = None
         # Flash phase of the red LEDs in record mode.
         self.blink_on = True
         self.blink_since = 0.0
@@ -947,6 +949,27 @@ def read_handle():
     handle_control.a += (fraction - handle_control.a) * HANDLE_SMOOTHING
 
 
+def note_name(midi):
+    return "{}{}".format(KEYS[int(midi) % 12], int(midi) // 12 - 1)
+
+
+def show_note(ctx):
+    """While squeezed, print each new note autotune snaps to, and the notes
+    the harmony sings with it, so the console can be checked against the
+    editor's readout."""
+    tune = ctx.tune
+    note = tune.snapper.target if ctx.paddle_held else None
+    if note == ctx.note_shown:
+        return
+    ctx.note_shown = note
+    if note is None:
+        return
+    line = "note " + note_name(note)
+    if tune.voices:
+        line += ", harmony " + " ".join(note_name(note + i) for i in tune._intervals)
+    print(line)
+
+
 def learn_handle_open():
     """Called as the paddle closes: move the mic-open point toward the travel
     just read. A lower reading is taken at once; a higher one (a fast squeeze
@@ -1119,6 +1142,7 @@ try:
         # paces the loop; otherwise nothing here needs to run faster.
         if data_context.tune is not None:
             data_context.tune.step()
+            show_note(data_context)
         elif data_context.recorder is not None and data_context.recorder.recording:
             data_context.recorder.step()
         else:
