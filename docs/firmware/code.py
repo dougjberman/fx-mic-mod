@@ -726,7 +726,7 @@ def load_selected_wave_sample(ctx):
 
     sample = sample_for_slot(ctx.white_active)
     ctx.current_playmode = sample["playmode"]
-    path = wave_path(ctx.white_active, sample["file"])
+    path = "/{}".format(sample["file"])
     ctx.current_path = path
     try:
         wave = audiocore.WaveFile(path)
@@ -780,32 +780,6 @@ def unload_wave_sample(ctx):
     ctx.current_playmode = "oneshot"
     ctx.current_source = None
     gc.collect()
-
-
-def wave_path(slot, name):
-    """The path of slot ``slot``'s WAV ``name``.
-
-    The Ting's stock firmware names its samples ``<slot>_<anything>.wav``
-    (its own sample in slot 1 is ``1_.wav``), so when the plain ``<slot>.wav``
-    isn't there, the first stock-style file for the slot plays instead.
-    """
-    path = "/" + name
-    if name != "{}.wav".format(slot):
-        return path
-    try:
-        os.stat(path)
-        return path
-    except OSError:
-        pass
-    prefix = "{}_".format(slot)
-    try:
-        names = sorted(os.listdir("/"))
-    except OSError:
-        return path
-    for entry in names:
-        if entry.startswith(prefix) and entry.lower().endswith(".wav"):
-            return "/" + entry
-    return path
 
 
 def sample_for_slot(slot):

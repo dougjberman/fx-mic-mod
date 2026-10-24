@@ -57,9 +57,7 @@ It can only turn a preset down, because a mixer voice can't go above 1.0.
 {"file": "1.wav", "playmode": "oneshot|hold|startstop", "blocks": {...}, "effects": [EFFECT, ...]}
 ```
 
-Samples must be 16-bit mono WAVs at 16 kHz. When slot N's file is the plain `N.wav` and it isn't on
-the drive, the mic plays the first `N_<anything>.wav` instead, which is how the Ting's stock firmware
-names its samples (its own sample is `1_.wav`).
+Samples must be 16-bit mono WAVs at 16 kHz. The install guide's step 05 converts other WAVs.
 
 ## Effect
 
