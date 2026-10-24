@@ -80,6 +80,10 @@ or 48000. Higher rates keep more of the top end and cost more CPU and memory. Sa
 that rate, and sample counts in presets (`grain_size`, `window`, `overlap`) are written for 16 kHz:
 the mic scales them, so a grain keeps its length in time.
 
+A top-level `"feed_phase"` (0 or 1, default 1) picks which half of the autotune stage's double buffer
+is written while the other plays. If autotune presets crackle steadily and clean ones don't, try the
+other value.
+
 | type | params |
 |---|---|
 | `autotune` **(new)** | `key` "C".."B" (sharps, e.g. "F#"), `scale` "chromatic" / "major" / "minor", `speed` (B) 0 = natural .. 1 = hard snap, `humanize` 0..1, `mix` (B), `grain_size` int (default 512), `density` int (default 2), `squeeze_key` / `squeeze_scale` (same values as key/scale: the key used while the handle is fully squeezed) |

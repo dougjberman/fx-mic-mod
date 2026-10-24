@@ -121,6 +121,14 @@ except ValueError as error:
     print("config: {}; using 16000".format(error))
     RATE = 16000
     autotune.set_rate(RATE)
+# "feed_phase": 0 or 1, which half of the autotune feed buffer is written
+# while the other plays. The right one can differ between sample rates; the
+# wrong one crackles steadily on autotune presets only.
+_phase = CONFIG.get("feed_phase", autotune.FEED_PHASE)
+if _phase in (0, 1) and not isinstance(_phase, bool):
+    autotune.FEED_PHASE = _phase
+else:
+    print("feed_phase must be 0 or 1; using {}".format(autotune.FEED_PHASE))
 # Sample counts in config.json (grain sizes, pitch_shift windows) are written
 # for 16 kHz, so they keep their length in time at other rates.
 RATE_SCALE = RATE / 16000
