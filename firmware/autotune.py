@@ -15,6 +15,7 @@
 import array
 import math
 import struct
+import time
 
 try:
     from ulab import numpy as np  # CircuitPython build with ulab
@@ -190,6 +191,7 @@ _WIN_D = BUFFER_SIZE // _DEC - _MAX_LAG_D       # samples compared per lag at 8 
 _WIN_F = BUFFER_SIZE - _MAX_LAG - 3             # samples compared per lag at 16 kHz
 
 _FLOAT = getattr(np, "float", None) or getattr(np, "float32", None) if np else None
+_CONVOLVE = np is not None and hasattr(np, "convolve")
 
 
 def _diff_at(x, lag, width):
@@ -225,14 +227,29 @@ def detect_pitch_autocorrelation(buffer):
         xd = [(x[i] + x[i + 1]) * 0.5 for i in range(0, BUFFER_SIZE, 2)]
         diff = _diff_at_py
 
-    # Cumulative-mean-normalised difference (YIN) at 8 kHz
+    # Cumulative-mean-normalised difference (YIN) at 8 kHz. With ulab, the
+    # difference at every lag comes from one convolution:
+    #   d(lag) = sum x[i]^2 + sum x[i+lag]^2 - 2 sum x[i] x[i+lag]
+    # so the loop below only does scalar sums. Calling _diff_at per lag
+    # instead was ~100 ulab calls a block, too slow on a real Ting.
+    fast = np is not None and _CONVOLVE
+    if fast:
+        cross = np.convolve(xd, xd[_WIN_D - 1::-1])
+        cross = cross[_WIN_D - 1:_WIN_D - 1 + _MAX_LAG_D].tolist()
+        sq = (xd * xd).tolist()
+        energy0 = sum(sq[0:_WIN_D])
+        energy = energy0
     running = 0.0
     best_lag = 0
     best_val = 2.0
     prev = 2.0
     found = False
     for lag in range(1, _MAX_LAG_D):
-        d = diff(xd, lag, _WIN_D)
+        if fast:
+            energy += sq[lag + _WIN_D - 1] - sq[lag - 1]
+            d = energy0 + energy - 2.0 * cross[lag]
+        else:
+            d = diff(xd, lag, _WIN_D)
         running += d
         norm = d * lag / running if running > 0 else 1.0
         if lag < _MIN_LAG_D:
@@ -545,6 +562,7 @@ class Autotune:
         self._window = array.array("h", [0] * BUFFER_SIZE)
         self._block = array.array("h", [0] * BLOCK_SIZE)
         self._half = 0
+        self.busy_ms = 0.0
         # Mic level, 0 or 1, applied before pitch detection. Used when
         # samples are mixed into this stage, so the paddle can mute the mic
         # without muting the sample.
@@ -683,6 +701,7 @@ class Autotune:
         """Process one block. Blocks for BLOCK_SIZE samples of audio."""
         block = self._block
         got = self.mic.record(block, BLOCK_SIZE)
+        began = time.monotonic_ns()
         for i in range(got, BLOCK_SIZE):
             block[i] = 0
         if not self.gate:
@@ -744,4 +763,7 @@ class Autotune:
         start = (self._half ^ FEED_PHASE) * BLOCK_SIZE
         self._out[start:start + BLOCK_SIZE] = block
         self._half ^= 1
+        # Python time this block took, in ms. Over ~16 ms (one block of audio)
+        # and the mic overflows; code.py prints it with each overflow.
+        self.busy_ms = (time.monotonic_ns() - began) / 1e6
         return got

@@ -1099,7 +1099,10 @@ try:
             recorder is not None and recorder.recording
         )
         if not idle and mic.overflow:
-            print("overflow")
+            if data_context.tune is not None:
+                print("overflow (autotune took {:.1f} ms of 16)".format(data_context.tune.busy_ms))
+            else:
+                print("overflow")
 
         # Autotune and the recorder each block on one 16 ms mic read, which
         # paces the loop; otherwise nothing here needs to run faster.
