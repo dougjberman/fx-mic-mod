@@ -319,7 +319,7 @@ def install(script, root):
 
     real_open = builtins.open
     builtins.open = lambda path, *a, **k: real_open(_map(path), *a, **k)
-    for name in ("stat", "remove", "rename"):
+    for name in ("stat", "remove", "rename", "listdir"):
         real = getattr(os, name)
         setattr(os, name, (lambda real: lambda *paths: real(*[_map(p) for p in paths]))(real))
 

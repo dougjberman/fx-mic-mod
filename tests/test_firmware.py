@@ -50,12 +50,12 @@ def write_tone(path, hz, seconds):
         out.writeframes(frames)
 
 
-def run(scenario, config=TEST_CONFIG, tone=None, handle=None):
+def run(scenario, config=TEST_CONFIG, tone=None, handle=None, tone_name="1.wav"):
     root = tempfile.mkdtemp()
     with open(os.path.join(root, "config.json"), "w") as file:
         json.dump(config, file)
     if tone:
-        write_tone(os.path.join(root, "1.wav"), *tone)
+        write_tone(os.path.join(root, tone_name), *tone)
     out = subprocess.run(
         [sys.executable, os.path.join(HERE, "run_scenario.py"), scenario, root],
         capture_output=True, text=True, timeout=600, check=True,
@@ -275,6 +275,12 @@ class DeviceScenarioTests(unittest.TestCase):
         # clean and the echo preset take the sample on an input mixer, mic gated off
         self.assertEqual(s["heads"][-1], {"mic_level": 0.0, "sample": "WaveFile"})
         self.assertEqual(s["out_level"], 1.0)
+
+    def test_stock_ting_sample_names_play(self):
+        # the Ting's stock firmware names its slot 1 sample 1_.wav
+        root, out, s = run("through", THROUGH_CONFIG, tone=(340.0, 1.0), tone_name="1_.wav")
+        self.assertIn("loaded /1_.wav", out)
+        self.assertAlmostEqual(s["shifters"][0]["max"], 0.46, delta=0.05)
 
     def test_preset_level_sets_the_output(self):
         config = json.loads(json.dumps(TEST_CONFIG))
