@@ -25,7 +25,7 @@ chord needs the note).
 
 ## Needs checking on the device
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
-  the dead zone (0.15, or `"handle_dead_zone"` in config.json). The console prints "handle opens the
+  the dead zone (0.25, or `"handle_dead_zone"` in config.json). The console prints "handle opens the
   mic at 0.xx" on each squeeze; check it settles near the real click, then try dead zones from about
   0.1 to 0.25 and keep whichever lets you sing with a light squeeze without nudging the effect.
 - **Harmonizer CPU:** autotune plus three harmony voices is four granular shifters. Watch for
