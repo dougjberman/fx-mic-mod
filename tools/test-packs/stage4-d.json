@@ -1,0 +1,82 @@
+{
+  "name": "T4D",
+  "sample_fx": "preset",
+  "presets": [
+    {
+      "name": "4.9 pitch shift down 5",
+      "list": [
+        {
+          "effect": "pitch_shift",
+          "semitones": -5,
+          "mix": 1,
+          "window": 1024,
+          "overlap": 128
+        }
+      ]
+    },
+    {
+      "name": "4.9 grain shift up 7",
+      "list": [
+        {
+          "effect": "granular_pitch_shift",
+          "semitones": 7,
+          "density": 2,
+          "mix": 1,
+          "grain_size": 512,
+          "spread": 0
+        }
+      ]
+    },
+    {
+      "name": "4.9 phaser",
+      "list": [
+        {
+          "effect": "phaser",
+          "frequency": 600,
+          "feedback": 0.7,
+          "mix": 0.5,
+          "stages": 6
+        }
+      ]
+    },
+    {
+      "name": "4.9 multi-tap delay",
+      "list": [
+        {
+          "effect": "multi_tap_delay",
+          "max_delay_ms": 600,
+          "delay_ms": 500,
+          "decay": 0.3,
+          "mix": 0.25,
+          "taps": [
+            0.25,
+            0.5,
+            [
+              0.75,
+              0.6
+            ],
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "file": "1.wav",
+      "playmode": "oneshot"
+    },
+    {
+      "file": "2.wav",
+      "playmode": "oneshot"
+    },
+    {
+      "file": "3.wav",
+      "playmode": "oneshot"
+    },
+    {
+      "file": "4.wav",
+      "playmode": "oneshot"
+    }
+  ]
+}

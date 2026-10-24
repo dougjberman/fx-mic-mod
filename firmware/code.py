@@ -589,9 +589,12 @@ def select_preset(ctx, index):
         print("record mode, {} bytes free".format(gc.mem_free()))
     else:
         print(
-            "preset {} of {} ({} effects{}), {} bytes free".format(
+            "preset {} of {}{} ({} effects{}), {} bytes free".format(
                 ctx.active,
                 len(PRESETS),
+                ": " + PRESETS[ctx.active - 1]["name"]
+                if ctx.active and isinstance(PRESETS[ctx.active - 1], dict)
+                and isinstance(PRESETS[ctx.active - 1].get("name"), str) else "",
                 len(ctx.chain),
                 ", {} via {}{}".format(
                     "autotune" if ctx.tune.correct else "voice",

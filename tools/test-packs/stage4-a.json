@@ -1,0 +1,75 @@
+{
+  "name": "T4A",
+  "sample_fx": "preset",
+  "presets": [
+    {
+      "name": "4.1 chromatic snap",
+      "list": [
+        {
+          "effect": "autotune",
+          "key": "C",
+          "scale": "chromatic",
+          "speed": 1,
+          "humanize": 0,
+          "mix": 1
+        }
+      ]
+    },
+    {
+      "name": "4.2 C major, natural",
+      "list": [
+        {
+          "effect": "autotune",
+          "key": "C",
+          "scale": "major",
+          "speed": 0.3,
+          "humanize": 0,
+          "mix": 1
+        }
+      ]
+    },
+    {
+      "name": "4.3 snap on the handle",
+      "list": [
+        {
+          "effect": "autotune",
+          "key": "C",
+          "scale": "chromatic",
+          "speed": "$handle",
+          "humanize": 0,
+          "mix": 1
+        }
+      ]
+    },
+    {
+      "name": "4.4 major harmony, untuned",
+      "list": [
+        {
+          "effect": "harmonizer",
+          "chord": "major",
+          "inversion": 0,
+          "octave": 0,
+          "level": 0.7
+        }
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "file": "1.wav",
+      "playmode": "oneshot"
+    },
+    {
+      "file": "2.wav",
+      "playmode": "oneshot"
+    },
+    {
+      "file": "3.wav",
+      "playmode": "oneshot"
+    },
+    {
+      "file": "4.wav",
+      "playmode": "oneshot"
+    }
+  ]
+}

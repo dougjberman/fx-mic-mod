@@ -1,0 +1,104 @@
+{
+  "name": "T4B",
+  "sample_fx": "preset",
+  "presets": [
+    {
+      "name": "4.5 maj7 with autotune",
+      "list": [
+        {
+          "effect": "autotune",
+          "key": "C",
+          "scale": "chromatic",
+          "speed": 1,
+          "humanize": 0,
+          "mix": 1
+        },
+        {
+          "effect": "harmonizer",
+          "chord": "maj7",
+          "inversion": 0,
+          "octave": 0,
+          "level": 0.7
+        }
+      ]
+    },
+    {
+      "name": "4.6 in the key, C major",
+      "list": [
+        {
+          "effect": "autotune",
+          "key": "C",
+          "scale": "major",
+          "speed": 1,
+          "humanize": 0,
+          "mix": 1
+        },
+        {
+          "effect": "harmonizer",
+          "chord": "key_triad",
+          "inversion": 0,
+          "octave": 0,
+          "level": 0.7
+        }
+      ]
+    },
+    {
+      "name": "4.7 1st inversion, down",
+      "list": [
+        {
+          "effect": "autotune",
+          "key": "C",
+          "scale": "chromatic",
+          "speed": 1,
+          "humanize": 0,
+          "mix": 1
+        },
+        {
+          "effect": "harmonizer",
+          "chord": "major",
+          "inversion": 1,
+          "octave": -1,
+          "level": 0.7
+        }
+      ]
+    },
+    {
+      "name": "4.8 harmony on the handle",
+      "list": [
+        {
+          "effect": "autotune",
+          "key": "C",
+          "scale": "chromatic",
+          "speed": 1,
+          "humanize": 0,
+          "mix": 1
+        },
+        {
+          "effect": "harmonizer",
+          "chord": "major",
+          "inversion": 0,
+          "octave": 0,
+          "level": "$handle"
+        }
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "file": "1.wav",
+      "playmode": "oneshot"
+    },
+    {
+      "file": "2.wav",
+      "playmode": "oneshot"
+    },
+    {
+      "file": "3.wav",
+      "playmode": "oneshot"
+    },
+    {
+      "file": "4.wav",
+      "playmode": "oneshot"
+    }
+  ]
+}
