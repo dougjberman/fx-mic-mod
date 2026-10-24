@@ -910,12 +910,21 @@ while True:
       while (port && port.readable) {
         reader = port.readable.getReader();
         try {
-          for (;;) { const { value, done } = await reader.read(); if (done) break; log(dec.decode(value, { stream: true })); }
+          for (;;) { const { value, done } = await reader.read(); if (done) break; log(plain(dec.decode(value, { stream: true }))); }
         } finally { reader.releaseLock(); reader = null; }
       }
     } catch (e) { log("\n[disconnected: " + e.message + (follow ? ". Reconnecting when the mic comes back…" : "") + "]\n"); }
     try { if (writer) writer.releaseLock(); } catch (e) {}
     writer = null; port = null; serialUi(false);
+  }
+  // CircuitPython sends terminal codes (clear line, window title); hide them. A code split
+  // across two reads waits for the rest.
+  let pending = "";
+  function plain(t) {
+    t = (pending + t).replace(/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "");
+    const cut = t.indexOf("\x1b");
+    pending = cut >= 0 && t.length - cut < 200 ? t.slice(cut) : "";
+    return cut >= 0 && pending ? t.slice(0, cut) : t;
   }
   async function reload() { await send("\x03"); await new Promise(r => setTimeout(r, 300)); await send("\x04"); }
   $("serialConnect").addEventListener("click", async () => {
