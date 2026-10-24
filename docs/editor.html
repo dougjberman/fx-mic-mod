@@ -199,6 +199,12 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 .addmenu button:hover{border-color:var(--accent)}
 .addmenu b{font-size:14px}
 .addmenu span{font-size:12.5px;color:var(--muted)}
+/* what an effect adds to the load meter, as five pips */
+.cpu{display:flex;align-items:center;gap:7px;margin-top:4px;font-size:11.5px;color:var(--muted)}
+.cpu .pips{display:inline-flex;gap:2px}
+.cpu .pips i{width:10px;height:4px;border-radius:2px;background:var(--track)}
+.cpu .pips i.on{background:var(--ink)}
+.cpu .pips.heavy i.on{background:var(--warn)}
 
 /* load meter */
 .meter{display:grid;gap:6px}
@@ -646,7 +652,7 @@ function renderEditor(){
   const chain = h("div",{class:"chain"});
   const tuneIdx = p.list.findIndex(fx=>fx.effect==="autotune");
   chain.append(tuneIdx>=0 ? autotuneCard(p, p.list[tuneIdx]) : h("div",{class:"fx tune"},
-    h("div",{class:"fx-head"}, h("div",{class:"grow"}, h("h3",{},"Autotune"), h("div",{class:"what"},"Snaps your voice to the nearest note. Always runs first.")),
+    h("div",{class:"fx-head"}, h("div",{class:"grow"}, h("h3",{},"Autotune"), h("div",{class:"what"},"Snaps your voice to the nearest note. Always runs first."), cpuCost(AUTOTUNE_COST)),
       h("button",{class:"btn small primary", onclick:()=>{ p.list.unshift({effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1}); changed(); }}, "Add autotune"))));
   const harm = p.list.find(fx=>fx.effect==="harmonizer");
   if (harm) chain.append(harmonizerCard(p, harm));
@@ -957,6 +963,12 @@ function jsonArea(value, onValid){
   return h("div",{style:"display:grid;gap:4px;min-width:0"}, ta, err);
 }
 
+// What one effect adds to the load meter: five pips and its share, for the Add effect menu.
+function cpuCost(cost, note){
+  const r = typeof config.sample_rate==="number" ? config.sample_rate/24000 : 1, pct = Math.round(cost*r), n = Math.max(1, Math.min(5, Math.ceil(pct/9)));
+  const pips = h("span",{class:"pips"+(n>=4?" heavy":""), "aria-hidden":"true"}); for (let i=0;i<5;i++) pips.append(h("i",{class:i<n?"on":""}));
+  return h("div",{class:"cpu", title:"Estimated share of the mic's CPU, from tests on a Ting"}, pips, "+"+pct+"% load"+(note||""));
+}
 function addEffectBlock(list, forSample){
   const wrap = h("div",{style:"display:grid;gap:10px"});
   wrap.append(h("button",{class:"btn", style:"justify-self:start", "aria-expanded":String(addOpen===list), onclick:()=>{ addOpen = addOpen===list?false:list; render(); }}, addOpen===list ? "Close" : "+ Add effect"));
@@ -966,13 +978,14 @@ function addEffectBlock(list, forSample){
       menu.append(h("button",{onclick:()=>{
         const at = list.findIndex(fx=>fx.effect==="autotune");
         list.splice(at+1, 0, {effect:"harmonizer", chord:"major", inversion:0, octave:0, level:.7}); addOpen=false; changed(); }},
-        h("b",{}, "Harmonizer"), h("span",{}, "Sings a chord with you on every note: major, minor, 7ths, 9ths and more.")));
+        h("b",{}, "Harmonizer"), h("span",{}, "Sings a chord with you on every note: major, minor, 7ths, 9ths and more."),
+        cpuCost(2*HARMONY_VOICE_COST, " for a triad")));
     for (const [key, def] of Object.entries(EFFECTS)){
       menu.append(h("button",{onclick:()=>{
         const fx = {effect:key};
         for (const [pn, meta] of Object.entries(def.params)) if (meta.def!==undefined) fx[pn] = clone(meta.def);
         if (key==="filter") fx.filter = {mode:"high_pass", frequency:200, Q:0.7071};
-        list.push(fx); addOpen=false; changed(); }}, h("b",{}, def.label), h("span",{}, def.what)));
+        list.push(fx); addOpen=false; changed(); }}, h("b",{}, def.label), h("span",{}, def.what), cpuCost(def.cost)));
     }
     wrap.append(menu);
   }
