@@ -377,7 +377,7 @@ picotool save -a ting-full-flash.bin</pre>
         <div class="status" id="codeStatus">No driver chosen yet. That's fine if it's already in CIRCUITPY/lib.</div>
         <pre id="bootOut" hidden></pre>
       </div>
-      <div class="note"><b>After installing, turn the mic off and on again.</b> From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
+      <div class="note"><b>After installing, turn the mic off and on again.</b> To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together for about a second. If it stays on, unplug the USB cable and take out the batteries. Then squeeze the handle to turn it back on. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
       <details><summary>Installing by hand</summary>
         <div style="display: grid; gap: 10px; margin-top: 10px;">
           <p>Download these files and copy them to the root of CIRCUITPY, with <code>code.py</code> last:</p>
@@ -776,7 +776,7 @@ while True:
         await writeFile(dir, f.name, f.data);
         status("codeStatus", `Copying… ${++n}/${total}`);
       }
-      status("codeStatus", "Installed" + (keepConfig ? " (your config.json was kept)" : "") + ". Turn the mic off and on again to finish. Open the serial console below to watch it start.", "ok");
+      status("codeStatus", "Installed" + (keepConfig ? " (your config.json was kept)" : "") + ". Turn the mic off and on again to finish: hold the orange and " + (window.siteDevice ? siteDevice.word("mid") : "white") + " buttons together for a second, then squeeze the handle. Open the serial console below to watch it start.", "ok");
       markDone("install");
     } catch (e) {
       status("codeStatus", "The mic didn't accept the files (" + e.message + "). If fx-mic-mod is already installed, the drive is read-only: turn the mic off, hold the orange button while you squeeze the handle to power it on, and try again. If CIRCUITPY is full, delete old files from lib/ first.", "bad");
