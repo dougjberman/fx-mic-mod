@@ -193,6 +193,32 @@ _WIN_F = BUFFER_SIZE - _MAX_LAG - 3             # samples compared per lag at 16
 _FLOAT = getattr(np, "float", None) or getattr(np, "float32", None) if np else None
 _CONVOLVE = np is not None and hasattr(np, "convolve")
 
+# The cross term below can come from FFTs instead of a convolution: three
+# 512-point FFTs instead of ~40k multiply-adds. ulab's fft takes and returns
+# (real, imag) pairs unless the build has complex numbers; numpy is complex.
+_FFT_N = 512                                    # >= BUFFER_SIZE // _DEC + _WIN_D
+_FFT = None
+if np is not None and hasattr(np, "fft"):
+    try:
+        _FFT = "pair" if isinstance(np.fft.fft(np.zeros(4)), tuple) else "complex"
+    except Exception:
+        _FFT = None
+
+
+def _cross_fft(xd):
+    """sum x[i] x[i+lag] over the first _WIN_D samples, for every lag."""
+    a = np.zeros(_FFT_N)
+    a[0:len(xd)] = xd
+    b = np.zeros(_FFT_N)
+    b[0:_WIN_D] = xd[0:_WIN_D]
+    if _FFT == "pair":
+        ar, ai = np.fft.fft(a)
+        br, bi = np.fft.fft(b)
+        r, _ = np.fft.ifft(ar * br + ai * bi, ai * br - ar * bi)
+    else:
+        r = np.real(np.fft.ifft(np.fft.fft(a) * np.conj(np.fft.fft(b))))
+    return r[0:_MAX_LAG_D].tolist()
+
 
 def _diff_at(x, lag, width):
     d = x[0:width] - x[lag:lag + width]
@@ -232,10 +258,13 @@ def detect_pitch_autocorrelation(buffer):
     #   d(lag) = sum x[i]^2 + sum x[i+lag]^2 - 2 sum x[i] x[i+lag]
     # so the loop below only does scalar sums. Calling _diff_at per lag
     # instead was ~100 ulab calls a block, too slow on a real Ting.
-    fast = np is not None and _CONVOLVE
+    fast = np is not None and (_FFT or _CONVOLVE)
     if fast:
-        cross = np.convolve(xd, xd[_WIN_D - 1::-1])
-        cross = cross[_WIN_D - 1:_WIN_D - 1 + _MAX_LAG_D].tolist()
+        if _FFT:
+            cross = _cross_fft(xd)
+        else:
+            cross = np.convolve(xd, xd[_WIN_D - 1::-1])
+            cross = cross[_WIN_D - 1:_WIN_D - 1 + _MAX_LAG_D].tolist()
         sq = (xd * xd).tolist()
         energy0 = sum(sq[0:_WIN_D])
         energy = energy0
