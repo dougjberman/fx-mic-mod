@@ -403,7 +403,14 @@ picotool save -a ting-full-flash.bin</pre>
     <!-- 06 -->
     <section class="step" id="console" data-step="console">
       <div class="step-head"><span class="step-num">06</span><h2>Watch it run on the serial console</h2><label class="mark"><input type="checkbox" data-done="console"> Done</label></div>
-      <p>CircuitPython prints <code>print()</code> output and errors over USB serial. Connect to see what the effects code is doing, then use the Stop and Reload buttons. With the cursor in the command box, the <kbd>control</kbd>-C and <kbd>control</kbd>-D keys do the same (on a Mac that's control, not ⌘).</p>
+      <p>The mic reports what it's doing over the USB cable: which preset is on, how far the handle is squeezed, and any error that stops it. This is where you look when something doesn't work, and where to copy text from if you're asking for help.</p>
+      <ol class="how">
+        <li>With the mic on and plugged in, click <b>Connect</b>. Chrome or Edge asks which device to use: pick the one named <b>CircuitPython</b> or <b>USB Serial</b>, then <b>Connect</b>.</li>
+        <li>Click <b>Reload</b>. The mic restarts its code, and you should see <code>code.py output:</code> followed by lines like <code>TOP button = next preset (5 spots, 0 = clean)</code>. That means it's running.</li>
+        <li>Use the mic. Each press and squeeze prints a line: <code>preset 2 of 4</code>, <code>paddle pressed</code>, <code>volume +3.0 dB</code>. An <code>overflow</code> line means that preset is too heavy for the chip and the sound will glitch.</li>
+        <li>If you see <code>Traceback</code>, the code stopped on an error and the mic goes quiet, with white LED 1 blinking twice every few seconds. Copy everything from <code>Traceback</code> down: the last line says what went wrong.</li>
+      </ol>
+      <p><b>Stop</b> halts the code and gives you a <code>&gt;&gt;&gt;</code> prompt, where you can type Python into the box below and click <b>Send</b>, for example when someone helping you asks you to run a line. <b>Reload</b> starts the code again. With the cursor in the box, <kbd>control</kbd>-C and <kbd>control</kbd>-D do the same as the two buttons (on a Mac that's control, not ⌘).</p>
       <div class="tool">
         <div class="row">
           <button class="go" id="serialConnect">Connect</button>
