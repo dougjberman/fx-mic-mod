@@ -13,11 +13,17 @@ CircuitPython lets either the computer or the code write the drive, never both.
   Recording is off.
 
 boot.py runs only on a hard reset or power-on, not on a code.py reload.
+
+It also turns off CircuitPython's USB keyboard and mouse, which the mic
+never uses and which makes macOS open its Keyboard Setup Assistant.
 """
 
 import board
 import digitalio
 import storage
+import usb_hid
+
+usb_hid.disable()
 
 top = digitalio.DigitalInOut(board.BUTTON_TOP)
 top.switch_to_input(pull=digitalio.Pull.UP)
