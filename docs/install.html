@@ -380,12 +380,13 @@ picotool save -a ting-full-flash.bin</pre>
       <div class="note"><b>After installing, turn the mic off and on again.</b> To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together until the lights go out (about a second), then let go. If it stays on, unplug the USB cable and take out the batteries. Once it's dark, squeeze the handle to turn it back on. <b>Working looks like:</b> white LED 1 stays lit, the red LEDs are off (the clean spot), and CIRCUITPY shows up on your computer again. If white LED 1 instead blinks twice every few seconds, the code stopped on an error: connect the serial console below and click Reload to see it. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
       <details><summary>Optional: copy samples from your backup</summary>
         <div style="display: grid; gap: 10px; margin-top: 10px;">
-          <p>If your step 01 backup has WAV files you want on the mic, this copies them to CIRCUITPY. fx-mic-mod plays 16-bit mono WAVs at 24 kHz, so each file is converted to that on the way. Choose the backup zip or the WAV files, then pick CIRCUITPY with the mic in edit mode. A file whose name starts with 1 to 4 goes in that slot; any others fill the empty slots in order.</p>
+          <p>If your step 01 backup has WAV files you want on the mic, this copies them to CIRCUITPY. fx-mic-mod plays 16-bit mono WAVs at 24 kHz, so each file is converted to that on the way. Bought or downloaded samples are usually much louder than a voice through the mic, so by default they're also turned down to about the level the mic records at. Choose the backup zip or the WAV files, then pick CIRCUITPY with the mic in edit mode. A file whose name starts with 1 to 4 goes in that slot; any others fill the empty slots in order.</p>
           <div class="tool">
             <div class="row">
               <label class="filebtn">Choose the backup zip or WAVs<input type="file" id="samplesInput" accept=".zip,.wav,audio/wav,audio/x-wav" multiple></label>
               <button class="go" id="samplesBtn" disabled>Pick CIRCUITPY and copy</button>
             </div>
+            <label class="mark" style="color: var(--ink);"><input type="checkbox" id="samplesMatch" checked> Match the mic's level</label>
             <div class="status" id="samplesStatus">No samples chosen yet.</div>
           </div>
         </div>
@@ -814,6 +815,16 @@ while True:
   // "sample_rate"), so each sample is decoded, mixed to mono, resampled and written back as <slot>.wav.
   const SAMPLE_RATE = 24000;
   let samplePicks = [];
+  // About the level a voice records at through the mic: RMS -20 dBFS while it plays, peaks kept
+  // under -1 dBFS. An estimate until it's checked against takes recorded on a Ting.
+  const MIC_RMS = 0.1, PEAK_CAP = 0.89;
+  function matchMic(data) {
+    let sum = 0, n = 0, peak = 0;
+    for (const x of data) { const a = Math.abs(x); if (a > peak) peak = a; if (a > 0.003) { sum += x * x; n++; } }
+    if (!n || !peak) return data;
+    const g = Math.min(MIC_RMS / Math.sqrt(sum / n), PEAK_CAP / peak);
+    return data.map(x => x * g);
+  }
   function wav16(data) {
     const buf = new ArrayBuffer(44 + data.length * 2), v = new DataView(buf);
     const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
@@ -836,7 +847,8 @@ while True:
     const decoded = await new AudioContext().decodeAudioData(bytes);
     const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * SAMPLE_RATE)), SAMPLE_RATE);
     const src = off.createBufferSource(); src.buffer = decoded; src.connect(off.destination); src.start();
-    return { blob: wav16((await off.startRendering()).getChannelData(0)), seconds: decoded.duration, from };
+    const mono = (await off.startRendering()).getChannelData(0);
+    return { blob: wav16($("samplesMatch").checked ? matchMic(mono) : mono), seconds: decoded.duration, from };
   }
   function slotsFor(names) {
     const slots = {}, rest = [];

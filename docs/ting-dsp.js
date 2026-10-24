@@ -513,7 +513,7 @@ function dspFactory(){
   class TingDSP {
     constructor(sr){
       this.sr=sr; this.S=sr/BASE;
-      this.g={rate:24000, sampleLevel:0.4, power:true, gate:false, handle:0, level:0.4, engine:"native", detector:"yin", hyst:0.3, vt:0.15, minRms:250, minHz:80, maxHz:500};
+      this.g={rate:24000, sampleLevel:1, power:true, gate:false, handle:0, level:0.4, engine:"native", detector:"yin", hyst:0.3, vt:0.15, minRms:250, minHz:80, maxHz:500};
       this.host={sr, g:this.g, blocks:{handle:()=>this.g.handle}, report:i=>{ this.atInfo=i; }};
       this.chain=[]; this.samples=[]; this.voice=null;
       this.tuner=new Detector(sr,this.g); this.tunerInfo=null; this.atInfo=null;

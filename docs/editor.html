@@ -1002,9 +1002,9 @@ function renderSamples(){
     h("p",{class:"small muted"}, through
       ? "Samples play dry into whichever effect preset is selected on the mic right now (the one the orange button picked), the same chain your voice goes through, autotune included. On Clean and in Record mode they play dry."
       : "Each slot gets its own effects below, whichever effect preset is selected on the mic. This is how Adafruit's packs work."),
-    // "sample_level": samples are full scale and the voice comes in at the mic's level, so they play lower (firmware SAMPLE_LEVEL)
-    h("div",{class:"levelrow"}, sliderEl({label:"Sample volume", min:0, max:1, step:.05}, typeof config.sample_level==="number" ? config.sample_level : 0.4,
-      v=>{ v=Math.round(v*100)/100; if (v===0.4) delete config.sample_level; else config.sample_level=v; trySend({g:tryG()}); changedQuiet(); })));
+    // "sample_level": a trim on every sample, full by default (firmware SAMPLE_LEVEL)
+    h("div",{class:"levelrow"}, sliderEl({label:"Sample volume", min:0, max:1, step:.05}, typeof config.sample_level==="number" ? config.sample_level : 1,
+      v=>{ v=Math.round(v*100)/100; if (v===1) delete config.sample_level; else config.sample_level=v; trySend({g:tryG()}); changedQuiet(); })));
   const root = $("#samples"); root.replaceChildren();
   config.samples.forEach((s, i) => {
     s.effects = s.effects || [];
@@ -1237,7 +1237,7 @@ function tryRoute(){
 }
 function trySend(msg){ if (tryState.engine) tryState.engine.set(msg); }
 function tryG(){ return {power:true, gate:tryState.open || tryState.held, handle:tryState.held ? 1 : tryState.squeeze, level:tryState.level,
-  sampleLevel: typeof config.sample_level==="number" ? config.sample_level : 0.4}; }
+  sampleLevel: typeof config.sample_level==="number" ? config.sample_level : 1}; }
 function tryPreset(){
   if (!tryState.engine) return;
   if (slotAudio.some(Boolean)) trySend({samples: slotPayload()});

@@ -366,9 +366,10 @@ if isinstance(_dead_zone, (int, float)) and not isinstance(_dead_zone, bool) and
 else:
     print("handle_dead_zone must be a number from 0 to 0.5; using {}".format(HANDLE_DEAD_ZONE))
 
-# "sample_level": how loud samples play, 0..1. A converted sample is full
-# scale and the voice comes in at the mic's level, so full level drowns it.
-SAMPLE_LEVEL = 0.4
+# "sample_level": how loud samples play, 0..1. Full level by default, so a
+# take recorded on the mic plays back as loud as it was sung; the install
+# guide's converter brings imported files down to about the mic's level.
+SAMPLE_LEVEL = 1.0
 _sample_level = CONFIG.get("sample_level", SAMPLE_LEVEL)
 if isinstance(_sample_level, (int, float)) and not isinstance(_sample_level, bool) and 0 <= _sample_level <= 1:
     SAMPLE_LEVEL = _sample_level
