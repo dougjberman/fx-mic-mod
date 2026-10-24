@@ -729,10 +729,21 @@ def load_selected_wave_sample(ctx):
     path = wave_path(ctx.white_active, sample["file"])
     ctx.current_path = path
     try:
-        ctx.current_wave = audiocore.WaveFile(path)
+        wave = audiocore.WaveFile(path)
     except OSError as error:
         print("{} not loaded: {}".format(path, error))
         return
+    shape = (wave.sample_rate, wave.channel_count, wave.bits_per_sample)
+    if shape != (RATE, 1, 16):
+        # The mixer refuses any other format, and an uncaught refusal stops
+        # code.py, so the file is left unloaded rather than played.
+        print(
+            "{} not loaded: it is {} Hz, {} ch, {} bit, and the mic plays "
+            "16-bit mono {} Hz WAVs".format(path, shape[0], shape[1], shape[2], RATE)
+        )
+        wave.deinit()
+        return
+    ctx.current_wave = wave
 
     if THROUGH_PRESET:
         # The preset is the sample's effect chain; its own list is unused.
@@ -838,7 +849,10 @@ def start_sample(ctx, loop=False):
         except (OSError, ValueError) as error:
             print("{} can't go through autotune: {}".format(ctx.current_path, error))
     else:
-        sample_voice(ctx).play(ctx.current_source, loop=loop)
+        try:
+            sample_voice(ctx).play(ctx.current_source, loop=loop)
+        except (ValueError, RuntimeError) as error:
+            print("{} can't play: {}".format(ctx.current_path, error))
 
 
 def stop_current_wave(ctx):

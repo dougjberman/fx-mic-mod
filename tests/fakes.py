@@ -222,9 +222,11 @@ class WaveFile(_Obj):
             raise OSError(2, "No such file")
         super().__init__()
         self.path = path
-        self.sample_rate = 16000
-        self.channel_count = 1
-        self.bits_per_sample = 16
+        import wave
+        with wave.open(_map(path)) as info:
+            self.sample_rate = info.getframerate()
+            self.channel_count = info.getnchannels()
+            self.bits_per_sample = 8 * info.getsampwidth()
 
 
 class Codec:

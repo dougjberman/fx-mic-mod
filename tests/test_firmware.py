@@ -38,15 +38,15 @@ THROUGH_CONFIG = {
 }
 
 
-def write_tone(path, hz, seconds):
+def write_tone(path, hz, seconds, rate=16000):
     import math
     import struct
-    frames = b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * hz * i / 16000)))
-                      for i in range(int(seconds * 16000)))
+    frames = b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * hz * i / rate)))
+                      for i in range(int(seconds * rate)))
     with wave.open(path, "wb") as out:
         out.setnchannels(1)
         out.setsampwidth(2)
-        out.setframerate(16000)
+        out.setframerate(rate)
         out.writeframes(frames)
 
 
@@ -281,6 +281,12 @@ class DeviceScenarioTests(unittest.TestCase):
         root, out, s = run("through", THROUGH_CONFIG, tone=(340.0, 1.0), tone_name="1_.wav")
         self.assertIn("loaded /1_.wav", out)
         self.assertAlmostEqual(s["shifters"][0]["max"], 0.46, delta=0.05)
+
+    def test_a_sample_in_another_format_is_refused(self):
+        # a 44.1 kHz file would stop code.py if it reached the mixer
+        root, out, s = run("through", THROUGH_CONFIG, tone=(340.0, 1.0, 44100))
+        self.assertIn("/1.wav not loaded: it is 44100 Hz, 1 ch, 16 bit", out)
+        self.assertIn("no wave loaded for LED 1", out)
 
     def test_preset_level_sets_the_output(self):
         config = json.loads(json.dumps(TEST_CONFIG))
