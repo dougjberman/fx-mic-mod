@@ -65,8 +65,13 @@ def run(scenario, config=TEST_CONFIG, tone=None):
 
 
 def transitions(log):
-    out, prev = [], None
+    """Changes in an LED log, keeping only the last state at each instant
+    (the LEDs are set one pin at a time)."""
+    settled = {}
     for t, value in log:
+        settled[t] = value
+    out, prev = [], None
+    for t, value in sorted(settled.items()):
         if value != prev:
             out.append((t, value))
             prev = value
@@ -235,14 +240,21 @@ class DeviceScenarioTests(unittest.TestCase):
 
         # the red LEDs count the second take down 4 -> 3 -> 2 -> 1 -> 0, a second each
         reds = [(t, c) for t, c in transitions(s["red_counts"]) if 7.0 < t < 11.2]
+        counts = [c for _, c in reds]
+        # before the take the reds flash 0/4; the countdown starts at the first 3
+        reds = reds[counts.index(3):]
         self.assertEqual([c for _, c in reds[:4]], [3, 2, 1, 0])
         for (t0, _), (t1, _) in zip(reds, reds[1:4]):
             self.assertAlmostEqual(t1 - t0, 1.0, delta=0.05)
 
-        # the selected white LED blinks in record mode
+        # in record mode the red LEDs flash all together while no take runs,
+        # and the white LEDs hold the slot count steady
+        reds_idle = [c for t, c in transitions(s["red_counts"]) if 3.6 < t < 6.0]
+        self.assertIn(0, reds_idle)
+        self.assertIn(4, reds_idle)
+        self.assertTrue(set(reds_idle) <= {0, 4}, reds_idle)
         whites = [w for t, w in transitions(s["white_log"]) if 3.6 < t < 6.0]
-        self.assertIn([], whites)
-        self.assertIn(["LED_WHITE1"], whites)
+        self.assertNotIn([], whites)
 
     def test_samples_through_the_preset(self):
         # 340 Hz is 46 cents flat of F4, which is in A minor.

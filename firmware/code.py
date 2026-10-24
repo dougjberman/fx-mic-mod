@@ -39,20 +39,22 @@ Controls:
 
 Record mode (TOP past the last preset):
 
-* All four red LEDs light and the selected sample's white LED blinks.
+* All four red LEDs flash together; the white LEDs show the selected slot.
 * MIDDLE picks the slot to record into, BOTTOM plays it back as usual.
 * Hold the handle to record, release to stop and save over the slot's file.
-  The red LEDs count the time left down from 4 to 0; at 0 the take stops.
+  The red LEDs stop flashing and count the time left down from 4 to 0; at 0
+  the take stops.
 * Needs the drive writable by CircuitPython (the default, see boot.py). In
-  edit mode (TOP held at power-on) the red LEDs flash and nothing records.
+  edit mode (TOP held at power-on) the red LEDs flash in alternating pairs
+  and nothing records.
 
-Indication:
+Indication, counting up like the stock firmware:
 
-* Top four red LEDs, one per preset: the lit one is the active preset. On the
-  clean spot they are all dark.
+* Top four red LEDs: preset 1 lights one, preset 2 lights two, and so on to
+  all four for preset 4. On the clean spot they are all dark.
 
-* Bottom four white LEDs, one per sample: the lit one is the currently selected
-  sample.
+* Bottom four white LEDs: sample 1 lights one, sample 2 lights two, and so
+  on to all four for sample 4.
 """
 
 import gc
@@ -145,7 +147,7 @@ HANDLE_DEAD_ZONE = 0.15
 # Longest take, in seconds. Held in RAM (32 KB per second at 16 kHz) and
 # written to flash after the take, so it is bounded by free memory.
 RECORD_SECONDS = 4
-# How fast the selected white LED blinks in record mode, in seconds per toggle.
+# How fast the red LEDs flash in record mode, in seconds per toggle.
 RECORD_BLINK_SECONDS = 0.25
 
 # Handle travel (0 out .. 1 in) at which an autotune preset's "squeeze_key"
@@ -632,31 +634,33 @@ for _pin in WHITE_PINS:
 
 
 def update_red_leds(ctx):
-    """Light the red LED belonging to the active preset, if any.
+    """Light as many red LEDs as the active preset's number (none on clean).
 
-    In record mode all four light, counting down the time left while a take
-    runs. In edit mode, where nothing can record, they flash together.
+    In record mode all four flash together, and count down the time left
+    while a take runs. In edit mode, where nothing can record, they flash in
+    alternating pairs instead.
     """
     if ctx.active == RECORD_SPOT:
         if ctx.recorder is None:
-            lit = len(red_leds) if ctx.blink_on else 0
-        elif ctx.recorder.recording:
+            for index, _led in enumerate(red_leds):
+                _led.value = (index % 2 == 0) == ctx.blink_on
+            return
+        if ctx.recorder.recording:
             # ceil() without math: 4 while more than 3/4 is left, ... 1, then 0
             lit = -int(-ctx.recorder.remaining * len(red_leds) // 1)
         else:
-            lit = len(red_leds)
+            lit = len(red_leds) if ctx.blink_on else 0
         for index, _led in enumerate(red_leds):
             _led.value = index < lit
         return
     for index, _led in enumerate(red_leds):
-        _led.value = ctx.active == index + 1
+        _led.value = index < ctx.active
 
 
 def update_white_leds(ctx):
-    """Light exactly the currently selected white LED; blink it in record mode."""
-    on = ctx.blink_on or ctx.active != RECORD_SPOT
+    """Light as many white LEDs as the selected sample's number."""
     for index, _led in enumerate(white_leds):
-        _led.value = on and ctx.white_active == index + 1
+        _led.value = index < ctx.white_active
 
 
 def build_sample_chain(wave, sample, loop):
