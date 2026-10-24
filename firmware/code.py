@@ -965,6 +965,8 @@ def show_note(ctx):
     if note is None:
         return
     line = "note " + note_name(note)
+    if tune.cents is not None:
+        line += " (sung {:+.0f} cents)".format(tune.cents)
     if tune.voices:
         line += ", harmony " + " ".join(note_name(note + i) for i in tune._intervals)
     print(line)
