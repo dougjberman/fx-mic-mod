@@ -377,6 +377,14 @@ picotool save -a ting-full-flash.bin</pre>
         <div class="status" id="codeStatus">No driver chosen yet. That's fine if it's already in CIRCUITPY/lib.</div>
         <pre id="bootOut" hidden></pre>
       </div>
+      <p><b>Put your samples back.</b> Flashing CircuitPython erased the samples, and the mic only plays 16-bit mono WAVs at 16 kHz. Choose the backup zip from step 01, or any WAV files, and this converts them and copies them to CIRCUITPY in edit mode. A file is put in the slot its name starts with (<code>1.wav</code> or the Ting's own <code>1_.wav</code> go to slot 1), and the rest fill the empty slots in order.</p>
+      <div class="tool">
+        <div class="row">
+          <label class="filebtn">1. Choose the backup zip or WAVs<input type="file" id="samplesInput" accept=".zip,.wav,audio/wav,audio/x-wav" multiple></label>
+          <button class="go" id="samplesBtn" disabled>2. Pick CIRCUITPY and copy</button>
+        </div>
+        <div class="status" id="samplesStatus">No samples chosen yet.</div>
+      </div>
       <div class="note"><b>After installing, turn the mic off and on again.</b> To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together until the lights go out (about a second), then let go. If it stays on, unplug the USB cable and take out the batteries. Once it's dark, squeeze the handle to turn it back on. <b>Working looks like:</b> white LED 1 stays lit, the red LEDs are off (the clean spot), and CIRCUITPY shows up on your computer again. If white LED 1 instead blinks twice every few seconds, the code stopped on an error: connect the serial console below and click Reload to see it. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
       <details><summary>Installing by hand</summary>
         <div style="display: grid; gap: 10px; margin-top: 10px;">
@@ -794,6 +802,76 @@ while True:
       markDone("install");
     } catch (e) {
       status("codeStatus", "The mic didn't accept the files (" + e.message + "). If fx-mic-mod is already installed, the drive is read-only: turn the mic off, hold the orange button while you squeeze the handle to power it on, and try again. If CIRCUITPY is full, delete old files from lib/ first.", "bad");
+    }
+  });
+
+  // ---------- 05 samples ----------
+  // The firmware plays only 16-bit mono 16 kHz WAVs, so each sample is decoded, mixed to mono,
+  // resampled to 16 kHz and written back as <slot>.wav.
+  const SAMPLE_RATE = 16000;
+  let samplePicks = [];
+  function wav16(data) {
+    const buf = new ArrayBuffer(44 + data.length * 2), v = new DataView(buf);
+    const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    str(0, "RIFF"); v.setUint32(4, 36 + data.length * 2, true); str(8, "WAVE");
+    str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, SAMPLE_RATE, true); v.setUint32(28, SAMPLE_RATE * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, "data"); v.setUint32(40, data.length * 2, true);
+    for (let i = 0; i < data.length; i++) { const x = Math.max(-1, Math.min(1, data[i])); v.setInt16(44 + i * 2, Math.round(x * 32767), true); }
+    return new Blob([buf], { type: "audio/wav" });
+  }
+  function wavShape(bytes) {
+    // the file's own rate and channels (decodeAudioData reports the context's rate instead)
+    const v = new DataView(bytes), tag = o => String.fromCharCode(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2), v.getUint8(o + 3));
+    for (let o = 12; o + 24 <= v.byteLength; o += 8 + v.getUint32(o + 4, true) + (v.getUint32(o + 4, true) & 1))
+      if (tag(o) === "fmt ") return `${v.getUint32(o + 12, true)} Hz, ${v.getUint16(o + 10, true)} ch, ${v.getUint16(o + 22, true)} bit`;
+    return "an unknown format";
+  }
+  async function toMicWav(bytes) {
+    const from = wavShape(bytes);
+    const decoded = await new AudioContext().decodeAudioData(bytes);
+    const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * SAMPLE_RATE)), SAMPLE_RATE);
+    const src = off.createBufferSource(); src.buffer = decoded; src.connect(off.destination); src.start();
+    return { blob: wav16((await off.startRendering()).getChannelData(0)), seconds: decoded.duration, from };
+  }
+  function slotsFor(names) {
+    const slots = {}, rest = [];
+    for (const n of names) { const m = /^([1-4])(?![0-9])/.exec(n.split("/").pop()); if (m && !slots[m[1]]) slots[m[1]] = n; else rest.push(n); }
+    for (const n of rest) { const free = ["1", "2", "3", "4"].find(k => !slots[k]); if (free) slots[free] = n; }
+    return slots;
+  }
+  $("samplesInput").addEventListener("change", async (ev) => {
+    samplePicks = []; $("samplesBtn").disabled = true;
+    try {
+      for (const f of ev.target.files) {
+        if (/\.zip$/i.test(f.name)) {
+          if (!window.JSZip) throw new Error("the zip library didn't load; unzip the backup and choose the WAVs instead");
+          const zip = await JSZip.loadAsync(f);
+          for (const e of Object.values(zip.files))
+            if (!e.dir && /\.wav$/i.test(e.name) && !/(^|\/)\._/.test(e.name)) samplePicks.push({ name: e.name, bytes: () => e.async("arraybuffer") });
+        } else if (/\.wav$/i.test(f.name)) samplePicks.push({ name: f.name, bytes: () => f.arrayBuffer() });
+      }
+    } catch (e) { status("samplesStatus", "Couldn't read that: " + e.message + ".", "bad"); return; }
+    const slots = slotsFor(samplePicks.map(p => p.name).sort());
+    samplePicks = Object.entries(slots).map(([slot, name]) => ({ slot, ...samplePicks.find(p => p.name === name) }));
+    if (!samplePicks.length) { status("samplesStatus", "No WAV files found there.", "bad"); return; }
+    status("samplesStatus", samplePicks.map(p => `${p.name} → ${p.slot}.wav`).join(", ") + ". Power the mic on in edit mode, then pick CIRCUITPY.", "ok");
+    $("samplesBtn").disabled = false;
+  });
+  $("samplesBtn").addEventListener("click", async () => {
+    const dir = await pickDir("readwrite", "samplesStatus"); if (!dir) return;
+    if (await tryRead(dir, "boot_out.txt") === null) { status("samplesStatus", `"${dir.name}" doesn't look like CIRCUITPY. Pick the mic's drive.`, "bad"); return; }
+    const done = [];
+    try {
+      for (const p of samplePicks) {
+        status("samplesStatus", `Converting ${p.name}…`);
+        const w = await toMicWav(await p.bytes());
+        await writeFile(dir, p.slot + ".wav", w.blob);
+        done.push(`${p.slot}.wav (${w.seconds.toFixed(1)} s, was ${w.from})`);
+      }
+      status("samplesStatus", "Copied " + done.join(", ") + ". The mic reloads by itself; press " + (window.siteDevice ? siteDevice.word("mid") : "white") + " to pick a sample and " + (window.siteDevice ? siteDevice.word("bot") : "grey") + " to play it.", "ok");
+    } catch (e) {
+      status("samplesStatus", (done.length ? "Copied " + done.join(", ") + ", then " : "") + "stopped: " + e.message + ". If the drive is read-only, power the mic on in edit mode (hold orange while you squeeze) and try again.", "bad");
     }
   });
 
