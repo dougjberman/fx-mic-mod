@@ -542,6 +542,10 @@ def select_preset(ctx, index):
             )
         )
     codec.dac_soft_mute = muted
+    # Building the chain takes longer than one block, so the mic always
+    # overflows once during a switch. Reading .overflow clears that, so the
+    # console only reports overflows while a preset is actually running.
+    mic.overflow
 
 
 # --- Record mode ---
