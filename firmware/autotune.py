@@ -36,6 +36,7 @@ BLOCK_SIZE = 256        # audio hop per loop pass (16 ms); BUFFER_SIZE must be 2
 MIN_HZ = 80.0           # lowest pitch the detector looks for
 MAX_HZ = 500.0          # highest pitch the detector looks for
 VOICED_THRESHOLD = 0.15 # YIN threshold: lower = stricter about what counts as a note
+HARMONY_SETTLE = 3      # detections a new note must hold before a key chord moves to it (~100 ms)
 DETECT_EVERY = 2        # find the pitch every N blocks (16 ms each); the chip can't do every one
 MIN_RMS = 250           # below this input level (int16 units) treat as silence
 
@@ -627,6 +628,11 @@ class Autotune:
         self._level = None
         self._intervals = []
         self._key_chord = False
+        # The note the key chord is built on, and a new note waiting to
+        # take over (see _chord_intervals).
+        self._chord_note = None
+        self._chord_next = None
+        self._chord_count = 0
         if harmony is not None:
             tones, self._key_chord = chord_by_name(harmony)
             if not 0 <= inversion <= max_inversion(tones):
@@ -706,6 +712,25 @@ class Autotune:
         self.mixer.voice[0].level = gain
         for index in range(len(self.voices)):
             self.mixer.voice[index + 1].level = gain * level
+
+    def _chord_intervals(self, note):
+        """Key chord intervals around the snapped ``note``. The chord only
+        moves to a new note once it has held for HARMONY_SETTLE detections;
+        until then the harmony keeps singing the last chord's tones, so a
+        passing or wavering note doesn't flip the whole chord."""
+        if self._chord_note is None or note == self._chord_note:
+            self._chord_note = note
+            self._chord_next = None
+        elif note == self._chord_next:
+            self._chord_count += 1
+            if self._chord_count >= HARMONY_SETTLE:
+                self._chord_note = note
+                self._chord_next = None
+        else:
+            self._chord_next = note
+            self._chord_count = 1
+        chord = self._chord_note
+        return [chord - note + i for i in self._key_intervals(chord)]
 
     def _key_intervals(self, note):
         """Harmony intervals for a key chord on the snapped MIDI note."""
@@ -798,8 +823,8 @@ class Autotune:
         else:
             self.shifter.semitones = self.correction
         if self.voices:
-            if self._key_chord and self.snapper.target is not None:
-                self._intervals = self._key_intervals(self.snapper.target)
+            if self._key_chord and self.snapper.target is not None and self._turn == 0:
+                self._intervals = self._chord_intervals(self.snapper.target)
             for voice, interval in zip(self.voices, self._intervals):
                 voice.semitones = self.correction + interval
             self._set_levels()

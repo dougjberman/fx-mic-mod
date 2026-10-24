@@ -281,6 +281,8 @@ function dspFactory(){
           voices=ivs.map(()=>new GrainShifter(grain));
         }
         let vRatios=ivs.map(iv=>Math.pow(2,iv/12));
+        let chordNote=null, chordNext=null, chordCount=0;
+        const settleN=Math.max(1, Math.round(0.096*sr/det.BLOCK));
         fx.process=(buf,env)=>{
           // speed s -> per-block rate 0.08 + 0.92 s^2; humanize h -> dead zone of h*30 cents (firmware autotune.py)
           const mix=clamp(mixF(env),0,1), s=clamp(speed(env),0,1), rate=0.08+0.92*s*s, dz=clamp(hum(env),0,1)*0.3;
@@ -299,7 +301,14 @@ function dspFactory(){
               if(semis!==null){ cents=-semis*100; target= Math.abs(semis)<=dz ? 0 : semis-Math.sign(semis)*dz; } else target*=0.9;
               if(!correct) target=0;
               corr+=(target-corr)*rate; ratio=Math.pow(2,corr/12);
-              if(keyChord&&snap.target!==null) ivs=keyIntervals(snap.target, snap, keyChord, inv, oct);
+              if(keyChord&&snap.target!==null){
+                // the chord moves to a new note only once it has held ~100 ms (firmware HARMONY_SETTLE)
+                const note=snap.target;
+                if(chordNote===null||note===chordNote){ chordNote=note; chordNext=null; }
+                else if(note===chordNext){ if(++chordCount>=settleN){ chordNote=note; chordNext=null; } }
+                else { chordNext=note; chordCount=1; }
+                ivs=keyIntervals(chordNote, snap, keyChord, inv, oct).map(iv=>chordNote-note+iv);
+              }
               vRatios=ivs.map(iv=>Math.pow(2,(corr+iv)/12));
               if(py&&hz>0) lsh.lock(sr/hz); lsh.begin(det.BLOCK);
               host.report({hz, cents: correct?cents:null, correction:corr, target: correct?snap.target:null, midi: hz>0?12*log2(hz/440)+69:null, autotune:correct, squeezed, harmony: voices.length?ivs.slice():null});
