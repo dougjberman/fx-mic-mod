@@ -1,8 +1,8 @@
 /* ting-dsp.js: browser approximation of the fx-mic-mod firmware, for trying presets
  * on a computer mic. Taken unchanged from this project's TING Effects Bench preview
- * (dspFactory). Autotune follows firmware/autotune.py; the other effects approximate
- * CircuitPython's audiodelays / audiofilters / audiofreeverb, so they sound close to
- * the mic but not identical.
+ * (dspFactory). Autotune follows firmware/autotune.py; echo, multi-tap delay, chorus and
+ * reverb follow CircuitPython's audiodelays and audiofreeverb source step for step; the
+ * other effects approximate audiofilters, so they sound close to the mic but not identical.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -21,6 +21,11 @@ function dspFactory(){
   const NOTE_IDX={C:0,"C#":1,DB:1,D:2,"D#":3,EB:3,E:4,F:5,"F#":6,GB:6,G:7,"G#":8,AB:8,A:9,"A#":10,BB:10,B:11};
   const norm=s=>String(s).replace(/([a-z0-9])([A-Z])/g,"$1_$2").toLowerCase().replace(/[ -]/g,"_");
   const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+  // CircuitPython's synthio_mix_down_sample: a soft knee above 28000/32768, then int16 saturation.
+  // mixScale(n) is SYNTHIO_MIX_DOWN_SCALE(n) as a slope; MIX_HARD is the near-hard limit Chorus uses
+  const KNEE=28000/32768, mixScale=n=>Math.floor(0xfffffff/(32768*n-28000))/65536, MIX_2=mixScale(2), MIX_HARD=2/65536;
+  const sat=v=>v>1?1:v<-1?-1:v;
+  const mixDown=(v,sc)=>sat(v>KNEE?(v-KNEE)*sc+KNEE:v<-KNEE?(v+KNEE)*sc-KNEE:v);
 
   /* ---------- harmonizer chords, as firmware/autotune.py (CHORDS, KEY_CHORDS, voicing) ---------- */
   const CHORDS={octave:[0,12], maj3:[0,4], min3:[0,3], fifth:[0,7], power:[0,7,12], major:[0,4,7], minor:[0,3,7], dim:[0,3,6], aug:[0,4,8], sus2:[0,2,7], sus4:[0,5,7],
@@ -409,33 +414,44 @@ function dspFactory(){
           taps=spec.taps.map(t=>{ if(Array.isArray(t)){ if(t.length!==2) throw new Error("taps pairs must be [position, level]"); return [+t[0],+t[1]]; } return [+t,1]; });
         }
         const read=d=>{ let r=w-d; while(r<0) r+=N; const i=Math.floor(r), f=r-i; return line[i%N]+(line[(i+1)%N]-line[i%N])*f; };
-        let lfo=0;
         fx.process=(buf,env)=>{
           const d=clamp(delay(env)/1000*sr,1,N-3), mix=clamp(mixF(env),0,1);
           if(type==="chorus"){
-            const v=clamp(Math.round(voices(env)),1,8);
-            for(let i=0;i<buf.length;i++){ const x=buf[i]; line[w]=x; lfo+=0.35/sr; let wet=0;
-              for(let k=0;k<v;k++){ const mod=0.5+0.5*Math.sin(2*Math.PI*(lfo+k/v)); wet+=read(clamp(d*(0.35+0.65*mod*(k+1)/v),1,N-3)); }
-              wet/=v; w=(w+1)%N; buf[i]=x*(1-mix)+wet*mix; }
+            // CircuitPython's Chorus: voices sit at fixed, evenly spaced delays from 0 to delay_ms (the first
+            // is the dry sample itself), are summed rather than averaged, and the sum is added to the dry
+            // signal at full level: out = dry + voices*mix
+            const v=Math.max(1,Math.round(voices(env))), len=Math.max(1,Math.floor(d)), step=v>1?Math.floor(len/(v-1))-1:0, sc=mixScale(v);
+            for(let i=0;i<buf.length;i++){ const x=buf[i]; line[w]=x; let wet=0;
+              if(v===1) wet=x; else { for(let k=0;k<v;k++){ let r=w-k*step; while(r<0) r+=N; wet+=line[r]; } wet=mixDown(wet,sc); }
+              w=(w+1)%N; buf[i]=mixDown(x+wet*mix,MIX_HARD); }
+          }else if(mix<=0.01){
+            // CircuitPython's Echo passes the dry sample straight through and leaves its buffer alone
           }else{
-            const dc=clamp(decay(env),0,0.98);
+            // CircuitPython's Echo and MultiTapDelay: the doubled mix law (dry at full until mix 0.5, the
+            // echo at full from 0.5), with the soft limiter on the buffer and on the output
+            const dc=clamp(decay(env),0,0.98), dry=Math.min(2-2*mix,1), eff=Math.min(2*mix,1), sc=mixScale(taps.length);
             for(let i=0;i<buf.length;i++){ const x=buf[i]; let wet=0;
               for(const [pos,lev] of taps) wet+=read(clamp(pos*d,1,N-3))*lev;
-              line[w]=x+read(d)*dc; w=(w+1)%N; buf[i]=x*(1-mix)+wet*mix; }
+              if(taps.length>1) wet=mixDown(wet,sc);
+              line[w]=mixDown(x+read(d)*dc,MIX_2); w=(w+1)%N; buf[i]=mixDown(x*dry+wet*eff,MIX_2); }
           }
         };
         break;
       }
       case "freeverb":{
         const room=P("roomsize",0.5), damp=P("damp",0.5);   // ASSUMED defaults
-        const k=sr/44100, combs=[1116,1188,1277,1356,1422,1491,1557,1617].map(n=>({b:new Float32Array(Math.max(8,Math.round(n*k))),i:0,f:0})),
+        // CircuitPython's Freeverb, step for step. Its comb and all-pass lengths are fixed sample counts,
+        // which the mic plays at 16 kHz, so the rooms are scaled from 16 kHz rather than 44.1 kHz
+        const k=sr/BASE, combs=[1116,1188,1277,1356,1422,1491,1557,1617].map(n=>({b:new Float32Array(Math.max(8,Math.round(n*k))),i:0,f:0})),
           aps=[556,441,341,225].map(n=>({b:new Float32Array(Math.max(8,Math.round(n*k))),i:0}));
         fx.process=(buf,env)=>{
-          const fb=clamp(room(env),0,1)*0.28+0.7, d1=clamp(damp(env),0,1)*0.4, d2=1-d1, mix=clamp(mixF(env),0,1);
-          for(let i=0;i<buf.length;i++){ const x=buf[i], inp=x*0.015; let out=0;
-            for(const c of combs){ const o=c.b[c.i]; c.f=o*d2+c.f*d1; c.b[c.i]=inp+c.f*fb; c.i=(c.i+1)%c.b.length; out+=o; }
-            for(const a of aps){ const bo=a.b[a.i]; a.b[a.i]=out+bo*0.5; out=bo-out; a.i=(a.i+1)%a.b.length; }
-            buf[i]=x*(1-mix)+out*3*mix; }
+          const fb=clamp(room(env),0,1)*0.28+0.7, d1=clamp(damp(env),0,1)*0.4, d2=1-d1, mix=clamp(mixF(env),0,1),
+            dry=Math.min(2-2*mix,1), eff=Math.min(2*mix,1);
+          for(let i=0;i<buf.length;i++){ const x=buf[i], inp=sat(x*8738/131072); let sum=0;
+            for(const c of combs){ const o=c.b[c.i]; sum+=o; c.f=sat(o*d2+c.f*d1); c.b[c.i]=sat(inp+sat(c.f*fb)); c.i=(c.i+1)%c.b.length; }
+            let out=sat(sum*0.24);
+            for(const a of aps){ const bo=a.b[a.i]; a.b[a.i]=out+bo*0.5; out=sat((bo-out)/2); a.i=(a.i+1)%a.b.length; }
+            buf[i]=mixDown(sat(x*dry)+sat(out*30*eff),MIX_2); }
         };
         break;
       }

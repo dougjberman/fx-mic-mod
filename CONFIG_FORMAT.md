@@ -60,6 +60,13 @@ It can only turn a preset down, because a mixer voice can't go above 1.0.
 ## Effect
 
 Every effect: `"effect": <type>`, optional `"mix"` (0..1), optional `"enabled": false`.
+
+`mix` is CircuitPython's own, and it isn't a crossfade for every effect. `echo`, `multi_tap_delay` and
+`freeverb` keep the dry voice at full level up to mix 0.5 and bring the effect in at full by 0.5, so
+0.25 is already an even blend. `chorus` always keeps the dry voice at full and adds the voices on top.
+`freeverb`'s rooms are sized in samples for 44.1 kHz, and the mic runs at 16 kHz, so every room is
+nearly three times longer than the same `roomsize` would be on a computer: small rooms want `roomsize`
+near 0. The editor's preview follows all of this.
 Any numeric param marked (B) accepts a number, a block object, or `"$name"`.
 `"$handle"` is supplied by the firmware: 0.0 from rest until the squeeze has opened the mic and
 gone a little further (the paddle click point plus a dead zone, so you can sing with a light squeeze), then up to
