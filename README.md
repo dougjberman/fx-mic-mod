@@ -14,18 +14,31 @@ Presets use Adafruit's `config.json` format, plus `autotune` and `harmonizer` ef
 
 ## Controls
 
+The EP-2350 is sold as the **FX Mic** and as the **Ting**. They run the same firmware but the buttons
+are different colours, so this README names them by position:
+
+| Button | FX Mic | Ting |
+|---|---|---|
+| TOP | orange | orange |
+| MIDDLE | white | green |
+| BOTTOM | grey | white |
+| Handle | orange | green |
+
+The website has an FX Mic / Ting switch at the top of every page that changes the colours and
+instructions to match your mic.
+
 | Control | Does |
 |---|---|
-| TOP (orange) | Next effects preset: clean → preset 1..4 → **record mode** → clean. Red LEDs indicate the selected preset. Record mode indicated by all four LEDs lit. |
-| MIDDLE (white) | Next sample slot 1..4. White LEDs show the slot. In record mode, a blinking LED indicates the slot that will be recorded into. |
-| BOTTOM (grey) | Play the selected sample (oneshot / hold / startstop, from the config). In config, you can decide if you want samples to play through the currently selected effect preset, (`"sample_fx": "preset"`) or hardcode the sample's own effects. |
+| TOP | Next effects preset: clean → preset 1..4 → **record mode** → clean. The red LEDs count up as on the stock firmware: one lit for preset 1, two for preset 2, all four for preset 4, none on clean. In record mode all four flash. |
+| MIDDLE | Next sample slot 1..4, counted on the white LEDs the same way (one lit for slot 1, all four for slot 4). |
+| BOTTOM | Play the selected sample (oneshot / hold / startstop, from the config). In config, you can decide if you want samples to play through the currently selected effect preset, (`"sample_fx": "preset"`) or hardcode the sample's own effects. |
 | Squeeze handle | Turns the mic on. Its travel is also `"$handle"` in presets (0 = just squeezed enough to open the mic, 1 = fully in). Effects parameters can be mapped to the squeeze, such as an autotune preset that switches key on a full squeeze (`squeeze_key` / `squeeze_scale`). |
 | Volume knob | Output level. |
 | TOP + MIDDLE 0.8 s | Power off. |
 
-**Record mode:** all four red LEDs lit and the slot's white LED blinks. MIDDLE picks the slot,
-squeeze and hold the handle to record, release to save. The red LEDs count down the 4 second max sample length as you record.
-A recording immediately replaces the slot's WAV. Grey plays it back to decide if you want another take.
+**Record mode:** all four red LEDs flash together and the white LEDs show the slot to record into. MIDDLE picks the slot,
+squeeze and hold the handle to record, release to save. The red LEDs stop flashing and count down the 4 second max sample length as you record.
+A recording immediately replaces the slot's WAV. BOTTOM plays it back to decide if you want another take.
 
 ## Two power-on modes (boot.py)
 
@@ -33,7 +46,7 @@ CircuitPython lets either the computer or the mic write files, never both at onc
 
 - **Normal power-on (squeeze the handle):** the mic can record. Your computer sees the drive as read-only.
 - **Hold TOP (orange) while squeezing the handle to power on (edit mode):** your computer can save `config.json`, WAVs and
-  firmware updates. Recording is off, and the red LEDs flash in record mode.
+  firmware updates. Recording is off: in record mode the red LEDs flash in alternating pairs instead of all together.
 
 `boot.py` only runs on power-on or a hard reset. If you ever get stuck, CircuitPython's safe mode
 skips it.
@@ -50,6 +63,9 @@ skips it.
 One static site, deployed by Cloudflare from `docs/` (see `wrangler.jsonc`):
 
 - `index.html`: how it works, the button guide and record mode.
+- `site-device.js` / `site-device.css`: the FX Mic / Ting switch in the nav. It sets `<html data-device>`,
+  swaps button colour words (`<span data-dw="mid">`), the site palette and the mic drawings.
+  `?device=ting` or `?device=fxmic` in a link picks one.
 - `install.html`: back up the mic (Ting or FX Mic), flash CircuitPython, then install fx-mic-mod in one click
   (it copies the files in `docs/firmware/` to CIRCUITPY), plus a serial console and restore steps.
   Adapted from this project's Ting Flash Bench.

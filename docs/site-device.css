@@ -1,0 +1,60 @@
+/* FX Mic or Ting: the switcher in the nav, the Ting palette, and the mic
+ * drawings' colours. Loaded after each page's own <style>, so the Ting
+ * tokens below win over the page's light and dark ones. See site-device.js. */
+
+/* ---------- the switcher ---------- */
+.device-switch{display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line);border-radius:999px;background:var(--panel)}
+.device-switch .ds-label{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:0 8px 0 9px}
+.device-switch button{display:inline-flex;align-items:center;gap:7px;font:600 13.5px "Archivo","Helvetica Neue",Arial,sans-serif;color:var(--muted);background:none;border:0;border-radius:999px;padding:5px 12px 5px 8px;cursor:pointer}
+.device-switch button:hover{color:var(--ink)}
+.device-switch button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.device-switch button:focus-visible{outline:2px solid var(--accent,#e2541c);outline-offset:2px}
+/* each choice shows its button colours, top to bottom */
+.device-switch .sw{display:inline-block;width:8px;height:16px;border-radius:2px;flex:none;box-shadow:0 0 0 1px rgba(0,0,0,.25);
+  background:linear-gradient(#f15a22 0 5px,var(--sw-gap) 5px 5.5px,var(--sw-mid) 5.5px 10.5px,var(--sw-gap) 10.5px 11px,var(--sw-bot) 11px)}
+.device-switch .sw{--sw-gap:rgba(0,0,0,.35)}
+.device-switch .sw-fxmic{--sw-mid:#f4f2ee;--sw-bot:#b5b6b8}
+.device-switch .sw-ting{--sw-mid:#00513a;--sw-bot:#f4f2ee}
+@media (max-width:420px){.device-switch .ds-label{display:none}.device-switch button{padding:5px 10px 5px 7px}}
+
+/* ---------- Ting palette: beige and bottle green, after Teenage Engineering's Ting guide ---------- */
+:root[data-device="ting"]{
+  --bg:#ddd4c0; --panel:#f2ede2; --panel-2:#e8e1d1; --ink:#0f3a2c; --line:#c6bca5; --muted:#4f5d52;
+  --accent:#ef5f1c; --accent-ink:#ffffff; --accent-text:#a8400c; --accent-btn:#d8521a; --accent-soft:#f3d6bf; --orange:#e2541c;
+  --green:#00513a; --grid:#d3cab4; --voice:#8b9488; --code-bg:#e6dfcf; --warn-bg:#f3d6bf; --ok-bg:#d4e2d2;
+  --led-off:#b9b09a; --track:#d6ceba; --knob:#f2ede2; --seg-on:#f2ede2;
+  --btn-mid:#00513a; --btn-bot:#f4f2ee; --btn-handle:#00513a;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root[data-device="ting"]:not([data-theme="light"]){
+  --bg:#0e211a; --panel:#152c23; --panel-2:#11261e; --ink:#ece4d2; --line:#2b4538; --muted:#a3afa2;
+  --accent:#ff6a33; --accent-ink:#1a0d06; --accent-text:#ff7a45; --accent-btn:#ff6a33; --accent-soft:#3a2617; --orange:#ff6a33;
+  --green:#5cc489; --grid:#23392f; --voice:#6f7d72; --code-bg:#1a3229; --warn-bg:#3a2617; --ok-bg:#1c3326;
+  --led-off:#3a5145; --track:#2b4538; --knob:#ece4d2; --seg-on:#2b4538;
+  --btn-mid:#1d8a62; --btn-bot:#ece4d2; --btn-handle:#1d8a62;
+  color-scheme:dark}}
+:root[data-device="ting"][data-theme="dark"]{
+  --bg:#0e211a; --panel:#152c23; --panel-2:#11261e; --ink:#ece4d2; --line:#2b4538; --muted:#a3afa2;
+  --accent:#ff6a33; --accent-ink:#1a0d06; --accent-text:#ff7a45; --accent-btn:#ff6a33; --accent-soft:#3a2617; --orange:#ff6a33;
+  --green:#5cc489; --grid:#23392f; --voice:#6f7d72; --code-bg:#1a3229; --warn-bg:#3a2617; --ok-bg:#1c3326;
+  --led-off:#3a5145; --track:#2b4538; --knob:#ece4d2; --seg-on:#2b4538;
+  --btn-mid:#1d8a62; --btn-bot:#ece4d2; --btn-handle:#1d8a62;
+  color-scheme:dark}
+:root[data-device="ting"] h1,:root[data-device="ting"] h2{color:var(--ink)}
+
+/* ---------- the mic drawings ---------- */
+/* Object colours are fixed per device; only the outline follows light and dark. */
+.dev,.hero-dev{--handle:#f15a22; --b1:#f15a22; --b2:#eceae6; --b3:#d3d3d1; --relief:#9ea1a5; --relief2:#b8babd; --cable:#c9cacc; --ledoff:var(--grill)}
+:root[data-device="ting"] .dev,:root[data-device="ting"] .hero-dev{
+  --case:#e9e8e2; --outline:#00513a; --handle:#00513a; --b1:#ff6a1f; --b2:#00513a; --b3:#e9e8e2;
+  --relief:#ff6a1f; --relief2:#ff6a1f; --cable:#00513a; --grill:#e9e8e2; --hole:#1f1f1f; --bay:#cfcdc4; --ledoff:#262626}
+.only-ting{display:none}
+:root[data-device="ting"] .only-ting{display:inline}
+:root[data-device="ting"] .only-fx{display:none}
+/* button keys in the text follow the device */
+.key.mid{background:var(--btn-mid,#ffffff)}
+.key.bot{background:var(--btn-bot,#b5b6b8)}
+:root[data-device="ting"] .key.handle{background:var(--btn-handle);border-color:var(--btn-handle)}
+:root[data-device="ting"] .modes .how .key.handle{border-color:var(--btn-handle)}
+/* swapped words read as part of their sentence */
+span[data-dw]{font:inherit!important;color:inherit!important;display:inline!important;margin:0!important;padding:0!important}

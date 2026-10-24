@@ -24,18 +24,20 @@
 .hero-dev{--case:#e4e2de; --outline:#2f3236; --grill:#6c7176; --hole:#2a2d31; --orange:#f15a22; --bw:#eceae6; --bg2:#d3d3d1;
   position:absolute;right:calc((100% - 615px) / 2 - 82px);top:58px;width:min(16%,165px);height:auto;transform:rotate(9deg);pointer-events:none;view-transition-name:hero-mic}
 @media (max-width:980px){.hero-dev{display:none}}
-.hero-dev .blink{animation:heroBlink 1s steps(1,end) infinite}
+/* Record mode, as the mic shows it: the four red lights flash together and
+   one white light holds slot 1. */
+.hero-dev .hl{animation:heroBlink 1s steps(1,end) infinite}
 @keyframes heroBlink{50%{opacity:0}}
-/* Power-up: a squeeze, the four red lights in turn, then the slot blinks */
+/* Power-up: a squeeze, the four red lights in turn, then they start flashing */
 .motion .hero-dev.intro .hero-handle{transform-box:view-box;animation:heroSqueeze .7s .25s cubic-bezier(.3,.7,.3,1) both}
 @keyframes heroSqueeze{45%{transform:translate(30px,4px) rotate(2deg)}}
-.motion .hero-dev.intro .hl{animation:heroLed .25s ease-out both}
-.motion .hero-dev.intro .hl:nth-child(1){animation-delay:.65s}.motion .hero-dev.intro .hl:nth-child(2){animation-delay:.8s}
-.motion .hero-dev.intro .hl:nth-child(3){animation-delay:.95s}.motion .hero-dev.intro .hl:nth-child(4){animation-delay:1.1s}
+.motion .hero-dev.intro .hl{animation:heroLed .25s ease-out both,heroBlink 1s 1.55s steps(1,end) infinite}
+.motion .hero-dev.intro .hl:nth-child(1){animation-delay:.65s,1.55s}.motion .hero-dev.intro .hl:nth-child(2){animation-delay:.8s,1.55s}
+.motion .hero-dev.intro .hl:nth-child(3){animation-delay:.95s,1.55s}.motion .hero-dev.intro .hl:nth-child(4){animation-delay:1.1s,1.55s}
 @keyframes heroLed{from{opacity:0}}
-.motion .hero-dev.intro .blink{animation:heroIn .2s 1.35s both,heroBlink 1s 1.55s steps(1,end) infinite}
+.motion .hero-dev.intro .w1{animation:heroIn .2s 1.35s both}
 @keyframes heroIn{from{opacity:0}}
-@media (prefers-reduced-motion:reduce){.hero-dev .blink{animation:none}}
+@media (prefers-reduced-motion:reduce){.hero-dev .hl{animation:none}}
 
 /* Press feedback on buttons and tabs */
 .btn,button.go,.site-nav a.tab,.talk,.seg button,.pick{transition:transform .12s ease-out,background-color .15s,border-color .15s,color .15s}

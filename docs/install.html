@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=Barlow:wght@300;400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="site-nav.css">
 <script src="site-stats.js"></script>
+<script src="site-device.js"></script>
 <link rel="stylesheet" href="site-motion.css">
 <style>
 /* Layout: sticky step rail on the left, one column of numbered bench steps on the right; collapses to a single column on phones.
@@ -145,6 +146,7 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 </style>
+<link rel="stylesheet" href="site-device.css">
 </head>
 <body>
 <nav class="site-nav" aria-label="Site">
@@ -164,35 +166,35 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
       <pattern id="holesHero" x="341" y="3" width="14.1" height="14.1" patternUnits="userSpaceOnUse"><circle cx="7" cy="7" r="5.2" fill="var(--hole)"/></pattern>
       <filter id="glowRHero" x="-150%" y="-150%" width="400%" height="400%"><feGaussianBlur stdDeviation="3" result="b"/><feFlood flood-color="#ff3b2f" flood-opacity=".9"/><feComposite in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       <filter id="glowWHero" x="-150%" y="-150%" width="400%" height="400%"><feGaussianBlur stdDeviation="3" result="b"/><feFlood flood-color="#ffffff" flood-opacity=".95"/><feComposite in2="b" operator="in" result="g"/><feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      <clipPath id="caseClipHero"><rect x="338" y="0" width="214" height="334" rx="7"/></clipPath>
+      <pattern id="slatsHero" x="0" y="3" width="20" height="9" patternUnits="userSpaceOnUse"><rect width="20" height="4.6" fill="var(--case)"/><path d="M0 .4 H20 M0 4.2 H20" stroke="var(--outline)" stroke-width=".8"/></pattern><clipPath id="caseClipHero"><rect x="338" y="0" width="214" height="334" rx="7"/></clipPath>
     </defs>
     <g stroke="var(--outline)" stroke-width="1.2">
-      <rect x="388" y="333" width="20" height="74" rx="2" fill="#9ea1a5"/>
-      <rect x="384" y="338" width="28" height="7" rx="2" fill="#b8babd"/><rect x="384" y="352" width="28" height="7" rx="2" fill="#b8babd"/>
-      <rect x="384" y="366" width="28" height="7" rx="2" fill="#b8babd"/><rect x="384" y="380" width="28" height="7" rx="2" fill="#b8babd"/>
-      <rect x="384" y="394" width="28" height="7" rx="2" fill="#b8babd"/>
+      <rect x="388" y="333" width="20" height="74" rx="2" fill="var(--relief)"/>
+      <rect x="384" y="338" width="28" height="7" rx="2" fill="var(--relief2)"/><rect x="384" y="352" width="28" height="7" rx="2" fill="var(--relief2)"/>
+      <rect x="384" y="366" width="28" height="7" rx="2" fill="var(--relief2)"/><rect x="384" y="380" width="28" height="7" rx="2" fill="var(--relief2)"/>
+      <rect x="384" y="394" width="28" height="7" rx="2" fill="var(--relief2)"/>
     </g>
-    <path class="hero-handle" d="M346 44 L304 52 Q288 56 292 72 L330 240 L346 240 Z" fill="var(--orange)" stroke="var(--outline)" stroke-width="1.2"/>
+    <path class="hero-handle" d="M346 44 L304 52 Q288 56 292 72 L330 240 L346 240 Z" fill="var(--handle)" stroke="var(--outline)" stroke-width="1.2"/>
     <g stroke="var(--outline)" stroke-width="1.2">
-      <path d="M540 37 h20 a6 6 0 0 1 6 6 v18 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--orange)"/>
-      <path d="M540 114 h20 a6 6 0 0 1 6 6 v20 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--bw)"/>
-      <path d="M540 242 h20 a6 6 0 0 1 6 6 v20 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--bg2)"/>
+      <path d="M540 37 h20 a6 6 0 0 1 6 6 v18 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--b1)"/>
+      <path d="M540 114 h20 a6 6 0 0 1 6 6 v20 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--b2)"/>
+      <path d="M540 242 h20 a6 6 0 0 1 6 6 v20 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--b3)"/>
     </g>
     <g clip-path="url(#caseClipHero)">
       <rect x="338" y="0" width="214" height="184" fill="var(--grill)"/>
-      <rect x="338" y="0" width="214" height="184" fill="url(#holesHero)"/>
+      <rect class="only-fx" x="338" y="0" width="214" height="184" fill="url(#holesHero)"/><g class="only-ting"><circle cx="430" cy="92" r="62" fill="var(--hole)"/><rect x="338" y="0" width="214" height="184" fill="url(#slatsHero)"/></g>
       <rect x="338" y="184" width="214" height="150" fill="var(--case)"/>
       <line x1="338" y1="184" x2="552" y2="184" stroke="var(--outline)" stroke-width="1.2"/>
     </g>
     <rect x="338" y="0" width="214" height="334" rx="7" fill="none" stroke="var(--outline)" stroke-width="1.4"/>
     <g fill="none" stroke="var(--outline)" stroke-width="1.2"><circle cx="351" cy="197" r="8.5"/><circle cx="537" cy="197" r="8.5"/><circle cx="351" cy="319" r="8.5"/><circle cx="537" cy="319" r="8.5"/></g>
-    <text x="367" y="239" font-family="Barlow, DIN Alternate, Helvetica Neue, Arial, sans-serif" font-weight="300" font-size="35" fill="#2a2a2a" letter-spacing="1">MOD</text>
-    <text x="444" y="226" font-family="Barlow, DIN Alternate, Helvetica Neue, Arial, sans-serif" font-weight="400" font-size="17" fill="var(--orange)" letter-spacing=".8">FX MIC</text>
-    <rect x="511" y="20" width="18" height="64" rx="9" fill="var(--grill)" stroke="var(--outline)" stroke-width="1.2"/>
-    <rect x="511" y="98" width="18" height="64" rx="9" fill="var(--grill)" stroke="var(--outline)" stroke-width="1.2"/>
+    <text class="only-fx" x="367" y="239" font-family="Barlow, DIN Alternate, Helvetica Neue, Arial, sans-serif" font-weight="300" font-size="35" fill="#2a2a2a" letter-spacing="1">MOD</text>
+    <text class="only-fx" x="444" y="226" font-family="Barlow, DIN Alternate, Helvetica Neue, Arial, sans-serif" font-weight="400" font-size="17" fill="var(--orange)" letter-spacing=".8">FX MIC</text><g class="only-ting"><g transform="translate(364 204) scale(0.9)" fill="none" stroke="#ff6a1f" stroke-width="9" stroke-linejoin="round"><path d="M4.5 44 V15 a7.5 7.5 0 0 1 15 0 V44 M19.5 15 a7.5 7.5 0 0 1 15 0 V44"/><rect x="47.5" y="4.5" width="24" height="39.5" rx="12"/><path d="M86.5 0 V44 M86.5 4.5 H94 a13 19.75 0 0 1 0 39.5 H86.5"/></g><text x="474" y="214" font-family="Barlow, DIN Alternate, Helvetica Neue, Arial, sans-serif" font-weight="400" font-size="14" fill="var(--outline)" letter-spacing=".6">FX MIC</text></g>
+    <rect class="only-fx" x="511" y="20" width="18" height="64" rx="9" fill="var(--grill)" stroke="var(--outline)" stroke-width="1.2"/>
+    <rect class="only-fx" x="511" y="98" width="18" height="64" rx="9" fill="var(--grill)" stroke="var(--outline)" stroke-width="1.2"/>
     <g stroke="var(--outline)" stroke-width="1">
-      <g fill="#ff3b2f" filter="url(#glowRHero)"><circle class="hl" cx="520" cy="31" r="4"/><circle class="hl" cx="520" cy="45" r="4"/><circle class="hl" cx="520" cy="59" r="4"/><circle class="hl" cx="520" cy="73" r="4"/></g>
-      <circle cx="520" cy="109" r="4" fill="var(--grill)"/><circle class="blink" cx="520" cy="109" r="4" fill="#ffffff" filter="url(#glowWHero)"/><circle cx="520" cy="123" r="4" fill="var(--grill)"/><circle cx="520" cy="137" r="4" fill="var(--grill)"/><circle cx="520" cy="151" r="4" fill="var(--grill)"/>
+      <circle cx="520" cy="31" r="4" fill="var(--ledoff)"/><circle cx="520" cy="45" r="4" fill="var(--ledoff)"/><circle cx="520" cy="59" r="4" fill="var(--ledoff)"/><circle cx="520" cy="73" r="4" fill="var(--ledoff)"/><g fill="#ff3b2f" filter="url(#glowRHero)"><circle class="hl" cx="520" cy="31" r="4"/><circle class="hl" cx="520" cy="45" r="4"/><circle class="hl" cx="520" cy="59" r="4"/><circle class="hl" cx="520" cy="73" r="4"/></g>
+      <circle cx="520" cy="109" r="4" fill="var(--ledoff)"/><circle class="w1" cx="520" cy="109" r="4" fill="#ffffff" filter="url(#glowWHero)"/><circle cx="520" cy="123" r="4" fill="var(--ledoff)"/><circle cx="520" cy="137" r="4" fill="var(--ledoff)"/><circle cx="520" cy="151" r="4" fill="var(--ledoff)"/>
     </g>
   </svg>
   <h1>Install <span>fx-mic-mod</span></h1>
@@ -286,18 +288,18 @@ picotool save -a ting-full-flash.bin</pre>
       <div class="gesture" data-reveal-list>
         <div>
           <b>1 · Squeeze</b>
-          <svg class="dev" viewBox="0 0 200 140" role="img" aria-label="The orange handle pressed all the way into the side of the mic">
-            <defs><pattern id="holesA" x="70" y="12" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--hole)"/></pattern></defs>
+          <svg class="dev" viewBox="0 0 200 140" role="img" aria-label="The handle pressed all the way into the side of the mic">
+            <defs><pattern id="slatsA" x="0" y="3" width="10" height="5" patternUnits="userSpaceOnUse"><rect width="10" height="2.6" fill="var(--case)"/><path d="M0 .3 H10 M0 2.4 H10" stroke="var(--outline)" stroke-width=".5"/></pattern><pattern id="holesA" x="70" y="12" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--hole)"/></pattern></defs>
             <path d="M74 22 L50 27 Q42 29 44 37 L64 112 L74 112 Z" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3 3"/>
-            <path d="M74 22 L68 24 Q64 26 65 32 L71 112 L74 112 Z" fill="var(--orange)" stroke="var(--outline)" stroke-width="1"/>
+            <path d="M74 22 L68 24 Q64 26 65 32 L71 112 L74 112 Z" fill="var(--handle)" stroke="var(--outline)" stroke-width="1"/>
             <path d="M30 70 H58 M51 63 L58 70 L51 77" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <g stroke="var(--outline)" stroke-width="1"><path d="M150 18 h8 a3 3 0 0 1 3 3 v9 a3 3 0 0 1 -3 3 h-8 Z" fill="var(--orange)"/><path d="M150 52 h8 a3 3 0 0 1 3 3 v9 a3 3 0 0 1 -3 3 h-8 Z" fill="var(--bw)"/><path d="M150 106 h8 a3 3 0 0 1 3 3 v9 a3 3 0 0 1 -3 3 h-8 Z" fill="var(--bg2)"/></g>
+            <g stroke="var(--outline)" stroke-width="1"><path d="M150 18 h8 a3 3 0 0 1 3 3 v9 a3 3 0 0 1 -3 3 h-8 Z" fill="var(--b1)"/><path d="M150 52 h8 a3 3 0 0 1 3 3 v9 a3 3 0 0 1 -3 3 h-8 Z" fill="var(--b2)"/><path d="M150 106 h8 a3 3 0 0 1 3 3 v9 a3 3 0 0 1 -3 3 h-8 Z" fill="var(--b3)"/></g>
             <rect x="72" y="8" width="80" height="124" rx="4" fill="var(--case)"/>
             <rect x="72" y="8" width="80" height="62" rx="4" fill="var(--grill)"/><rect x="72" y="12" width="80" height="58" fill="var(--grill)"/>
-            <rect x="72" y="12" width="80" height="58" fill="url(#holesA)"/>
+            <rect class="only-fx" x="72" y="12" width="80" height="58" fill="url(#holesA)"/><g class="only-ting"><circle cx="106" cy="40" r="22" fill="var(--hole)"/><rect x="72" y="10" width="80" height="60" fill="url(#slatsA)"/></g>
             <line x1="72" y1="70" x2="152" y2="70" stroke="var(--outline)" stroke-width="1"/>
             <rect x="72" y="8" width="80" height="124" rx="4" fill="none" stroke="var(--outline)" stroke-width="1.2"/>
-            <text x="82" y="94" font-family="Barlow, Helvetica Neue, Arial, sans-serif" font-weight="300" font-size="15" fill="#2a2a2a">MOD</text>
+            <text class="only-fx" x="82" y="94" font-family="Barlow, Helvetica Neue, Arial, sans-serif" font-weight="300" font-size="15" fill="#2a2a2a">MOD</text><g class="only-ting"><g transform="translate(80 80) scale(0.3)" fill="none" stroke="#ff6a1f" stroke-width="9" stroke-linejoin="round"><path d="M4.5 44 V15 a7.5 7.5 0 0 1 15 0 V44 M19.5 15 a7.5 7.5 0 0 1 15 0 V44"/><rect x="47.5" y="4.5" width="24" height="39.5" rx="12"/><path d="M86.5 0 V44 M86.5 4.5 H94 a13 19.75 0 0 1 0 39.5 H86.5"/></g><text x="118" y="86" font-family="Barlow, DIN Alternate, Helvetica Neue, Arial, sans-serif" font-weight="400" font-size="6.5" fill="var(--outline)" letter-spacing=".6">FX MIC</text></g>
           </svg>
           <span>Hold the handle all the way in, and keep holding it through the end of section 04, after the flash finishes and the mic reboots. Grab a rubber band if it's helpful.</span>
         </div>
@@ -317,15 +319,15 @@ picotool save -a ting-full-flash.bin</pre>
         <div>
           <b>3 · Look for the drive</b>
           <svg class="dev" viewBox="0 0 200 140" role="img" aria-label="All the mic's lights off, and a boot drive showing on the computer">
-            <defs><pattern id="holesC" x="20" y="12" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--hole)"/></pattern></defs>
+            <defs><pattern id="slatsC" x="0" y="3" width="10" height="5" patternUnits="userSpaceOnUse"><rect width="10" height="2.6" fill="var(--case)"/><path d="M0 .3 H10 M0 2.4 H10" stroke="var(--outline)" stroke-width=".5"/></pattern><pattern id="holesC" x="20" y="12" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--hole)"/></pattern></defs>
             <rect x="20" y="8" width="80" height="124" rx="4" fill="var(--case)"/>
             <rect x="20" y="8" width="80" height="62" rx="4" fill="var(--grill)"/><rect x="20" y="12" width="80" height="58" fill="var(--grill)"/>
-            <rect x="20" y="12" width="64" height="58" fill="url(#holesC)"/>
+            <rect class="only-fx" x="20" y="12" width="64" height="58" fill="url(#holesC)"/><g class="only-ting"><circle cx="54" cy="40" r="22" fill="var(--hole)"/><rect x="20" y="10" width="80" height="60" fill="url(#slatsC)"/></g>
             <line x1="20" y1="70" x2="100" y2="70" stroke="var(--outline)" stroke-width="1"/>
             <rect x="20" y="8" width="80" height="124" rx="4" fill="none" stroke="var(--outline)" stroke-width="1.2"/>
-            <g stroke="var(--outline)" stroke-width="1" fill="var(--grill)"><rect x="86" y="14" width="9" height="24" rx="4.5"/><rect x="86" y="42" width="9" height="24" rx="4.5"/></g>
+            <g class="only-fx" stroke="var(--outline)" stroke-width="1" fill="var(--grill)"><rect x="86" y="14" width="9" height="24" rx="4.5"/><rect x="86" y="42" width="9" height="24" rx="4.5"/></g>
             <g fill="#3a3d41"><circle cx="90.5" cy="19" r="2"/><circle cx="90.5" cy="24.5" r="2"/><circle cx="90.5" cy="30" r="2"/><circle cx="90.5" cy="35" r="2"/><circle cx="90.5" cy="47" r="2"/><circle cx="90.5" cy="52.5" r="2"/><circle cx="90.5" cy="58" r="2"/><circle cx="90.5" cy="63" r="2"/></g>
-            <text x="30" y="94" font-family="Barlow, Helvetica Neue, Arial, sans-serif" font-weight="300" font-size="15" fill="#2a2a2a">MOD</text>
+            <text class="only-fx" x="30" y="94" font-family="Barlow, Helvetica Neue, Arial, sans-serif" font-weight="300" font-size="15" fill="#2a2a2a">MOD</text><g class="only-ting"><g transform="translate(28 80) scale(0.3)" fill="none" stroke="#ff6a1f" stroke-width="9" stroke-linejoin="round"><path d="M4.5 44 V15 a7.5 7.5 0 0 1 15 0 V44 M19.5 15 a7.5 7.5 0 0 1 15 0 V44"/><rect x="47.5" y="4.5" width="24" height="39.5" rx="12"/><path d="M86.5 0 V44 M86.5 4.5 H94 a13 19.75 0 0 1 0 39.5 H86.5"/></g><text x="66" y="86" font-family="Barlow, DIN Alternate, Helvetica Neue, Arial, sans-serif" font-weight="400" font-size="6.5" fill="var(--outline)" letter-spacing=".6">FX MIC</text></g>
             <g transform="translate(116 46)">
               <rect width="76" height="48" rx="6" fill="none" stroke="var(--green)" stroke-width="2"/>
               <rect x="10" y="10" width="20" height="16" rx="2" fill="none" stroke="var(--green)" stroke-width="1.6"/><path d="M14 10 V6 h12 v4" fill="none" stroke="var(--green)" stroke-width="1.6"/>
@@ -434,7 +436,7 @@ picotool save -a ting-full-flash.bin</pre>
         </div>
         <div class="status" id="restoreStatus">No backup folder chosen.</div>
       </div>
-      <p>If the stock firmware freezes on a bad <code>config.json</code>, hold the white and grey buttons while it starts to get the disk back, then fix the file.</p>
+      <p>If the stock firmware freezes on a bad <code>config.json</code>, hold the <span data-dw="mid">white</span> and <span data-dw="bot">grey</span> buttons while it starts to get the disk back, then fix the file.</p>
     </section>
 
     <!-- !! -->
