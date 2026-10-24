@@ -113,13 +113,16 @@ CONFIG = load_config()
 
 # Frame rate of the whole audio path: the codec, the mic, every effect and
 # the samples. config.json's "sample_rate" picks it from autotune.RATES; the
-# codec's FLL follows the bit clock, so any of them works there.
-RATE = CONFIG.get("sample_rate", 16000)
+# codec's FLL follows the bit clock, so any of them works there. 24 kHz is the
+# most a Ting keeps up with on a full preset: at 32 kHz the built-in effects
+# overrun the mic with distortion, echo and reverb all running.
+DEFAULT_RATE = 24000
+RATE = CONFIG.get("sample_rate", DEFAULT_RATE)
 try:
     autotune.set_rate(RATE)
 except ValueError as error:
-    print("config: {}; using 16000".format(error))
-    RATE = 16000
+    print("config: {}; using {}".format(error, DEFAULT_RATE))
+    RATE = DEFAULT_RATE
     autotune.set_rate(RATE)
 # "feed_phase": 0 or 1, which half of the autotune feed buffer is written
 # while the other plays. The right one can differ between sample rates; the

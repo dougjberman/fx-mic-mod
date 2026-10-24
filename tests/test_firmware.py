@@ -39,7 +39,7 @@ THROUGH_CONFIG = {
 }
 
 
-def write_tone(path, hz, seconds, rate=16000):
+def write_tone(path, hz, seconds, rate=24000):
     import math
     import struct
     frames = b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * hz * i / rate)))
@@ -239,12 +239,12 @@ class DeviceScenarioTests(unittest.TestCase):
 
         with wave.open(os.path.join(root, "1.wav")) as take:
             self.assertEqual((take.getnchannels(), take.getsampwidth(), take.getframerate()),
-                             (1, 2, 16000))
+                             (1, 2, 24000))
             # held 1.0 s, minus the 0.1 s paddle settle and 0.05 s trim
-            self.assertAlmostEqual(take.getnframes() / 16000, 0.85, delta=0.03)
+            self.assertAlmostEqual(take.getnframes() / 24000, 0.85, delta=0.03)
         with wave.open(os.path.join(root, "2.wav")) as take:
             # held 5 s, capped at 4 s, minus the trim
-            self.assertAlmostEqual(take.getnframes() / 16000, 3.95, delta=0.03)
+            self.assertAlmostEqual(take.getnframes() / 24000, 3.95, delta=0.03)
         self.assertFalse(any(name.endswith(".tmp") for name in s["files"]))
 
         # the red LEDs count the second take down 4 -> 3 -> 2 -> 1 -> 0, a second each

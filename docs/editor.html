@@ -354,7 +354,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
         <button class="btn primary ico-btn" id="try-mic"><span class="ico rec" aria-hidden="true"></span>Use my mic</button>
         <button class="btn ico-btn" id="try-singer"><span class="ico play" aria-hidden="true"></span>Play sample singer</button>
         <button class="btn stop" id="try-stop" hidden><span class="sq" aria-hidden="true"></span><span id="try-stop-label">Stop</span></button>
-        <label class="switch" title="Shapes your computer's mic like the Ting's own: a 16 kHz system with a small capsule, so thinner and darker than your computer. Turn off to compare."><input type="checkbox" id="try-character" checked><span class="track"></span>Sound like the mic</label>
+        <label class="switch" title="Shapes your computer's mic like the Ting's own: a 24 kHz system with a small capsule, so thinner and darker than your computer. Turn off to compare."><input type="checkbox" id="try-character" checked><span class="track"></span>Sound like the mic</label>
       </div>
     </div>
     <div class="squeeze-hint" id="try-hint" hidden></div>
@@ -414,15 +414,17 @@ if (!window.track) window.track = function(){};  // site-stats.js missing
  * Effect catalogue. Mirrors firmware/config_loader.py (EFFECTS) and
  * CONFIG_FORMAT.md. `simple` params show in Simple mode; the rest only
  * in Advanced. `squeeze` params may be driven by the handle.
- * cost / ramPerMs are rough estimates for the load meter, not measurements.
+ * cost is a rough load estimate for the meter, set from a Ting at 24 kHz: autotune, distortion,
+ * echo and reverb together (104) crackled, the same without the reverb (59) and Chipmunks in space
+ * (92) did not.
  * ------------------------------------------------------------------ */
 const NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const P = (o) => Object.assign({kind:"num", simple:false, squeeze:true}, o);
 
 const EFFECTS = {
-  filter: {label:"Tone filter", what:"Cut lows to thin the voice, or highs to muffle it.", cost:3,
+  filter: {label:"Tone filter", what:"Cut lows to thin the voice, or highs to muffle it.", cost:4,
     params:{ filter:{kind:"biquad", simple:true}, mix:P({label:"Amount",min:0,max:1,step:.01,def:1,simple:true}) }},
-  distortion: {label:"Distortion", what:"Grit, from warm overdrive to broken radio.", cost:4,
+  distortion: {label:"Distortion", what:"Grit, from warm overdrive to broken radio.", cost:12,
     params:{
       drive:P({label:"Grit",min:0,max:1,step:.01,def:.6,simple:true,ends:["Clean","Broken"]}),
       mode:{kind:"enum",label:"Character",options:[["overdrive","Overdrive"],["clip","Clip"],["lofi","Lo-fi"],["wavefold","Wavefold"]],def:"overdrive",simple:true},
@@ -430,46 +432,46 @@ const EFFECTS = {
       post_gain:P({label:"Output gain",min:-40,max:20,step:1,def:-8,unit:"dB",simple:true}),
       soft_clip:{kind:"bool",label:"Soft clip",def:true},
       mix:P({label:"Amount",min:0,max:1,step:.01,def:1,simple:true}) }},
-  pitch_shift: {label:"Pitch shift", what:"Move the voice up or down. Monsters and chipmunks.", cost:15,
+  pitch_shift: {label:"Pitch shift", what:"Move the voice up or down. Monsters and chipmunks.", cost:21,
     params:{
       semitones:P({label:"Pitch",min:-12,max:12,step:1,def:-5,unit:"st",simple:true,ends:["Lower","Higher"]}),
       mix:P({label:"Amount",min:0,max:1,step:.01,def:1,simple:true}),
       window:P({kind:"int",label:"Window",min:256,max:2048,step:128,def:1024,squeeze:false,unit:"smp"}),
       overlap:P({kind:"int",label:"Overlap",min:32,max:512,step:32,def:128,squeeze:false,unit:"smp"}) }},
-  granular_pitch_shift: {label:"Grain shift", what:"Grainy, shimmery pitch shift, up to two octaves.", cost:15,
+  granular_pitch_shift: {label:"Grain shift", what:"Grainy, shimmery pitch shift, up to two octaves.", cost:21,
     params:{
       semitones:P({label:"Pitch",min:-24,max:24,step:1,def:8,unit:"st",simple:true,ends:["Lower","Higher"]}),
       mix:P({label:"Amount",min:0,max:1,step:.01,def:1,simple:true}),
       density:P({kind:"int",label:"Density",min:1,max:8,step:1,def:3,squeeze:false}),
       grain_size:P({kind:"int",label:"Grain size",min:128,max:2048,step:128,def:512,squeeze:false,unit:"smp"}),
       spread:P({kind:"float",label:"Spread",min:0,max:1,step:.01,def:0,squeeze:false}) }},
-  chorus: {label:"Chorus", what:"Several of you at once, slightly out of step.", cost:8, ram:"max_delay_ms",
+  chorus: {label:"Chorus", what:"Several of you at once, slightly out of step.", cost:11, ram:"max_delay_ms",
     params:{
       voices:P({label:"Voices",min:1,max:5,step:1,def:3,simple:true}),
       delay_ms:P({label:"Spread",min:1,max:50,step:1,def:25,unit:"ms",simple:true}),
       mix:P({label:"Amount",min:0,max:1,step:.01,def:.5,simple:true}),
       max_delay_ms:P({kind:"int",label:"Max delay",min:10,max:500,step:10,def:50,squeeze:false,unit:"ms"}) }},
-  phaser: {label:"Phaser", what:"A swooshing, jet-plane sweep.", cost:8,
+  phaser: {label:"Phaser", what:"A swooshing, jet-plane sweep.", cost:11,
     params:{
       frequency:P({label:"Center",min:100,max:5000,step:10,def:1000,unit:"Hz",simple:true,log:true}),
       feedback:P({label:"Intensity",min:0,max:.95,step:.01,def:.7,simple:true}),
       mix:P({label:"Amount",min:0,max:1,step:.01,def:.5,simple:true}),
       stages:P({kind:"int",label:"Stages",min:2,max:12,step:2,def:6,squeeze:false}) }},
-  echo: {label:"Echo", what:"Repeats of your voice. Short for slap-back, long for canyons.", cost:5, ram:"max_delay_ms",
+  echo: {label:"Echo", what:"Repeats of your voice. Short for slap-back, long for canyons.", cost:12, ram:"max_delay_ms",
     params:{
       delay_ms:P({label:"Time",min:20,max:1500,step:10,def:250,unit:"ms",simple:true}),
       decay:P({label:"Repeats",min:0,max:.95,step:.01,def:.5,simple:true,ends:["One","Many"]}),
       mix:P({label:"Amount",min:0,max:1,step:.01,def:.3,simple:true}),
       freq_shift:{kind:"bool",label:"Tape-style pitch bend",def:false},
       max_delay_ms:P({kind:"int",label:"Max delay",min:50,max:2000,step:50,def:500,squeeze:false,unit:"ms"}) }},
-  multi_tap_delay: {label:"Multi-tap delay", what:"Rhythmic echoes at set points in the delay.", cost:8, ram:"max_delay_ms",
+  multi_tap_delay: {label:"Multi-tap delay", what:"Rhythmic echoes at set points in the delay.", cost:15, ram:"max_delay_ms",
     params:{
       delay_ms:P({label:"Time",min:20,max:1500,step:10,def:500,unit:"ms",simple:true}),
       decay:P({label:"Repeats",min:0,max:.95,step:.01,def:.6,simple:true}),
       mix:P({label:"Amount",min:0,max:1,step:.01,def:.3,simple:true}),
       taps:{kind:"json",label:"Taps",def:[[0.333,0.6],[0.666,0.8],1]},
       max_delay_ms:P({kind:"int",label:"Max delay",min:50,max:2000,step:50,def:750,squeeze:false,unit:"ms"}) }},
-  freeverb: {label:"Reverb", what:"Put the voice in a room, a hall or a cathedral.", cost:20,
+  freeverb: {label:"Reverb", what:"Put the voice in a room, a hall or a cathedral.", cost:45,
     params:{
       roomsize:P({label:"Size",min:0,max:1,step:.01,def:.6,simple:true,ends:["Closet","Cathedral"]}),
       damp:P({label:"Darkness",min:0,max:1,step:.01,def:.5,simple:true,ends:["Bright","Dark"]}),
@@ -477,7 +479,7 @@ const EFFECTS = {
 };
 const ALIASES = {reverb:"freeverb", delay:"echo", multitap_delay:"multi_tap_delay", multitapdelay:"multi_tap_delay",
   pitchshift:"pitch_shift", granularpitchshift:"granular_pitch_shift", auto_tune:"autotune", harmony:"harmonizer"};
-const AUTOTUNE_COST = 30;
+const AUTOTUNE_COST = 35;
 // Harmonizer chords, in the families the picker shows. Tones match firmware/autotune.py CHORDS.
 const CHORD_FAMILIES = [
   ["In the key", [["key_third","3rd above"],["key_triad","Triad"],["key_seventh","7th chord"]]],
@@ -496,22 +498,22 @@ const CHORD_NOTES = {
   "6/9":"Lush and resolved, leaves out the 5th.", maj9:"Lush major, leaves out the 5th.", "9":"Funky dominant 9th, leaves out the 5th.", m9:"Lush minor, leaves out the 5th.",
   "7b9":"Dark dominant, leaves out the 5th.", "7#9":"The Hendrix chord.", "maj7#11":"Bright and floaty, Lydian.", "11":"7th, 9th and 11th over you.", m11:"Minor 3rd, 7th and 11th.",
   "13":"3rd, 7th and 13th over you.", maj13:"3rd, maj7th and 13th.", m13:"Minor 3rd, 7th and 13th.", quartal:"Stacked 4ths. Modern and open."};
-const HARMONY_VOICE_COST = 12;
+const HARMONY_VOICE_COST = 17;
 const FILTER_MODES = [["high_pass","Thin (cut lows)"],["low_pass","Muffle (cut highs)"],["band_pass","Telephone (band)"],["notch","Notch"]];
 const PLAYMODES = [["oneshot","Tap to play"],["hold","Hold to play"],["startstop","Tap start / stop"]];
 
 const STARTERS = [
-  {name:"Hard tune", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"freeverb",roomsize:0,damp:.6,mix:.15}]},
+  {name:"Hard tune", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"freeverb",roomsize:0,damp:.6,mix:.19}]},
   {name:"Squeeze for backups", list:[{effect:"autotune",key:"C",scale:"major",speed:.7,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:2,octave:0,level:"$handle"},{effect:"echo",delay_ms:250,decay:.1,mix:.06,freq_shift:false,max_delay_ms:500}]},
-  {name:"Stadium tune", list:[{effect:"autotune",key:"A",scale:"minor",speed:.7,humanize:.2,mix:1},{effect:"chorus",max_delay_ms:50,delay_ms:20,voices:2,mix:.35},{effect:"freeverb",roomsize:.49,damp:.4,mix:.85}]},
+  {name:"Stadium tune", list:[{effect:"autotune",key:"A",scale:"minor",speed:.7,humanize:.2,mix:1},{effect:"chorus",max_delay_ms:50,delay_ms:20,voices:2,mix:.35},{effect:"freeverb",roomsize:.68,damp:.4,mix:.46}]},
   {name:"Radio", list:[{effect:"filter",filter:{mode:"band_pass",frequency:1500,Q:1.2},mix:1},{effect:"distortion",drive:.5,pre_gain:12,post_gain:-10,mode:"clip",soft_clip:true,mix:1}]},
-  {name:"Chipmunks in space", list:[{effect:"filter",filter:{mode:"high_pass",frequency:200,Q:.7071},mix:1},{effect:"granular_pitch_shift",semitones:8,density:2,mix:1,grain_size:512,spread:0},{effect:"chorus",voices:3,delay_ms:30,mix:.5,max_delay_ms:50},{effect:"echo",max_delay_ms:1200,delay_ms:750,decay:.25,mix:.09,freq_shift:true},{effect:"freeverb",roomsize:.25,damp:.55,mix:.9}]},
+  {name:"Chipmunks in space", list:[{effect:"filter",filter:{mode:"high_pass",frequency:200,Q:.7071},mix:1},{effect:"granular_pitch_shift",semitones:8,density:2,mix:1,grain_size:512,spread:0},{effect:"chorus",voices:3,delay_ms:30,mix:.5,max_delay_ms:50},{effect:"echo",max_delay_ms:1200,delay_ms:750,decay:.25,mix:.09,freq_shift:true},{effect:"freeverb",roomsize:.5,damp:.55,mix:.6}]},
   {name:"Squeeze monster", list:[{effect:"pitch_shift",semitones:{block:"math",operation:"constrained_lerp",a:-12,b:12,c:"$handle"},mix:1,window:1024,overlap:128},{effect:"distortion",drive:.6,pre_gain:12,post_gain:-8,mode:"overdrive",soft_clip:true,mix:1},{effect:"filter",filter:{mode:"low_pass",frequency:3500,Q:.7071},mix:1}]},
-  {name:"Key flip", list:[{effect:"autotune",key:"C",scale:"major",squeeze_scale:"minor",speed:.85,humanize:.1,mix:1},{effect:"echo",max_delay_ms:500,delay_ms:250,decay:.3,mix:.13},{effect:"freeverb",roomsize:0,damp:.5,mix:.29}]},
-  {name:"Snapped and crunched", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"distortion",drive:.6,mode:"overdrive",pre_gain:25,post_gain:-16,soft_clip:true,mix:.4},{effect:"echo",delay_ms:250,decay:.38,mix:{block:"math",operation:"constrained_lerp",a:0,b:.33,c:"$handle"},freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:0,damp:.6,mix:.06}]},
+  {name:"Key flip", list:[{effect:"autotune",key:"C",scale:"major",squeeze_scale:"minor",speed:.85,humanize:.1,mix:1},{effect:"echo",max_delay_ms:500,delay_ms:250,decay:.3,mix:.13},{effect:"freeverb",roomsize:.25,damp:.5,mix:.27}]},
+  {name:"Snapped and crunched", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"distortion",drive:.6,mode:"overdrive",pre_gain:25,post_gain:-16,soft_clip:true,mix:.4},{effect:"echo",delay_ms:250,decay:.38,mix:{block:"math",operation:"constrained_lerp",a:0,b:.33,c:"$handle"},freq_shift:false,max_delay_ms:400}]},
 ];
 STARTERS.push(
-  {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.37,damp:.5,mix:.52}]});
+  {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]});
 const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.6],[STARTERS[1],.45],[STARTERS[4],1],[STARTERS[5],.2]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Balance preset volume outputs
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"hold"},{file:"4.wav",playmode:"startstop"}]};
 
@@ -665,14 +667,16 @@ function loadMeter(p){
   const tuned = p.list.some(fx=>fx.effect==="autotune" && fx.enabled!==false);
   p.list.forEach(fx => { if (fx.enabled===false) return; if (fx.effect==="autotune"){ cost+=AUTOTUNE_COST; return; }
     if (fx.effect==="harmonizer"){ cost += harmonyVoices(fx).length*HARMONY_VOICE_COST + (tuned ? 0 : AUTOTUNE_COST-10); return; }
-    const e=EFFECTS[fx.effect]; if(!e) return; cost+=e.cost; if (e.ram){ const ms = typeof fx.max_delay_ms==="number"?fx.max_delay_ms:e.params.max_delay_ms.def; ramKB += ms*32/1000; } });
+    const e=EFFECTS[fx.effect]; if(!e) return; cost+=e.cost; if (e.ram){ const ms = typeof fx.max_delay_ms==="number"?fx.max_delay_ms:e.params.max_delay_ms.def; ramKB += ms*2*(typeof config.sample_rate==="number" ? config.sample_rate : 24000)/1e6; } });
+  // Costs are for 24 kHz; the built-in effects' work grows with the rate.
+  cost = Math.round(cost * (typeof config.sample_rate==="number" ? config.sample_rate : 24000) / 24000);
   const pct = Math.min(100, cost);
-  const cls = cost>90?"bad":cost>70?"warn":"";
+  const cls = cost>100?"bad":cost>85?"warn":"";
   return h("div",{class:"meter"},
     h("div",{class:"row spread small"}, h("span",{}, h("b",{},"Estimated load "), h("span",{class:"mono"}, cost+"%")),
-      h("span",{class:"muted"}, ramKB ? "Delay memory "+Math.round(ramKB)+" KB · " : "", "Estimate, not measured on the mic yet")),
+      h("span",{class:"muted"}, ramKB ? "Delay memory "+Math.round(ramKB)+" KB · " : "", "Estimate, from tests on a Ting")),
     h("div",{class:"bar "+cls}, h("i",{style:"width:"+pct+"%"})),
-    cost>90 ? h("p",{class:"small", style:"color:var(--bad)"},"This chain may be too heavy and stutter. Try removing an effect.") : null);
+    cost>100 ? h("p",{class:"small", style:"color:var(--bad)"},"This chain is likely too heavy for the mic and will crackle. Try removing an effect; the reverb costs the most.") : null);
 }
 
 function fxHead(title, what, list, i, fx, extra){
@@ -1189,20 +1193,23 @@ $("#pack-name").addEventListener("input", e=>{ config.name = e.target.value.toUp
 
 /* ------------------------- try it (Web Audio) ------------------------ *
  * Runs the selected preset on the computer mic through ting-dsp.js, at the
- * mic's 16 kHz where the browser allows it. The button acts as the
+ * mic's own rate (24 kHz unless config.json sets "sample_rate") where the
+ * browser allows it. The button acts as the
  * handle: open/closed gates the mic, the Squeeze slider is "$handle".
  * ------------------------------------------------------------------- */
 const tryState = {ctx:null, engine:null, src:null, stream:null, running:false, open:true, squeeze:0, held:false, level:0.5, timer:0, character:null};
 /* The mic's own sound, ahead of the presets: the firmware's 120 Hz high-pass,
- * the 16 kHz system's top end (nothing above ~7 kHz), and a small capsule's
+ * the system's top end (nothing above about 0.43 of its rate), and a small capsule's
  * thin low end and upper-mid push. An estimate, to be tuned against
  * recordings from a real Ting. */
+function deviceRate(){ return typeof config.sample_rate==="number" ? config.sample_rate : 24000; }
 function tryCharacter(ctx){
+  const top = Math.min(0.425 * deviceRate(), 0.45 * ctx.sampleRate);
   const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 120; hp.Q.value = 0.7;
   const low = ctx.createBiquadFilter(); low.type = "lowshelf"; low.frequency.value = 300; low.gain.value = -4;
   const mid = ctx.createBiquadFilter(); mid.type = "peaking"; mid.frequency.value = 2500; mid.Q.value = 0.8; mid.gain.value = 3;
-  const lp1 = ctx.createBiquadFilter(); lp1.type = "lowpass"; lp1.frequency.value = 6800; lp1.Q.value = 0.7;
-  const lp2 = ctx.createBiquadFilter(); lp2.type = "lowpass"; lp2.frequency.value = 6800; lp2.Q.value = 0.7;
+  const lp1 = ctx.createBiquadFilter(); lp1.type = "lowpass"; lp1.frequency.value = top; lp1.Q.value = 0.7;
+  const lp2 = ctx.createBiquadFilter(); lp2.type = "lowpass"; lp2.frequency.value = top; lp2.Q.value = 0.7;
   hp.connect(low); low.connect(mid); mid.connect(lp1); lp1.connect(lp2);
   return {input: hp, output: lp2};
 }
@@ -1218,13 +1225,13 @@ function tryPreset(){
   if (!tryState.engine) return;
   if (slotAudio.some(Boolean)) trySend({samples: slotPayload()});
   clearTimeout(tryState.timer);
-  tryState.timer = setTimeout(()=>{ const p = serialize().presets[selected]; trySend({preset: p || null, sampleFx: config.sample_fx || "own"}); }, 60);
+  tryState.timer = setTimeout(()=>{ const p = serialize().presets[selected]; trySend({g:{rate: deviceRate()}, preset: p || null, sampleFx: config.sample_fx || "own"}); }, 60);
 }
 async function tryEnsure(){
   if (tryState.ctx) return;
   if (typeof makeTingEngine !== "function") throw new Error("The audio engine (ting-dsp.js) didn't load.");
   let ctx;
-  try { ctx = new AudioContext({latencyHint:"interactive", sampleRate:16000}); }
+  try { ctx = new AudioContext({latencyHint:"interactive", sampleRate:deviceRate()}); }
   catch(e){ ctx = new AudioContext({latencyHint:"interactive"}); }
   tryState.ctx = ctx;
   tryState.engine = await makeTingEngine(ctx);
@@ -1413,6 +1420,8 @@ config = restore() || normalizeConfig(DEFAULT_CONFIG);
 // Earlier site defaults. A visitor whose preset still matches one exactly never changed it, so it
 // moves to the current default in that slot.
 const OLD_DEFAULTS = [
+  [0, '{"name":"Snapped and crunched","level":0.6,"list":[{"effect":"autotune","key":"C","scale":"chromatic","speed":1,"humanize":0,"mix":1},{"effect":"distortion","drive":0.6,"mode":"overdrive","pre_gain":25,"post_gain":-16,"soft_clip":true,"mix":0.4},{"effect":"echo","delay_ms":250,"decay":0.38,"mix":{"block":"math","operation":"constrained_lerp","a":0,"b":0.33,"c":"$handle"},"freq_shift":false,"max_delay_ms":400},{"effect":"freeverb","roomsize":0,"damp":0.6,"mix":0.06}]}'],
+  [2, '{"name":"Chipmunks in space","list":[{"effect":"filter","filter":{"mode":"high_pass","frequency":200,"Q":0.7071},"mix":1},{"effect":"granular_pitch_shift","semitones":8,"density":2,"mix":1,"grain_size":512,"spread":0},{"effect":"chorus","voices":3,"delay_ms":30,"mix":0.5,"max_delay_ms":50},{"effect":"echo","max_delay_ms":1200,"delay_ms":750,"decay":0.25,"mix":0.09,"freq_shift":true},{"effect":"freeverb","roomsize":0.25,"damp":0.55,"mix":0.9}]}'],
   [0, '{"name":"Snapped and crunched","level":0.6,"list":[{"effect":"autotune","key":"C","scale":"chromatic","speed":1,"humanize":0,"mix":1},{"effect":"distortion","drive":0.6,"mode":"overdrive","pre_gain":25,"post_gain":-16,"soft_clip":true,"mix":0.4},{"effect":"echo","delay_ms":250,"decay":0.38,"mix":{"block":"math","operation":"constrained_lerp","a":0,"b":0.4,"c":"$handle"},"freq_shift":false,"max_delay_ms":400},{"effect":"freeverb","roomsize":0.2,"damp":0.6,"mix":0.15}]}'],
   [1, '{"name":"Squeeze for backups","level":0.45,"list":[{"effect":"autotune","key":"C","scale":"major","speed":0.7,"humanize":0.2,"mix":1},{"effect":"harmonizer","chord":"key_triad","inversion":2,"octave":0,"level":"$handle"},{"effect":"echo","delay_ms":250,"decay":0.1,"mix":0.1,"freq_shift":false,"max_delay_ms":500}]}'],
   [2, '{"name":"Chipmunks in space","list":[{"effect":"filter","filter":{"mode":"high_pass","frequency":200,"Q":0.7071},"mix":1},{"effect":"granular_pitch_shift","semitones":8,"density":2,"mix":1,"grain_size":512,"spread":0},{"effect":"chorus","voices":3,"delay_ms":30,"mix":0.5,"max_delay_ms":50},{"effect":"echo","max_delay_ms":1200,"delay_ms":750,"decay":0.25,"mix":0.15,"freq_shift":true},{"effect":"freeverb","roomsize":0.75,"damp":0.55,"mix":0.6}]}'],

@@ -27,7 +27,7 @@ parameter names and types) and the demo `config.json`.
   - `"preset"`: samples play dry into the effect preset currently selected on the mic (TOP button), mixed with the mic ahead of the
     whole chain, autotune included. The handle still gates only the mic. Sample `effects` are
     ignored. On clean and in record mode samples play dry. On autotune presets the firmware
-    streams the WAV into autotune itself, so the file must be 16-bit mono 16 kHz (the
+    streams the WAV into autotune itself, so the file must be 16-bit mono at the mic's rate, 24 kHz by default (the
     recorder writes that).
 
 ## Preset
@@ -57,7 +57,7 @@ It can only turn a preset down, because a mixer voice can't go above 1.0.
 {"file": "1.wav", "playmode": "oneshot|hold|startstop", "blocks": {...}, "effects": [EFFECT, ...]}
 ```
 
-Samples must be 16-bit mono WAVs at the mic's `sample_rate` (16 kHz unless set). The install guide's step 05 converts other WAVs to 16 kHz.
+Samples must be 16-bit mono WAVs at the mic's `sample_rate` (24 kHz unless set). The install guide's step 05 converts other WAVs to 24 kHz.
 
 ## Effect
 
@@ -66,17 +66,18 @@ Every effect: `"effect": <type>`, optional `"mix"` (0..1), optional `"enabled": 
 `mix` is CircuitPython's own, and it isn't a crossfade for every effect. `echo`, `multi_tap_delay` and
 `freeverb` keep the dry voice at full level up to mix 0.5 and bring the effect in at full by 0.5, so
 0.25 is already an even blend. `chorus` always keeps the dry voice at full and adds the voices on top.
-`freeverb`'s rooms are sized in samples for 44.1 kHz, and the mic runs at 16 kHz, so every room is
-nearly three times longer than the same `roomsize` would be on a computer: small rooms want `roomsize`
-near 0. The editor's preview follows all of this.
+`freeverb`'s rooms are sized in samples for 44.1 kHz, and the mic runs at 24 kHz, so every room is
+nearly twice as long as the same `roomsize` would be on a computer: small rooms want a low `roomsize`. The editor's preview follows all of this.
 Any numeric param marked (B) accepts a number, a block object, or `"$name"`.
 `"$handle"` is supplied by the firmware: 0.0 from rest until the squeeze has opened the mic and
 gone a little further (the paddle click point plus a dead zone, so you can sing with a light squeeze), then up to
 1.0 fully squeezed. The firmware learns the click point as you play. The dead zone is 0.25 of
 the travel; a top-level `"handle_dead_zone": 0..0.5` in config.json changes it.
 
-A top-level `"sample_rate"` sets the rate the whole mic runs at: 16000 (the default), 24000, 32000
-or 48000. Higher rates keep more of the top end and cost more CPU and memory. Samples must be WAVs at
+A top-level `"sample_rate"` sets the rate the whole mic runs at: 16000, 24000 (the default), 32000
+or 48000. Higher rates keep more of the top end and cost more CPU and memory: at 32 kHz a Ting
+crackles on a preset with autotune, distortion, echo and reverb, and at 24 kHz that preset needs to
+lose its reverb. Samples must be WAVs at
 that rate, and sample counts in presets (`grain_size`, `window`, `overlap`) are written for 16 kHz:
 the mic scales them, so a grain keeps its length in time.
 
@@ -159,4 +160,4 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
 - Name a block under `"blocks"` and refer to it as `"$name"` to share it between params.
 
 ## Not in the file
-Sample rate (16 kHz), buffer sizes, mic gain and volume are firmware constants, never in the JSON.
+Buffer sizes, mic gain and volume are firmware constants, never in the JSON.

@@ -406,7 +406,8 @@ def suite(dev, report, args):
     hits = 0
     for index, (midi, cents) in enumerate(A.OFF_NOTES):
         start = A.LEAD_IN + index * (A.NOTE_SECONDS + A.GAP_SECONDS)
-        mid = slice(int((start + 0.2) * A.RATE / 256), int((start + A.NOTE_SECONDS - 0.1) * A.RATE / 256))
+        block = A.RATE * 16 // 1000  # one 16 ms detection block
+        mid = slice(int((start + 0.2) * A.RATE / block), int((start + A.NOTE_SECONDS - 0.1) * A.RATE / block))
         seen = hz[mid]
         seen = seen[seen > 0]
         if len(seen) and abs(A.hz_midi(A.np.median(seen)) - (midi + cents / 100)) < 0.15:

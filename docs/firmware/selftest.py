@@ -44,23 +44,25 @@ import synthio
 
 import adafruit_nau88l21
 import autotune
-from autotune import BLOCK_SIZE, Autotune, detect_pitch_autocorrelation
-from config_loader import create_preset, preset_level, uses_tune_stage
 
-# Same audio settings as code.py.
-RATE = 16000
+# Same audio settings as code.py (its default rate).
+RATE = 24000
+autotune.set_rate(RATE)
+
+from autotune import BLOCK_SIZE, Autotune, detect_pitch_autocorrelation  # noqa: E402  after set_rate
+from config_loader import create_preset, preset_level, uses_tune_stage  # noqa: E402
 MIC_GAIN = 14
 ADC_VOLUME = 0
 HEADPHONE_VOLUME = 0
 HPF_HZ = 120
 FORMAT = {
-    "buffer_size": 1024,
+    "buffer_size": 1536,
     "sample_rate": RATE,
     "bits_per_sample": 16,
     "samples_signed": True,
     "channel_count": 1,
 }
-AUTOTUNE_FORMAT = dict(FORMAT, buffer_size=512)
+AUTOTUNE_FORMAT = dict(FORMAT, buffer_size=2 * BLOCK_SIZE)
 
 # Output level for loopback checks, in dB on the DAC. Loud enough for the mic
 # to hear the speaker clearly, quiet enough not to clip it.

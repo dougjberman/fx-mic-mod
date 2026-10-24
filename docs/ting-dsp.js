@@ -441,8 +441,8 @@ function dspFactory(){
       case "freeverb":{
         const room=P("roomsize",0.5), damp=P("damp",0.5);   // ASSUMED defaults
         // CircuitPython's Freeverb, step for step. Its comb and all-pass lengths are fixed sample counts,
-        // which the mic plays at 16 kHz, so the rooms are scaled from 16 kHz rather than 44.1 kHz
-        const k=sr/BASE, combs=[1116,1188,1277,1356,1422,1491,1557,1617].map(n=>({b:new Float32Array(Math.max(8,Math.round(n*k))),i:0,f:0})),
+        // played at the mic's own rate (host.g.rate, 24 kHz by default) rather than 44.1 kHz
+        const k=sr/(host.g.rate||24000), combs=[1116,1188,1277,1356,1422,1491,1557,1617].map(n=>({b:new Float32Array(Math.max(8,Math.round(n*k))),i:0,f:0})),
           aps=[556,441,341,225].map(n=>({b:new Float32Array(Math.max(8,Math.round(n*k))),i:0}));
         fx.process=(buf,env)=>{
           const fb=clamp(room(env),0,1)*0.28+0.7, d1=clamp(damp(env),0,1)*0.4, d2=1-d1, mix=clamp(mixF(env),0,1),
@@ -513,7 +513,7 @@ function dspFactory(){
   class TingDSP {
     constructor(sr){
       this.sr=sr; this.S=sr/BASE;
-      this.g={power:true, gate:false, handle:0, level:0.4, engine:"native", detector:"yin", hyst:0.3, vt:0.15, minRms:250, minHz:80, maxHz:500};
+      this.g={rate:24000, power:true, gate:false, handle:0, level:0.4, engine:"native", detector:"yin", hyst:0.3, vt:0.15, minRms:250, minHz:80, maxHz:500};
       this.host={sr, g:this.g, blocks:{handle:()=>this.g.handle}, report:i=>{ this.atInfo=i; }};
       this.chain=[]; this.samples=[]; this.voice=null;
       this.tuner=new Detector(sr,this.g); this.tunerInfo=null; this.atInfo=null;

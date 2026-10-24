@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "firmware"))
 
 import autotune  # noqa: E402  (the firmware's own chord tables)
 
-RATE = 16000
+RATE = 24000  # the mic's default rate (code.py DEFAULT_RATE)
 LEAD_IN = 0.8          # seconds of silence before the first note
 NOTE_SECONDS = 0.6
 GAP_SECONDS = 0.1
