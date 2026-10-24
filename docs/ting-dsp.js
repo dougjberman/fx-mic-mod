@@ -513,7 +513,7 @@ function dspFactory(){
   class TingDSP {
     constructor(sr){
       this.sr=sr; this.S=sr/BASE;
-      this.g={rate:24000, power:true, gate:false, handle:0, level:0.4, engine:"native", detector:"yin", hyst:0.3, vt:0.15, minRms:250, minHz:80, maxHz:500};
+      this.g={rate:24000, sampleLevel:0.4, power:true, gate:false, handle:0, level:0.4, engine:"native", detector:"yin", hyst:0.3, vt:0.15, minRms:250, minHz:80, maxHz:500};
       this.host={sr, g:this.g, blocks:{handle:()=>this.g.handle}, report:i=>{ this.atInfo=i; }};
       this.chain=[]; this.samples=[]; this.voice=null;
       this.tuner=new Detector(sr,this.g); this.tunerInfo=null; this.atInfo=null;
@@ -566,7 +566,7 @@ function dspFactory(){
       const smp=this.smp; smp.fill(0); let playing=-1;
       if(this.voice){
         const v=this.voice, d=v.s.data; playing=this.samples.indexOf(v.s);
-        for(let i=0;i<n;i++){ if(v.pos>=d.length){ if(v.loop) v.pos=0; else { this.voice=null; break; } } smp[i]=d[v.pos++]; }
+        for(let i=0;i<n;i++){ if(v.pos>=d.length){ if(v.loop) v.pos=0; else { this.voice=null; break; } } smp[i]=d[v.pos++]*g.sampleLevel; }
       }
       const gGoal=g.gate?1:0, lGoal=g.power?g.level:0, through=this.through&&!this.rec;
       // sample_fx "preset": the sample is mixed in ahead of the preset (autotune included), and the handle gates only the mic

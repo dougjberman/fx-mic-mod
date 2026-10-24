@@ -80,7 +80,8 @@ def main():
         # mixers after the output one are preset input mixers
         "heads": [
             {"mic_level": m.voice[0].level,
-             "sample": type(m.voice[1].playing).__name__}
+             "sample": type(m.voice[1].playing).__name__,
+             "sample_level": m.voice[1].level}
             for m in script.mixers[1:]
         ],
         "out_level": env["mixer"].voice[0].level,

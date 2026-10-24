@@ -81,6 +81,9 @@ lose its reverb. Samples must be WAVs at
 that rate, and sample counts in presets (`grain_size`, `window`, `overlap`) are written for 16 kHz:
 the mic scales them, so a grain keeps its length in time.
 
+A top-level `"sample_level"` (0..1, default 0.4) sets how loud samples play. Samples are usually
+full scale while the voice comes in at the mic's level, so full level drowns the voice.
+
 A top-level `"feed_phase"` (0 or 1, default 1) picks which half of the autotune stage's double buffer
 is written while the other plays. If autotune presets crackle steadily and clean ones don't, try the
 other value.

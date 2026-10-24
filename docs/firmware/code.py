@@ -366,6 +366,15 @@ if isinstance(_dead_zone, (int, float)) and not isinstance(_dead_zone, bool) and
 else:
     print("handle_dead_zone must be a number from 0 to 0.5; using {}".format(HANDLE_DEAD_ZONE))
 
+# "sample_level": how loud samples play, 0..1. A converted sample is full
+# scale and the voice comes in at the mic's level, so full level drowns it.
+SAMPLE_LEVEL = 0.4
+_sample_level = CONFIG.get("sample_level", SAMPLE_LEVEL)
+if isinstance(_sample_level, (int, float)) and not isinstance(_sample_level, bool) and 0 <= _sample_level <= 1:
+    SAMPLE_LEVEL = _sample_level
+else:
+    print("sample_level must be a number from 0 to 1; using {}".format(SAMPLE_LEVEL))
+
 # The cycle position of record mode: one past the last preset.
 RECORD_SPOT = len(PRESETS) + 1
 
@@ -507,6 +516,7 @@ def build(ctx, preset):
             ctx.tune_keys = (rest, alt)
         ctx.tune_squeezed = False
         ctx.tune = Autotune(mic, fmt, **tune_args)
+        ctx.tune.sample_gain = int(SAMPLE_LEVEL * 256)
         source = ctx.tune.output
     else:
         source = mic
@@ -870,7 +880,9 @@ def start_sample(ctx, loop=False):
             print("{} can't go through autotune: {}".format(ctx.current_path, error))
     else:
         try:
-            sample_voice(ctx).play(ctx.current_source, loop=loop)
+            voice = sample_voice(ctx)
+            voice.level = SAMPLE_LEVEL
+            voice.play(ctx.current_source, loop=loop)
         except (ValueError, RuntimeError) as error:
             print("{} can't play: {}".format(ctx.current_path, error))
 

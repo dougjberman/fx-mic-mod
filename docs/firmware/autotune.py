@@ -640,8 +640,9 @@ class Autotune:
         # samples are mixed into this stage, so the paddle can mute the mic
         # without muting the sample.
         self.gate = 1
-        # The WaveReader being mixed in, or None.
+        # The WaveReader being mixed in, or None, and its level in 256ths.
         self.sample = None
+        self.sample_gain = 256
         self._zeros = array.array("h", [0] * BLOCK_SIZE)
 
         # Python writes each processed block into the half of this buffer
@@ -810,9 +811,9 @@ class Autotune:
             block[0:BLOCK_SIZE] = self._zeros
         sample = self.sample
         if sample is not None:
-            extra, n = sample.buf, sample.read()
+            extra, n, gain = sample.buf, sample.read(), self.sample_gain
             for i in range(n):
-                value = block[i] + extra[i]
+                value = block[i] + ((extra[i] * gain) >> 8)
                 block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
             if sample.done:
                 self.stop_sample()

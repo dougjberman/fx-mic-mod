@@ -274,7 +274,7 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertEqual(shifter["min"], 0.0)
         self.assertAlmostEqual(shifter["max"], 0.46, delta=0.05)
         # clean and the echo preset take the sample on an input mixer, mic gated off
-        self.assertEqual(s["heads"][-1], {"mic_level": 0.0, "sample": "WaveFile"})
+        self.assertEqual(s["heads"][-1], {"mic_level": 0.0, "sample": "WaveFile", "sample_level": 0.4})
         self.assertEqual(s["out_level"], 1.0)
 
     def test_a_sample_in_another_format_is_refused(self):
