@@ -123,11 +123,15 @@ VOLUME_DEADBAND = 700
 
 # --- Handle position ---
 
-# The handle travel pot on GP28, in ADC counts at each end of its swing. The
-# whole range is only ~2520 counts of the 16-bit scale, so it has to be mapped
-# explicitly;
-HANDLE_OUT_COUNTS = 32370  # at rest, handle all the way out
-HANDLE_IN_COUNTS = 29850  # squeezed fully in
+# The handle travel pot on GP28, in ADC counts. The whole swing is only
+# ~2500-2900 counts of the 16-bit scale, and where it sits differs from mic to
+# mic (an FX Mic read 32370 out / 29850 in, a Ting 33470 / 30570), so the ends
+# are learned as the handle moves: "out" is the highest reading seen, "in" the
+# lowest, but never closer to "out" than HANDLE_MIN_SPAN so a light first
+# squeeze can't read as fully in. HANDLE_OUT_COUNTS is only the starting guess,
+# low enough that any mic's resting reading pushes it up.
+HANDLE_OUT_COUNTS = 32370
+HANDLE_MIN_SPAN = 2000
 
 # Handle position potentiometer smoothing for noisy signal
 HANDLE_SAMPLES = 16
@@ -910,18 +914,26 @@ def apply_volume(ctx, force=False):
 # switch opens the mic.
 handle_travel = 0.0
 handle_open = HANDLE_OPEN_GUESS
+# The learned ends of the pot's swing, in ADC counts, and the lowest reading
+# seen so far.
+handle_out = HANDLE_OUT_COUNTS
+handle_low = HANDLE_OUT_COUNTS
+handle_in = HANDLE_OUT_COUNTS - HANDLE_MIN_SPAN
 
 
 def read_handle():
     """Update `handle_control` from the handle position: 0.0 until the
     squeeze passes the mic-open click plus HANDLE_DEAD_ZONE, 1.0 fully in."""
-    global handle_travel
+    global handle_travel, handle_out, handle_low, handle_in
     total = 0
     for _ in range(HANDLE_SAMPLES):
         total += handle_pot.value
     raw = total / HANDLE_SAMPLES
 
-    fraction = (HANDLE_OUT_COUNTS - raw) / (HANDLE_OUT_COUNTS - HANDLE_IN_COUNTS)
+    handle_out = max(handle_out, raw)
+    handle_low = min(handle_low, raw)
+    handle_in = min(handle_low, handle_out - HANDLE_MIN_SPAN)
+    fraction = (handle_out - raw) / (handle_out - handle_in)
     handle_travel = min(1.0, max(0.0, fraction))
     start = handle_open + HANDLE_DEAD_ZONE
     fraction = (handle_travel - start) / (1.0 - start)
@@ -938,7 +950,8 @@ def learn_handle_open():
         handle_open = handle_travel
     else:
         handle_open += (min(handle_travel, 0.6) - handle_open) * 0.25
-    print("handle opens the mic at {:.2f} of its travel".format(handle_open))
+    print("handle opens the mic at {:.2f} of its travel (raw {:.0f} out, {:.0f} in)".format(
+        handle_open, handle_out, handle_in))
 
 
 # --- Main demo setup and loop ---

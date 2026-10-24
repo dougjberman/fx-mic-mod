@@ -50,7 +50,7 @@ def write_tone(path, hz, seconds):
         out.writeframes(frames)
 
 
-def run(scenario, config=TEST_CONFIG, tone=None):
+def run(scenario, config=TEST_CONFIG, tone=None, handle=None):
     root = tempfile.mkdtemp()
     with open(os.path.join(root, "config.json"), "w") as file:
         json.dump(config, file)
@@ -59,6 +59,7 @@ def run(scenario, config=TEST_CONFIG, tone=None):
     out = subprocess.run(
         [sys.executable, os.path.join(HERE, "run_scenario.py"), scenario, root],
         capture_output=True, text=True, timeout=600, check=True,
+        env=dict(os.environ, FAKE_HANDLE="%d,%d" % handle) if handle else None,
     ).stdout
     summary = json.loads(out.split("SUMMARY ", 1)[1])
     return root, out, summary
@@ -227,6 +228,13 @@ class DeviceScenarioTests(unittest.TestCase):
         shifter = s["shifters"][0]
         self.assertAlmostEqual(shifter["min"], -0.95, delta=0.05)
         self.assertEqual(s["active"], s["record_spot"])
+
+    def test_handle_range_is_learned(self):
+        # A Ting's handle pot sits ~1100 counts above an FX Mic's. Its full
+        # squeeze must still read as fully in, so the squeeze key switches.
+        root, out, s = run("record", handle=(33470, 30570))
+        self.assertIn("raw 33470 out, 30570 in", out)
+        self.assertIn("autotune now C major", out)
 
         with wave.open(os.path.join(root, "1.wav")) as take:
             self.assertEqual((take.getnchannels(), take.getsampwidth(), take.getframerate()),

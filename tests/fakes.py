@@ -5,6 +5,7 @@ and a fake clock. Only what code.py, config_loader.py, autotune.py and
 recorder.py touch is modelled.
 """
 
+import os
 import math
 import sys
 import types
@@ -118,8 +119,10 @@ class AnalogIn:
     def value(self):
         if self.pin.name == "VOLUME":
             return 40000
-        # handle pot: squeezed fully while the paddle is held
-        return 29850 if SCRIPT.paddle_held() else 32370
+        # handle pot: squeezed fully while the paddle is held. FAKE_HANDLE="out,in"
+        # sets the two ends, since each mic sits differently.
+        out, full = (int(v) for v in os.environ.get("FAKE_HANDLE", "32370,29850").split(","))
+        return full if SCRIPT.paddle_held() else out
 
     def deinit(self):
         pass

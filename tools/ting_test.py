@@ -567,14 +567,15 @@ def guided(args):
                 if title == "Handle travel":
                     raws = [r["raw"] for r in records if r["t"] == "handle"]
                     if raws:
-                        out, full = 32370, 29850
-                        travel = (out - min(raws)) / (out - full)
-                        detail = "raw {} to {}, reaches {:.2f} of travel (squeeze key needs 0.67)".format(
-                            min(raws), max(raws), travel)
-                        hits = hits if travel >= 0.67 else []
+                        # Each mic sits differently, so judge the swing, not fixed ends.
+                        # An FX Mic swung 2520 counts, a Ting 2900.
+                        swing = max(raws) - min(raws)
+                        detail = "raw {} (in) to {} (out), a swing of {} counts".format(
+                            min(raws), max(raws), swing)
+                        hits = hits if swing >= 1500 else []
                 if title == "Paddle click" and hits:
                     raw = hits[0]["handle"]
-                    detail = "clicks at raw {} = {:.2f} of travel".format(raw, (32370 - raw) / (32370 - 29850))
+                    detail = "clicks at raw {}".format(raw)
                 if title == "Volume knob":
                     raws = [r["raw"] for r in records if r["t"] == "knob"]
                     detail = "raw {} to {}".format(min(raws), max(raws)) if raws else ""
