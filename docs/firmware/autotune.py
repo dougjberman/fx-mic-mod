@@ -54,7 +54,7 @@ FEED_PHASE = 1
 # NATURAL_RATE (about a 200 ms glide) up to 1.0 (instant).
 NATURAL_RATE = 0.08
 HUMANIZE_CENTS = 30     # humanize = 1 leaves up to this much of the error alone
-NOTE_HYSTERESIS = 0.15  # semitones past the halfway point before switching notes
+NOTE_HYSTERESIS = 0.3   # semitones past the halfway point before switching notes
 
 KEYS = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 SCALES = (
@@ -336,6 +336,7 @@ class NoteSnapper:
         self.allowed = SCALES[0][1]
         self.root = 0           # 0 = C, 2 = D, 9 = A ...
         self.target = None
+        self._leap = None       # a far note heard once, waiting to be heard again
 
     def set_scale(self, pitch_classes, root=None):
         self.allowed = pitch_classes
@@ -363,8 +364,16 @@ class NoteSnapper:
             self.target = nearest
         elif abs(midi - self.target) > abs(midi - nearest) + 2 * NOTE_HYSTERESIS:
             self.target = nearest
-        elif abs(midi - self.target) > 1.5:  # jumped well away, follow at once
-            self.target = nearest
+        elif abs(midi - self.target) > 1.5:
+            # Jumped well away: follow once the same note is heard twice in a
+            # row, so a one-off octave error doesn't swap the harmony chord.
+            if self._leap == nearest:
+                self.target = nearest
+                self._leap = None
+            else:
+                self._leap = nearest
+            return self.target - midi
+        self._leap = None
         return self.target - midi
 
 

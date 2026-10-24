@@ -158,7 +158,7 @@ function dspFactory(){
     }
   }
   class NoteSnapper {
-    constructor(scale,root,g){ this.allowed=SCALES[scale]; this.root=root; this.target=null; this.g=g; }
+    constructor(scale,root,g){ this.allowed=SCALES[scale]; this.root=root; this.target=null; this.leap=null; this.g=g; }
     nearest(m){ let best=null;
       for(let o=Math.floor(m/12)-1;o<=Math.floor(m/12)+1;o++) for(const pc of this.allowed){ const n=o*12+(pc+this.root)%12; if(best===null||Math.abs(n-m)<Math.abs(best-m)) best=n; }
       return best; }
@@ -167,7 +167,12 @@ function dspFactory(){
       const m=12*log2(hz/440)+69, near=this.nearest(m), h=this.g.hyst;
       if(this.target===null||near===this.target) this.target=near;
       else if(Math.abs(m-this.target)>Math.abs(m-near)+2*h) this.target=near;
-      else if(Math.abs(m-this.target)>1.5) this.target=near;
+      else if(Math.abs(m-this.target)>1.5){
+        // jumped well away: follow once heard twice in a row, so a one-off octave error doesn't swap the chord
+        if(this.leap===near){ this.target=near; this.leap=null; } else this.leap=near;
+        return this.target-m;
+      }
+      this.leap=null;
       return this.target-m;
     }
   }
@@ -464,7 +469,7 @@ function dspFactory(){
     const presets=cfg.presets==null?[]:cfg.presets, samples=cfg.samples==null?[]:cfg.samples;
     if(!Array.isArray(presets)) issues.push({where:"presets",msg:"presets must be a list"});
     if(!Array.isArray(samples)) issues.push({where:"samples",msg:"samples must be a list"});
-    const host={sr:BASE, g:{detector:"yin",minRms:250,minHz:80,maxHz:500,vt:0.15,hyst:0.15,engine:"native"}, blocks:{handle:()=>0}, report:()=>{}};
+    const host={sr:BASE, g:{detector:"yin",minRms:250,minHz:80,maxHz:500,vt:0.15,hyst:0.3,engine:"native"}, blocks:{handle:()=>0}, report:()=>{}};
     (Array.isArray(presets)?presets:[]).slice(0,4).forEach((p,i)=>{ try{ const c=buildChain(p,host,false); c.notes.forEach(n=>issues.push({where:"preset "+(i+1),msg:n,soft:true})); }catch(e){ issues.push({where:"preset "+(i+1), msg:e.message}); } });
     (Array.isArray(samples)?samples:[]).slice(0,4).forEach((s,i)=>{
       try{
@@ -483,7 +488,7 @@ function dspFactory(){
   class TingDSP {
     constructor(sr){
       this.sr=sr; this.S=sr/BASE;
-      this.g={power:true, gate:false, handle:0, level:0.4, engine:"native", detector:"yin", hyst:0.15, vt:0.15, minRms:250, minHz:80, maxHz:500};
+      this.g={power:true, gate:false, handle:0, level:0.4, engine:"native", detector:"yin", hyst:0.3, vt:0.15, minRms:250, minHz:80, maxHz:500};
       this.host={sr, g:this.g, blocks:{handle:()=>this.g.handle}, report:i=>{ this.atInfo=i; }};
       this.chain=[]; this.samples=[]; this.voice=null;
       this.tuner=new Detector(sr,this.g); this.tunerInfo=null; this.atInfo=null;
