@@ -56,8 +56,8 @@
       var box = document.createElement("div");
       box.className = "device-switch";
       box.setAttribute("role", "group");
-      box.setAttribute("aria-label", "Your mic");
-      box.innerHTML = '<span class="ds-label">My mic</span>' +
+      box.setAttribute("aria-label", "Select your device");
+      box.innerHTML = '<span class="ds-label"><span class="ds-long">Select your device</span><span class="ds-short">Device</span></span>' +
         '<button type="button" value="fxmic"><i class="sw sw-fxmic" aria-hidden="true"></i>FX Mic</button>' +
         '<button type="button" value="ting"><i class="sw sw-ting" aria-hidden="true"></i>Ting</button>';
       box.addEventListener("click", function(e){

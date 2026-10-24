@@ -15,12 +15,15 @@
 .device-switch .sw{--sw-gap:rgba(0,0,0,.35)}
 .device-switch .sw-fxmic{--sw-mid:#f4f2ee;--sw-bot:#b5b6b8}
 .device-switch .sw-ting{--sw-mid:#00513a;--sw-bot:#f4f2ee}
-@media (max-width:420px){.device-switch .ds-label{display:none}.device-switch button{padding:5px 10px 5px 7px}}
+.device-switch .ds-short{display:none}
+/* phones: the short label keeps the switch on the brand's row */
+@media (max-width:480px){.device-switch .ds-long{display:none}.device-switch .ds-short{display:inline}.device-switch .ds-label{padding:0 4px 0 7px}.device-switch button{padding:5px 10px 5px 7px}}
 
 /* ---------- Ting palette: beige and bottle green, after Teenage Engineering's Ting guide ---------- */
 :root[data-device="ting"]{
   --bg:#ddd4c0; --panel:#f2ede2; --panel-2:#e8e1d1; --ink:#0f3a2c; --line:#c6bca5; --muted:#4f5d52;
-  --accent:#ef5f1c; --accent-ink:#ffffff; --accent-text:#a8400c; --accent-btn:#d8521a; --accent-soft:#f3d6bf; --orange:#e2541c;
+  /* orange held dark enough for text on beige: accent 3:1 for large type, button and text 4.5:1 */
+  --accent:#cc4d14; --accent-ink:#ffffff; --accent-text:#93370a; --accent-btn:#c4471a; --accent-soft:#f3d6bf; --orange:#cc4d14;
   --green:#00513a; --grid:#d3cab4; --voice:#8b9488; --code-bg:#e6dfcf; --warn-bg:#f3d6bf; --ok-bg:#d4e2d2;
   --led-off:#b9b09a; --track:#d6ceba; --knob:#f2ede2; --seg-on:#f2ede2;
   --btn-mid:#00513a; --btn-bot:#f4f2ee; --btn-handle:#00513a;
@@ -41,6 +44,10 @@
   --btn-mid:#1d8a62; --btn-bot:#ece4d2; --btn-handle:#1d8a62;
   color-scheme:dark}
 :root[data-device="ting"] h1,:root[data-device="ting"] h2{color:var(--ink)}
+/* browser surfaces in the Ting palette */
+:root[data-device="ting"]{accent-color:var(--accent-btn)}
+:root[data-device="ting"] ::selection{background:var(--accent-soft);color:var(--ink)}
+:root[data-device="ting"] body{scrollbar-color:var(--line) var(--bg)}
 
 /* ---------- the mic drawings ---------- */
 /* Object colours are fixed per device; only the outline follows light and dark. */
