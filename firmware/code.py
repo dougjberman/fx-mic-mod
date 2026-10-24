@@ -262,6 +262,8 @@ class DataContext:
         # `time.monotonic()` of the last paddle change still waiting to be
         # acted on after PADDLE_SETTLE_SECONDS, or None.
         self.paddle_changed = None
+        # Handle travel last printed while squeezed.
+        self.handle_shown = -1.0
         # Flash phase of the red LEDs in record mode.
         self.blink_on = True
         self.blink_since = 0.0
@@ -1078,6 +1080,11 @@ try:
 
         # The handle is read every pass too, always applied
         read_handle()
+        # While squeezed, print the handle whenever it moves a step, so the
+        # console shows what "$handle" reads at each point of a squeeze.
+        if data_context.paddle_held and abs(handle_travel - data_context.handle_shown) >= 0.05:
+            data_context.handle_shown = handle_travel
+            print("squeeze {:.2f} of travel, $handle {:.2f}".format(handle_travel, handle_control.a))
 
         # An autotune preset with a squeeze key switches key / scale when the
         # handle goes far in, and back once it eases off (hysteresis, so a
