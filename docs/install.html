@@ -366,7 +366,7 @@ picotool save -a ting-full-flash.bin</pre>
     <section class="step" id="install" data-step="install">
       <div class="step-head"><span class="step-num">05</span><h2>Install fx-mic-mod</h2><label class="mark"><input type="checkbox" data-done="install"> Done</label></div>
       <p>This copies the fx-mic-mod files to CIRCUITPY: <code>code.py</code> and its modules (<code>autotune.py</code>, <code>recorder.py</code>, <code>config_loader.py</code>), <code>boot.py</code>, and a starter <code>config.json</code> with four presets.</p>
-      <p>It also needs Adafruit's driver for the mic's audio chip, <code>adafruit_nau88l21.mpy</code>. Download the <b>10.x</b> library bundle from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>, unzip it, and choose its <code>lib</code> folder below. Only the driver is copied from it. You can skip this if the driver is already on the drive.</p>
+      <p>It also needs Adafruit's driver for the mic's audio chip, <code>adafruit_nau88l21.mpy</code>. Download the <b>10.x</b> library bundle from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>, unzip it, and choose its <code>lib</code> folder below. Only the driver and the <code>adafruit_register</code> folder it needs are copied from it. You can skip this if both are already on the drive.</p>
       <div class="tool">
         <div class="row">
           <label class="filebtn">1. Choose the bundle's lib folder<input type="file" id="libInput" webkitdirectory multiple></label>
@@ -387,7 +387,7 @@ picotool save -a ting-full-flash.bin</pre>
             <li><a href="firmware/boot.py" download>boot.py</a></li>
             <li><a href="firmware/code.py" download>code.py</a></li>
           </ul>
-          <p>Then copy <code>adafruit_nau88l21.mpy</code> from the bundle's <code>lib</code> folder into <code>CIRCUITPY/lib</code>.</p>
+          <p>Then copy <code>adafruit_nau88l21.mpy</code> and the <code>adafruit_register</code> folder from the bundle's <code>lib</code> folder into <code>CIRCUITPY/lib</code>.</p>
         </div>
       </details>
       <details>
@@ -729,13 +729,20 @@ while True:
   // The fx-mic-mod files are served next to this page in firmware/. code.py goes last,
   // so CircuitPython's auto-reload starts it with everything else already in place.
   const FIRMWARE = ["config_loader.py", "autotune.py", "recorder.py", "config.json", "boot.py", "code.py"];
+  // The audio chip's driver, and the adafruit_register package it imports.
+  // adafruit_bus_device, its other import, is built into CircuitPython.
   const DRIVER = "adafruit_nau88l21.mpy";
-  let driverFile = null;
+  const REGISTER = "adafruit_register";
+  let libFiles = [];
   $("libInput").addEventListener("change", (ev) => {
     const list = Array.from(ev.target.files);
-    driverFile = list.find(f => f.name === DRIVER) || null;
-    if (driverFile) status("codeStatus", `Found ${DRIVER} (${fmtBytes(driverFile.size)}). Now pick CIRCUITPY.`, "ok");
-    else status("codeStatus", `That folder has no ${DRIVER}. Choose the lib folder inside the unzipped 10.x bundle.`, "bad");
+    const driver = list.find(f => f.name === DRIVER);
+    const register = list.filter(f => f.webkitRelativePath.split("/").slice(-2, -1)[0] === REGISTER && f.name.endsWith(".mpy"));
+    libFiles = driver ? [{ path: "lib/" + DRIVER, file: driver }]
+      .concat(register.map(f => ({ path: "lib/" + REGISTER + "/" + f.name, file: f }))) : [];
+    if (!driver) status("codeStatus", `That folder has no ${DRIVER}. Choose the lib folder inside the unzipped 10.x bundle.`, "bad");
+    else if (!register.length) { libFiles = []; status("codeStatus", `That folder has ${DRIVER} but no ${REGISTER} folder, which the driver needs. Choose the whole lib folder from the 10.x bundle.`, "bad"); }
+    else status("codeStatus", `Found ${DRIVER} and ${REGISTER} (${libFiles.length} files). Now pick CIRCUITPY.`, "ok");
   });
   async function hasFile(dir, path) {
     try {
@@ -761,12 +768,12 @@ while True:
     $("bootOut").hidden = false; $("bootOut").textContent = "boot_out.txt\n" + bootOut.trim();
     const m = /CircuitPython (\d+)\./.exec(bootOut);
     if (m && m[1] !== "10") { status("codeStatus", `This mic runs CircuitPython ${m[1]}. fx-mic-mod and the driver bundle need 10.x. Flash 10.x in step 04 first.`, "bad"); return; }
-    const haveDriver = await hasFile(dir, "lib/" + DRIVER);
-    if (!driverFile && !haveDriver) { status("codeStatus", `CIRCUITPY has no lib/${DRIVER}. Choose the bundle's lib folder first (step 1 above).`, "bad"); return; }
+    const haveDriver = await hasFile(dir, "lib/" + DRIVER) && await hasFile(dir, "lib/" + REGISTER + "/register_bit.mpy");
+    if (!libFiles.length && !haveDriver) { status("codeStatus", `CIRCUITPY is missing lib/${DRIVER} or lib/${REGISTER}. Choose the bundle's lib folder first (step 1 above).`, "bad"); return; }
     const keepConfig = $("keepConfig").checked && await hasFile(dir, "config.json");
     try {
-      let n = 0; const total = files.length + (driverFile ? 1 : 0);
-      if (driverFile) { await writeFile(dir, "lib/" + DRIVER, driverFile); status("codeStatus", `Copying… ${++n}/${total}`); }
+      let n = 0; const total = files.length + libFiles.length;
+      for (const f of libFiles) { await writeFile(dir, f.path, f.file); status("codeStatus", `Copying… ${++n}/${total}`); }
       for (const f of files) {
         if (f.name === "config.json" && keepConfig) { n++; continue; }
         if (f.name === "code.py" && $("keepOld").checked) {

@@ -55,7 +55,7 @@ skips it.
 
 1. Back up the mic and flash CircuitPython 10.x for `teenage_engineering_ep2350` (see the flash guide).
 2. Copy everything in `firmware/` to the CIRCUITPY drive.
-3. Copy `adafruit_nau88l21.mpy` from the matching Adafruit library bundle into `CIRCUITPY/lib`.
+3. Copy `adafruit_nau88l21.mpy` and the `adafruit_register` folder from the matching Adafruit library bundle into `CIRCUITPY/lib`.
 4. Power-cycle. To change presets later, power on holding TOP and save a new `config.json`.
 
 ## Website (docs/)
