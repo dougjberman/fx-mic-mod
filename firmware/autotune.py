@@ -36,6 +36,7 @@ BLOCK_SIZE = 256        # audio hop per loop pass (16 ms); BUFFER_SIZE must be 2
 MIN_HZ = 80.0           # lowest pitch the detector looks for
 MAX_HZ = 500.0          # highest pitch the detector looks for
 VOICED_THRESHOLD = 0.15 # YIN threshold: lower = stricter about what counts as a note
+DETECT_EVERY = 2        # find the pitch every N blocks (16 ms each); the chip can't do every one
 MIN_RMS = 250           # below this input level (int16 units) treat as silence
 
 # "native": audiodelays.GranularPitchShift (or PitchShift on older firmware)
@@ -177,47 +178,29 @@ def log2(x):
 #   - every offset compares the same number of samples (fixes the octave bias)
 #   - squared differences + YIN normalisation, taking the FIRST dip under the
 #     threshold rather than the global minimum (fewer octave errors)
-#   - search at 8 kHz (decimated by 2), then refine at 16 kHz around the hit
-#     and use parabolic interpolation for a fractional period
+#   - search at 4 kHz, then refine at 8 kHz around the hit and use parabolic
+#     interpolation for a fractional period
 #   - ulab does the inner loop in C. The original pure-Python double loop is
 #     ~170 x 400 = 68k operations per call, roughly a second on an RP2350.
+#   - On a real Ting every ulab operation costs ~0.3 us per element, and the
+#     first version (full 16 kHz refine, 8 kHz search) took 14 ms of a 16 ms
+#     block on its own, more with effects running. So the search runs at
+#     4 kHz and the refine at 8 kHz, and Autotune only detects every
+#     DETECT_EVERY blocks.
 
-_DEC = 2
-_MIN_LAG = int(SAMPLE_RATE / MAX_HZ)            # 32 samples at 16 kHz
-_MAX_LAG = int(SAMPLE_RATE / MIN_HZ)            # 200
-_MAX_LAG_D = _MAX_LAG // _DEC + 1               # 101 at 8 kHz
-_MIN_LAG_D = max(2, _MIN_LAG // _DEC)
-_WIN_D = BUFFER_SIZE // _DEC - _MAX_LAG_D       # samples compared per lag at 8 kHz
-_WIN_F = BUFFER_SIZE - _MAX_LAG - 3             # samples compared per lag at 16 kHz
+_COARSE = 4                                     # search at 16 kHz / 4 = 4 kHz
+_FINE = 2                                       # refine at 8 kHz
+_RATE_F = SAMPLE_RATE / _FINE
+_MIN_LAG_F = int(_RATE_F / MAX_HZ)              # 16 at 8 kHz
+_MAX_LAG_F = int(_RATE_F / MIN_HZ)              # 100
+_N_D = BUFFER_SIZE // _COARSE                   # 128 samples at 4 kHz
+_MAX_LAG_D = _MAX_LAG_F * _FINE // _COARSE + 1  # 51
+_MIN_LAG_D = max(2, _MIN_LAG_F * _FINE // _COARSE)
+_WIN_D = _N_D - _MAX_LAG_D                      # samples compared per lag at 4 kHz
+_WIN_F = BUFFER_SIZE // _FINE - _MAX_LAG_F - 3  # samples compared per lag at 8 kHz
 
 _FLOAT = getattr(np, "float", None) or getattr(np, "float32", None) if np else None
 _CONVOLVE = np is not None and hasattr(np, "convolve")
-
-# The cross term below can come from FFTs instead of a convolution: three
-# 512-point FFTs instead of ~40k multiply-adds. ulab's fft takes and returns
-# (real, imag) pairs unless the build has complex numbers; numpy is complex.
-_FFT_N = 512                                    # >= BUFFER_SIZE // _DEC + _WIN_D
-_FFT = None
-if np is not None and hasattr(np, "fft"):
-    try:
-        _FFT = "pair" if isinstance(np.fft.fft(np.zeros(4)), tuple) else "complex"
-    except Exception:
-        _FFT = None
-
-
-def _cross_fft(xd):
-    """sum x[i] x[i+lag] over the first _WIN_D samples, for every lag."""
-    a = np.zeros(_FFT_N)
-    a[0:len(xd)] = xd
-    b = np.zeros(_FFT_N)
-    b[0:_WIN_D] = xd[0:_WIN_D]
-    if _FFT == "pair":
-        ar, ai = np.fft.fft(a)
-        br, bi = np.fft.fft(b)
-        r, _ = np.fft.ifft(ar * br + ai * bi, ai * br - ar * bi)
-    else:
-        r = np.real(np.fft.ifft(np.fft.fft(a) * np.conj(np.fft.fft(b))))
-    return r[0:_MAX_LAG_D].tolist()
 
 
 def _diff_at(x, lag, width):
@@ -233,39 +216,42 @@ def _diff_at_py(x, lag, width):
     return total
 
 
+def _halve(x):
+    """Crude low-pass and decimate by 2."""
+    if np is not None:
+        return (x[0::2] + x[1::2]) * 0.5
+    return [(x[i] + x[i + 1]) * 0.5 for i in range(0, len(x) - 1, 2)]
+
+
 def detect_pitch_autocorrelation(buffer):
     """Return the fundamental in Hz of the last BUFFER_SIZE samples, or 0.0.
 
     `buffer` is an int16 array (or list) of BUFFER_SIZE samples.
     """
     if np is not None:
-        x = np.array(buffer, dtype=_FLOAT)
-        x = x - np.mean(x)
-        if math.sqrt(float(np.sum(x * x)) / BUFFER_SIZE) < MIN_RMS:
-            return 0.0
-        xd = (x[0::2] + x[1::2]) * 0.5   # crude low-pass + decimate to 8 kHz
+        xf = _halve(np.array(buffer, dtype=_FLOAT))   # 8 kHz
+        xd = _halve(xf)                               # 4 kHz
+        xd = xd - np.mean(xd)
+        sq = (xd * xd).tolist()
         diff = _diff_at
     else:
-        mean = sum(buffer) / len(buffer)
-        x = [s - mean for s in buffer]
-        if math.sqrt(sum(s * s for s in x) / BUFFER_SIZE) < MIN_RMS:
-            return 0.0
-        xd = [(x[i] + x[i + 1]) * 0.5 for i in range(0, BUFFER_SIZE, 2)]
+        xf = _halve(list(buffer))
+        xd = _halve(xf)
+        mean = sum(xd) / len(xd)
+        xd = [s - mean for s in xd]
+        sq = [s * s for s in xd]
         diff = _diff_at_py
+    if math.sqrt(sum(sq) / _N_D) < MIN_RMS:
+        return 0.0
 
-    # Cumulative-mean-normalised difference (YIN) at 8 kHz. With ulab, the
+    # Cumulative-mean-normalised difference (YIN) at 4 kHz. With ulab, the
     # difference at every lag comes from one convolution:
     #   d(lag) = sum x[i]^2 + sum x[i+lag]^2 - 2 sum x[i] x[i+lag]
-    # so the loop below only does scalar sums. Calling _diff_at per lag
-    # instead was ~100 ulab calls a block, too slow on a real Ting.
-    fast = np is not None and (_FFT or _CONVOLVE)
+    # so the loop below only does scalar sums.
+    fast = np is not None and _CONVOLVE
     if fast:
-        if _FFT:
-            cross = _cross_fft(xd)
-        else:
-            cross = np.convolve(xd, xd[_WIN_D - 1::-1])
-            cross = cross[_WIN_D - 1:_WIN_D - 1 + _MAX_LAG_D].tolist()
-        sq = (xd * xd).tolist()
+        cross = np.convolve(xd, xd[_WIN_D - 1::-1])
+        cross = cross[_WIN_D - 1:_WIN_D - 1 + _MAX_LAG_D].tolist()
         energy0 = sum(sq[0:_WIN_D])
         energy = energy0
     running = 0.0
@@ -299,11 +285,11 @@ def detect_pitch_autocorrelation(buffer):
     if best_lag == 0 or (not found and best_val > 0.4):
         return 0.0
 
-    # Refine at 16 kHz around the coarse hit
-    centre = best_lag * _DEC
-    lo = max(_MIN_LAG, centre - 3)
-    hi = min(_MAX_LAG + 1, centre + 4)
-    vals = [diff(x, lag, _WIN_F) for lag in range(lo, hi)]
+    # Refine at 8 kHz around the coarse hit
+    centre = best_lag * _COARSE // _FINE
+    lo = max(2, centre - 2)
+    hi = min(_MAX_LAG_F + 1, centre + 3)
+    vals = [diff(xf, lag, _WIN_F) for lag in range(lo, hi)]
     i = vals.index(min(vals))
     period = float(lo + i)
     if 0 < i < len(vals) - 1:
@@ -311,7 +297,7 @@ def detect_pitch_autocorrelation(buffer):
         denom = a - 2.0 * b + c
         if denom > 0:
             period += 0.5 * (a - c) / denom
-    return SAMPLE_RATE / period
+    return _RATE_F / period
 
 
 # ---------------------------------------------------------------------------
@@ -591,6 +577,7 @@ class Autotune:
         self._window = array.array("h", [0] * BUFFER_SIZE)
         self._block = array.array("h", [0] * BLOCK_SIZE)
         self._half = 0
+        self._turn = 0
         self.busy_ms = 0.0
         # Mic level, 0 or 1, applied before pitch detection. Used when
         # samples are mixed into this stage, so the paddle can mute the mic
@@ -747,10 +734,16 @@ class Autotune:
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]
         window[BLOCK_SIZE:BUFFER_SIZE] = block
 
-        self.cents = None
-        self.hz = 0.0
-        # Without retuning, only a key chord needs to know the note.
-        if self.enabled and (self.correct or self._key_chord):
+        # Without retuning, only a key chord needs to know the note. Pitch
+        # is found every DETECT_EVERY blocks; between, the last target holds.
+        self._turn = (self._turn + 1) % DETECT_EVERY
+        if not (self.enabled and (self.correct or self._key_chord)):
+            self.cents = None
+            self.hz = 0.0
+            self._target = 0.0
+            self.snapper.target = None
+        elif self._turn == 0:
+            self.cents = None
             self.hz = detect_pitch_autocorrelation(window)
             semis = self.snapper.correction_semitones(self.hz) if self.hz > 0 else None
             if semis is not None:
@@ -765,10 +758,8 @@ class Autotune:
                     semis = 0.0
                 self._target = semis
             else:
-                self._target *= 0.9   # silence / noise: relax back toward no shift
-        else:
-            self._target = 0.0
-            self.snapper.target = None
+                # silence / noise: relax back toward no shift
+                self._target *= 0.9 ** DETECT_EVERY
         if not self.correct:
             self._target = 0.0
 
@@ -798,44 +789,15 @@ class Autotune:
         return got
 
 
+
 def bench(hz=150.0, runs=5):
-    """Time each part of the pitch search on this chip, for the serial console:
+    """Time the pitch search on this chip, for the serial console:
     >>> import autotune; autotune.bench()"""
     buf = array.array("h", [int(6000 * math.sin(2 * math.pi * hz * i / SAMPLE_RATE)) for i in range(BUFFER_SIZE)])
-
-    def timed(label, fn):
-        best = None
-        for _ in range(runs):
-            t = time.monotonic_ns()
-            out = fn()
-            ms = (time.monotonic_ns() - t) / 1e6
-            best = ms if best is None or ms < best else best
-        print("{:<22} {:6.2f} ms".format(label, best))
-        return out
-
-    print("ulab:", np is not None, " fft:", _FFT, " convolve:", _CONVOLVE)
-    timed("whole detection", lambda: detect_pitch_autocorrelation(buf))
-    if np is None:
-        return
-    x = timed("int16 -> ulab array", lambda: np.array(buf, dtype=_FLOAT))
-    timed("mean + rms", lambda: math.sqrt(float(np.sum((x - np.mean(x)) ** 2)) / BUFFER_SIZE))
-    xd = timed("decimate", lambda: (x[0::2] + x[1::2]) * 0.5)
-    if _FFT:
-        cross = timed("cross term, fft", lambda: _cross_fft(xd))
-    if _CONVOLVE:
-        timed("cross term, convolve", lambda: np.convolve(xd, xd[_WIN_D - 1::-1]))
-    sq = timed("squares to list", lambda: (xd * xd).tolist())
-
-    def loop():
-        energy0 = sum(sq[0:_WIN_D])
-        energy = energy0
-        running = 0.0
-        for lag in range(1, _MAX_LAG_D):
-            energy += sq[lag + _WIN_D - 1] - sq[lag - 1]
-            d = energy0 + energy - 2.0 * cross[lag]
-            running += d
-            norm = d * lag / running if running > 0 else 1.0
-        return norm
-    if _FFT:
-        timed("python lag loop x100", loop)
-    timed("refine, 7 diffs", lambda: [_diff_at(x, lag, _WIN_F) for lag in range(100, 107)])
+    best = None
+    for _ in range(runs):
+        t = time.monotonic_ns()
+        found = detect_pitch_autocorrelation(buf)
+        ms = (time.monotonic_ns() - t) / 1e6
+        best = ms if best is None or ms < best else best
+    print("ulab: {}  detection: {:.2f} ms  found {:.1f} Hz for {:.1f}".format(np is not None, best, found, hz))
