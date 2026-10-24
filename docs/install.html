@@ -896,28 +896,48 @@ while True:
     $("serialConnect").disabled = on;
   }
   async function send(t) { if (writer) await writer.write(new TextEncoder().encode(t)); }
-  $("serialConnect").addEventListener("click", async () => {
-    if (!hasSerial) { log("\nThis browser has no Web Serial. Use Chrome or Edge, or Mu / screen / PuTTY.\n"); return; }
-    try {
-      port = await navigator.serial.requestPort();
-      await port.open({ baudRate: 115200 });
-    } catch (e) {
-      if (e.name === "NotFoundError") { log("\nNo port chosen.\n"); return; }
-      if (e.name === "SecurityError" || framed) { setChip("chipSerial", "blocked here", false); showBlocked(); log("\nSerial access is blocked in this view. Save the standalone flasher and open it in Chrome or Edge.\n"); return; }
-      log("\nCouldn't open the port: " + e.message + "\n"); return;
-    }
+  // After a power cycle the mic comes back as a new port. Chrome remembers ports it was given,
+  // so the console reopens the mic's port when it reappears, unless Disconnect was clicked,
+  // and restarts the code once so its start-up lines aren't lost.
+  let lastInfo = null, follow = false;
+  async function openPort(p) {
+    await p.open({ baudRate: 115200 });
+    port = p; lastInfo = p.getInfo(); follow = true;
     writer = port.writable.getWriter();
-    serialUi(true); out.textContent = ""; log("Connected.\n"); markDone("console");
+    serialUi(true); markDone("console");
     const dec = new TextDecoder();
     try {
-      while (port.readable) {
+      while (port && port.readable) {
         reader = port.readable.getReader();
         try {
           for (;;) { const { value, done } = await reader.read(); if (done) break; log(dec.decode(value, { stream: true })); }
         } finally { reader.releaseLock(); reader = null; }
       }
-    } catch (e) { log("\n[disconnected: " + e.message + "]\n"); }
-    serialUi(false);
+    } catch (e) { log("\n[disconnected: " + e.message + (follow ? ". Reconnecting when the mic comes back…" : "") + "]\n"); }
+    try { if (writer) writer.releaseLock(); } catch (e) {}
+    writer = null; port = null; serialUi(false);
+  }
+  async function reload() { await send("\x03"); await new Promise(r => setTimeout(r, 300)); await send("\x04"); }
+  $("serialConnect").addEventListener("click", async () => {
+    if (!hasSerial) { log("\nThis browser has no Web Serial. Use Chrome or Edge, or Mu / screen / PuTTY.\n"); return; }
+    let p;
+    try { p = await navigator.serial.requestPort(); }
+    catch (e) {
+      if (e.name === "NotFoundError") { log("\nNo port chosen.\n"); return; }
+      if (e.name === "SecurityError" || framed) { setChip("chipSerial", "blocked here", false); showBlocked(); log("\nSerial access is blocked in this view. Save the standalone flasher and open it in Chrome or Edge.\n"); return; }
+      log("\nCouldn't open the port: " + e.message + "\n"); return;
+    }
+    out.textContent = ""; log("Connected.\n");
+    try { await openPort(p); } catch (e) { log("\nCouldn't open the port: " + e.message + "\n"); }
+  });
+  if (hasSerial) navigator.serial.addEventListener("connect", async (ev) => {
+    const p = ev.target, info = p.getInfo();
+    if (!follow || port || !lastInfo || info.usbVendorId !== lastInfo.usbVendorId || info.usbProductId !== lastInfo.usbProductId) return;
+    await new Promise(r => setTimeout(r, 800));   // let CircuitPython finish starting USB
+    if (port) return;
+    log("\n[reconnected]\n");
+    openPort(p).catch(e => log("\n[couldn't reopen the port: " + e.message + "]\n"));
+    setTimeout(reload, 600);
   });
   // control-C and control-D in the command box go to the mic, as in a terminal.
   // ⌘-C stays copy on a Mac.
@@ -927,12 +947,13 @@ while True:
     if (k === "c" || k === "d") { ev.preventDefault(); send(k === "c" ? "\x03" : "\x04"); }
   });
   $("serialStop").addEventListener("click", () => send("\x03"));
-  $("serialReload").addEventListener("click", () => send("\x04"));
+  $("serialReload").addEventListener("click", reload);
   $("serialPins").addEventListener("click", () => send("\x03\r\nimport board; print(sorted(dir(board)))\r\n"));
   // Keep the handle squeezed: the reset releases POWER_HOLD until the boot ROM takes over.
   $("serialBoot").addEventListener("click", () => send("\x03\r\nimport microcontroller; microcontroller.on_next_reset(microcontroller.RunMode.BOOTLOADER); microcontroller.reset()\r\n"));
   $("serialForm").addEventListener("submit", (ev) => { ev.preventDefault(); const v = $("serialLine").value; $("serialLine").value = ""; send(v + "\r\n"); });
   $("serialDisconnect").addEventListener("click", async () => {
+    follow = false;
     try { if (reader) await reader.cancel(); } catch (e) {}
     try { if (writer) { writer.releaseLock(); writer = null; } } catch (e) {}
     try { if (port) await port.close(); } catch (e) {}
