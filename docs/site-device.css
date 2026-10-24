@@ -21,11 +21,11 @@
 
 /* ---------- Ting palette: beige and bottle green, after Teenage Engineering's Ting guide ---------- */
 :root[data-device="ting"]{
-  --bg:#ddd4c0; --panel:#f2ede2; --panel-2:#e8e1d1; --ink:#0f3a2c; --line:#c6bca5; --muted:#4f5d52;
+  --bg:#ebe5d7; --panel:#f8f5ee; --panel-2:#f0ebdf; --ink:#0f3a2c; --line:#d3c9b3; --muted:#4f5d52;
   /* orange held dark enough for text on beige: accent 3:1 for large type, button and text 4.5:1 */
   --accent:#cc4d14; --accent-ink:#ffffff; --accent-text:#93370a; --accent-btn:#c4471a; --accent-soft:#f3d6bf; --orange:#cc4d14;
-  --green:#00513a; --grid:#d3cab4; --voice:#8b9488; --code-bg:#e6dfcf; --warn-bg:#f3d6bf; --ok-bg:#d4e2d2;
-  --led-off:#b9b09a; --track:#d6ceba; --knob:#f2ede2; --seg-on:#f2ede2;
+  --green:#00513a; --grid:#dfd7c6; --voice:#8b9488; --code-bg:#ede7da; --warn-bg:#f5dcc7; --ok-bg:#dae6d8;
+  --led-off:#c3baa5; --track:#ddd5c3; --knob:#f8f5ee; --seg-on:#f8f5ee;
   --btn-mid:#00513a; --btn-bot:#f4f2ee; --btn-handle:#00513a;
   color-scheme:light;
 }
