@@ -377,7 +377,7 @@ picotool save -a ting-full-flash.bin</pre>
         <div class="status" id="codeStatus">No driver chosen yet. That's fine if it's already in CIRCUITPY/lib.</div>
         <pre id="bootOut" hidden></pre>
       </div>
-      <div class="note"><b>After installing, turn the mic off and on again.</b> To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together until the lights go out (about a second), then let go. If it stays on, unplug the USB cable and take out the batteries. Once it's dark, squeeze the handle to turn it back on. <b>Working looks like:</b> white LED 1 stays lit, the red LEDs are off (the clean spot), and CIRCUITPY shows up on your computer again. If white LED 1 instead blinks twice every few seconds, the code stopped on an error: open the serial console below and press Ctrl-D to see it. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
+      <div class="note"><b>After installing, turn the mic off and on again.</b> To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together until the lights go out (about a second), then let go. If it stays on, unplug the USB cable and take out the batteries. Once it's dark, squeeze the handle to turn it back on. <b>Working looks like:</b> white LED 1 stays lit, the red LEDs are off (the clean spot), and CIRCUITPY shows up on your computer again. If white LED 1 instead blinks twice every few seconds, the code stopped on an error: connect the serial console below and click Reload to see it. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
       <details><summary>Installing by hand</summary>
         <div style="display: grid; gap: 10px; margin-top: 10px;">
           <p>Download these files and copy them to the root of CIRCUITPY, with <code>code.py</code> last:</p>
@@ -403,7 +403,7 @@ picotool save -a ting-full-flash.bin</pre>
     <!-- 06 -->
     <section class="step" id="console" data-step="console">
       <div class="step-head"><span class="step-num">06</span><h2>Watch it run on the serial console</h2><label class="mark"><input type="checkbox" data-done="console"> Done</label></div>
-      <p>CircuitPython prints <code>print()</code> output and errors over USB serial. Connect to see what the effects code is doing, stop it with <kbd>Ctrl-C</kbd>, or reload with <kbd>Ctrl-D</kbd>.</p>
+      <p>CircuitPython prints <code>print()</code> output and errors over USB serial. Connect to see what the effects code is doing, then use the Stop and Reload buttons. With the cursor in the command box, the <kbd>control</kbd>-C and <kbd>control</kbd>-D keys do the same (on a Mac that's control, not ⌘).</p>
       <div class="tool">
         <div class="row">
           <button class="go" id="serialConnect">Connect</button>
@@ -829,6 +829,13 @@ while True:
       }
     } catch (e) { log("\n[disconnected: " + e.message + "]\n"); }
     serialUi(false);
+  });
+  // control-C and control-D in the command box go to the mic, as in a terminal.
+  // ⌘-C stays copy on a Mac.
+  $("serialLine").addEventListener("keydown", (ev) => {
+    if (!ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const k = ev.key.toLowerCase();
+    if (k === "c" || k === "d") { ev.preventDefault(); send(k === "c" ? "\x03" : "\x04"); }
   });
   $("serialStop").addEventListener("click", () => send("\x03"));
   $("serialReload").addEventListener("click", () => send("\x04"));
