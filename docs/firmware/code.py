@@ -258,7 +258,7 @@ class DataContext:
         # `time.monotonic()` of the last paddle change still waiting to be
         # acted on after PADDLE_SETTLE_SECONDS, or None.
         self.paddle_changed = None
-        # Blink phase of the white LED in record mode.
+        # Flash phase of the red LEDs in record mode.
         self.blink_on = True
         self.blink_since = 0.0
 
