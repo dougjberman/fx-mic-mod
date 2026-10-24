@@ -1044,8 +1044,8 @@ update_white_leds(data_context)
 load_selected_wave_sample(data_context)
 
 print(
-    "demo v2: pack {!r}, {} preset(s), mic gain {:.0f} dB, codec ADC HPF {:d} Hz".format(
-        PACK_NAME, len(PRESETS), codec.mic_gain, HPF_HZ
+    "demo v2: pack {!r}, {} preset(s), {} Hz, mic gain {:.0f} dB, codec ADC HPF {:d} Hz".format(
+        PACK_NAME, len(PRESETS), RATE, codec.mic_gain, HPF_HZ
     )
 )
 print("TOP button = next preset ({} spots, 0 = clean)".format(len(PRESETS) + 1))
