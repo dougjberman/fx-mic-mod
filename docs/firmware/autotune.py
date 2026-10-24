@@ -796,3 +796,46 @@ class Autotune:
         # and the mic overflows; code.py prints it with each overflow.
         self.busy_ms = (time.monotonic_ns() - began) / 1e6
         return got
+
+
+def bench(hz=150.0, runs=5):
+    """Time each part of the pitch search on this chip, for the serial console:
+    >>> import autotune; autotune.bench()"""
+    buf = array.array("h", [int(6000 * math.sin(2 * math.pi * hz * i / SAMPLE_RATE)) for i in range(BUFFER_SIZE)])
+
+    def timed(label, fn):
+        best = None
+        for _ in range(runs):
+            t = time.monotonic_ns()
+            out = fn()
+            ms = (time.monotonic_ns() - t) / 1e6
+            best = ms if best is None or ms < best else best
+        print("{:<22} {:6.2f} ms".format(label, best))
+        return out
+
+    print("ulab:", np is not None, " fft:", _FFT, " convolve:", _CONVOLVE)
+    timed("whole detection", lambda: detect_pitch_autocorrelation(buf))
+    if np is None:
+        return
+    x = timed("int16 -> ulab array", lambda: np.array(buf, dtype=_FLOAT))
+    timed("mean + rms", lambda: math.sqrt(float(np.sum((x - np.mean(x)) ** 2)) / BUFFER_SIZE))
+    xd = timed("decimate", lambda: (x[0::2] + x[1::2]) * 0.5)
+    if _FFT:
+        cross = timed("cross term, fft", lambda: _cross_fft(xd))
+    if _CONVOLVE:
+        timed("cross term, convolve", lambda: np.convolve(xd, xd[_WIN_D - 1::-1]))
+    sq = timed("squares to list", lambda: (xd * xd).tolist())
+
+    def loop():
+        energy0 = sum(sq[0:_WIN_D])
+        energy = energy0
+        running = 0.0
+        for lag in range(1, _MAX_LAG_D):
+            energy += sq[lag + _WIN_D - 1] - sq[lag - 1]
+            d = energy0 + energy - 2.0 * cross[lag]
+            running += d
+            norm = d * lag / running if running > 0 else 1.0
+        return norm
+    if _FFT:
+        timed("python lag loop x100", loop)
+    timed("refine, 7 diffs", lambda: [_diff_at(x, lag, _WIN_F) for lag in range(100, 107)])
