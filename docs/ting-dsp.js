@@ -340,21 +340,35 @@ function dspFactory(){
         break;
       }
       case "distortion":{
+        // Step for step audiofilters.Distortion (CircuitPython 10, shared-module/audiofilters/Distortion.c),
+        // on int16-scaled words. Overdrive ignores drive there: pre_gain is what pushes it.
         const drive=P("drive",0), pre=P("pre_gain",0), post=P("post_gain",0);
-        const mode=norm(spec.mode==null?"clip":spec.mode); if(!["clip","lofi","overdrive","wavefold"].includes(mode)) throw new Error("unknown distortion mode: "+spec.mode);
+        let mode=norm(spec.mode==null?"clip":spec.mode); if(mode==="wavefold") mode="waveshape";
+        if(!["clip","lofi","overdrive","waveshape"].includes(mode)) throw new Error("unknown distortion mode: "+spec.mode);
         if(spec.soft_clip!=null&&typeof spec.soft_clip!=="boolean") throw new Error("soft_clip must be true or false");
         const soft=!!spec.soft_clip;
         fx.process=(buf,env)=>{
-          const d=clamp(drive(env),0,1), g1=dbToGain(pre(env)), g2=dbToGain(post(env)), mix=clamp(mixF(env),0,1);
-          const thr=Math.max(0.01,1-d*0.99), q=Math.pow(2,16-Math.round(d*14)), k=1+d*20, tk=Math.tanh(k), fold=1+d*10;
+          let d=clamp(drive(env),0,1); const g1=dbToGain(clamp(pre(env),-60,60)), g2=dbToGain(clamp(post(env),-80,24)), mix=clamp(mixF(env),0,1);
+          if(mix<=0.01) return;
+          let mask=0;
+          if(mode==="clip") d=1.0001-d;
+          else if(mode==="waveshape") d=2*d/(1.0001-d);
+          else if(mode==="lofi") mask=~((1<<Math.round(d*14))-1);
           for(let i=0;i<buf.length;i++){
-            const x=buf[i]; let y=x*g1;
-            if(mode==="clip") y=clamp(y,-thr,thr);
-            else if(mode==="lofi") y=Math.round(y*q)/q;
-            else if(mode==="overdrive") y=Math.tanh(y*k)/tk;
-            else y=Math.sin(y*fold*Math.PI/2);
-            y*=g2; if(soft) y=Math.tanh(y);
-            buf[i]=x*(1-mix)+y*mix;
+            const sw=Math.max(-32768,Math.min(32767,Math.round(buf[i]*32768)));
+            let w=Math.trunc(sw*g1);
+            if(mode==="lofi") w&=mask;
+            if(mode!=="lofi"||soft){
+              let f=w/32768;
+              if(mode==="clip"){ f=Math.pow(Math.abs(f),d); if(w<0) f=-f; }
+              else if(mode==="overdrive"){ f*=0.686306; const z=1+Math.exp(Math.sqrt(Math.abs(f))*-0.75), e=Math.exp(f); f=(e-Math.exp(-f*z))/(e+Math.exp(-f)); }
+              else if(mode==="waveshape") f=(1+d)*f/(1+d*Math.abs(f));
+              f*=g2;
+              if(soft) f=f>0 ? 1-Math.exp(-f) : -1+Math.exp(f);
+              w=Math.trunc(f*32767);
+            } else w=Math.trunc(w*g2);
+            if(!soft) w=Math.min(Math.max(w,-32767),32768);
+            buf[i]=Math.max(-32768,Math.min(32767,Math.trunc(sw*(1-mix)+w*mix)))/32768;
           }
         };
         break;

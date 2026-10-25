@@ -95,7 +95,7 @@ other value.
 | `harmonizer` **(new)** | `chord` (see below, default "major"), `inversion` int (default 0), `octave` int (default 0, moves the harmony by octaves), `level` (B) harmony volume against the voice, 0..1 (default 0.7) |
 | `pitch_shift` | `semitones` (B), `window` int, `overlap` int, `mix` (B) |
 | `granular_pitch_shift` | `semitones` (B), `grain_size` int, `density` int, `spread` float, `mix` (B) |
-| `distortion` | `drive` (B), `pre_gain` (B, dB), `post_gain` (B, dB), `mode` = an `audiofilters.DistortionMode` name, case-insensitive (e.g. "clip", "lofi", "overdrive", "wavefold"), `soft_clip` bool, `mix` (B) |
+| `distortion` | `drive` (B), `pre_gain` (B, dB), `post_gain` (B, dB), `mode` = an `audiofilters.DistortionMode` name, case-insensitive ("clip", "lofi", "overdrive", "waveshape"; "overdrive" ignores `drive`, `pre_gain` sets how hard it is pushed), `soft_clip` bool, `mix` (B) |
 | `filter` | `filter`: one or a list of `{"mode": <synthio.FilterMode name, e.g. "low_pass", "high_pass", "band_pass", "notch">, "frequency": (B) Hz, "Q": (B), "A": (B) shelf/peak gain}`, `mix` (B) |
 | `phaser` | `frequency` (B) Hz, `feedback` (B), `stages` int, `mix` (B) |
 | `chorus` | `max_delay_ms` int, `delay_ms` (B), `voices` (B), `mix` (B) |

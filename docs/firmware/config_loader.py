@@ -151,8 +151,10 @@ def _distortion_mode(value, name, blocks=None):
 
     if not isinstance(value, str):
         raise ValueError("{} must be a string".format(name))
+    # "wavefold" is what the editor used to call WAVESHAPE
+    upper = "WAVESHAPE" if value.upper() == "WAVEFOLD" else value.upper()
     try:
-        return getattr(audiofilters.DistortionMode, value.upper())
+        return getattr(audiofilters.DistortionMode, upper)
     except AttributeError as exc:
         raise ValueError("unknown distortion mode: {}".format(value)) from exc
 
