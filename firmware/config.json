@@ -23,7 +23,7 @@
     {
       "name": "Chipmunks in space",
       "comment": "Adafruit's Chipmunk space, plus a chorus of chipmunks and a lighter echo.",
-      "level": 0.7,
+      "level": 0.8,
       "list": [
         {"effect": "filter", "filter": {"mode": "high_pass", "frequency": 200, "Q": 0.7071}, "mix": 1},
         {"effect": "granular_pitch_shift", "semitones": 8, "density": 2, "mix": 1, "grain_size": 512, "spread": 0},

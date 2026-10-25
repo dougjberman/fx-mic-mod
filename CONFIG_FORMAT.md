@@ -93,11 +93,11 @@ other value.
 |---|---|
 | `autotune` **(new)** | `key` "C".."B" (sharps, e.g. "F#"), `scale` "chromatic" / "major" / "minor", `speed` (B) 0 = natural .. 1 = hard snap, `humanize` 0..1, `mix` (B), `grain_size` int (default 512), `density` int (default 2), `squeeze_key` / `squeeze_scale` (same values as key/scale: the key used while the handle is fully squeezed) |
 | `harmonizer` **(new)** | `chord` (see below, default "major"), `inversion` int (default 0), `octave` int (default 0, moves the harmony by octaves), `level` (B) harmony volume against the voice, 0..1 (default 0.7) |
-| `pitch_shift` | `semitones` (B), `window` int, `overlap` int, `mix` (B) |
-| `granular_pitch_shift` | `semitones` (B), `grain_size` int, `density` int, `spread` float, `mix` (B) |
+| `pitch_shift` | `semitones` (B), `window` int and `overlap` int, both in **bytes** of 16-bit audio (so samples = bytes / 2, at 16 kHz before the rate scaling), `mix` (B) |
+| `granular_pitch_shift` | `semitones` (B), `grain_size` int samples, `density` int 1..8, `spread` float 0..1 (fixed at load, not a block), `mix` (B) |
 | `distortion` | `drive` (B), `pre_gain` (B, dB), `post_gain` (B, dB), `mode` = an `audiofilters.DistortionMode` name, case-insensitive ("clip", "lofi", "overdrive", "waveshape"; "overdrive" ignores `drive`, `pre_gain` sets how hard it is pushed), `soft_clip` bool, `mix` (B) |
 | `filter` | `filter`: one or a list of `{"mode": <synthio.FilterMode name, e.g. "low_pass", "high_pass", "band_pass", "notch">, "frequency": (B) Hz, "Q": (B), "A": (B) shelf/peak gain}`, `mix` (B) |
-| `phaser` | `frequency` (B) Hz, `feedback` (B), `stages` int, `mix` (B) |
+| `phaser` | `frequency` (B) Hz, `feedback` (B; the mic holds it to 0.1..0.9), `stages` int, `mix` (B) |
 | `chorus` | `max_delay_ms` int, `delay_ms` (B), `voices` (B), `mix` (B) |
 | `echo` | `max_delay_ms` int, `delay_ms` (B), `decay` (B), `freq_shift` bool, `mix` (B) |
 | `multi_tap_delay` | `max_delay_ms` int, `delay_ms` (B), `decay` (B), `taps` list of `pos` or `[pos, level]`, `mix` (B) |

@@ -183,20 +183,53 @@ function dspFactory(){
   }
 
   /* ---------- grain shifters ---------- */
-  class GrainShifter {          // `taps` Hann grains spread evenly over one grain, like audiodelays density
-    constructor(sizeSamples){ let N=1024; while(N<sizeSamples*2+8) N*=2; this.N=N; this.buf=new Float32Array(N); this.w=0; this.p=0; }
-    tick(x,ratio,grain,taps){
-      const N=this.N; this.buf[this.w]=x; let out=0;
-      for(let k=0;k<taps;k++){
-        let ph=this.p+k/taps; ph-=Math.floor(ph);
-        let r=this.w-ph*grain-2; if(r<0) r+=N; if(r<0) r+=N;
-        const i=Math.floor(r), f=r-i, a=this.buf[i%N], b=this.buf[(i+1)%N], s=Math.sin(Math.PI*ph);
-        out+=(a+(b-a)*f)*s*s;
-      }
-      this.w=(this.w+1)%N; this.p+=(1-ratio)/grain; this.p-=Math.floor(this.p);
-      return out*2/taps;
+  // audiodelays.GranularPitchShift (CircuitPython 10.3, shared-module/audiodelays/GranularPitchShift.c), step for step:
+  // a 2-grain capture line, Hann grains launched every grain/density samples starting one grain behind
+  // the write point (plus up to spread*grain of backward jitter), each reading at the rate it was launched
+  // with, summed and scaled by 2/density (at most 1). tick() returns the wet signal.
+  class CPGranular {
+    constructor(grain, density, spread){
+      const g=Math.max(2,Math.round(grain)); this.g=g; this.L=2*g; this.cap=new Float32Array(this.L); this.w=0;
+      this.d=clamp(Math.round(density),1,8); this.spread=clamp(spread||0,0,1); this.gain=Math.min(1,2/this.d);
+      this.spacing=Math.max(1,Math.floor(g/this.d)); this.next=0; this.rng=0x1234abcd;
+      this.env=new Float32Array(g); const den=g>1?g-1:1; for(let n=0;n<g;n++) this.env[n]=Math.trunc(0.5*(1-Math.cos(2*Math.PI*n/den))*32767)/32768;
+      this.gr=[]; for(let k=0;k<8;k++) this.gr.push({on:false,ri:0,rate:1,ph:0});
+    }
+    rand(){ let x=this.rng; x^=x<<13; x>>>=0; x^=x>>>17; x^=x<<5; x>>>=0; this.rng=x; return x; }
+    tick(x,ratio){
+      const L=this.L, cap=this.cap; cap[this.w]=x; let s=0;
+      for(const q of this.gr){ if(!q.on) continue; const ip=Math.floor(q.ri), f=q.ri-ip, lo=cap[ip%L], hi=cap[(ip+1)%L]; s+=(lo+(hi-lo)*f)*this.env[q.ph]; }
+      s*=this.gain;
+      for(const q of this.gr){ if(!q.on) continue; q.ri+=q.rate; q.ph++; if(q.ph>=this.g) q.on=false; }
+      if(this.next===0){
+        const q=this.gr.find(q=>!q.on);
+        if(q){ let j=0; const mj=Math.floor(this.spread*this.g); if(mj>0) j=this.rand()%(mj+1);
+          q.on=true; q.ri=(this.w+L-this.g-j)%L; q.rate=ratio; q.ph=0; }
+        this.next=this.spacing;
+      } else this.next--;
+      this.w=(this.w+1)%L;
+      return s;
     }
   }
+  // audiodelays.PitchShift, step for step: window and overlap are in bytes (16-bit, so samples = bytes/2).
+  class CPPitch {
+    constructor(windowBytes, overlapBytes){
+      this.ws=Math.max(1,Math.floor(windowBytes/2)); this.os=Math.max(0,Math.floor(overlapBytes/2));
+      this.win=new Float32Array(this.ws); this.ov=this.os?new Float32Array(this.os):null; this.wi=0; this.oi=0; this.ri=0;
+    }
+    tick(x,ratio){
+      const ws=this.ws, os=this.os, win=this.win, ov=this.ov;
+      if(os){ win[this.wi]=ov[this.oi]; ov[this.oi]=x; } else win[this.wi]=x;
+      const r=Math.floor(this.ri), off=r+ws*(r<this.wi?1:0)-this.wi;
+      let y=win[r];
+      if(os&&off>0&&off<=os) y=(y*off+ov[(this.oi+off)%os]*(os-off))/os;
+      this.wi=(this.wi+1)%ws; if(os) this.oi=(this.oi+1)%os;
+      this.ri+=ratio; if(this.ri>=ws) this.ri-=ws;
+      return y;
+    }
+  }
+  // PitchShift and GranularPitchShift's dry/wet law: mix doubled, each side capped at 1, then mix_down.
+  const shiftMix=(x,y,m)=>mixDown(x*Math.min(2-2*m,1)+y*Math.min(2*m,1),MIX_2);
   class LockedShifter {         // OLAPitchShifter from code.py: grain held at a whole number of pitch periods
     constructor(grain){ this.grain=grain; this.target=grain; this.baseHalf=Math.floor(grain/2); let N=1024; while(N<grain*4) N*=2;
       this.N=N; this.hist=new Float32Array(N); this.w=0; this.p=0.25; this.dg=0; }
@@ -231,7 +264,7 @@ function dspFactory(){
   const ALIASES={reverb:"freeverb",delay:"echo",multitap_delay:"multi_tap_delay",multitapdelay:"multi_tap_delay",pitchshift:"pitch_shift",granularpitchshift:"granular_pitch_shift",auto_tune:"autotune",harmony:"harmonizer"};
   function effectKey(name){ if(typeof name!=="string") throw new Error("effect name must be a string"); let k=norm(name); k=ALIASES[k]||k; if(!PARAMS[k]) throw new Error("unknown effect: "+name); return k; }
   const dbToGain=d=>Math.pow(10,d/20);
-  const MIX_DEFAULT={autotune:1,pitch_shift:1,granular_pitch_shift:1,distortion:1,filter:1,phaser:0.5,chorus:0.5,echo:0.25,multi_tap_delay:0.25,freeverb:0.5}; // ASSUMED except autotune
+  const MIX_DEFAULT={autotune:1,pitch_shift:1,granular_pitch_shift:1,distortion:1,filter:1,phaser:1,chorus:0.5,echo:0.25,multi_tap_delay:0.25,freeverb:0.5}; // CircuitPython 10.3 defaults
 
   // harm: the preset's harmonizer, which runs inside the autotune stage, {spec, correct}
   function makeEffect(spec, ns, host, harm){
@@ -265,7 +298,7 @@ function dspFactory(){
         const rest=new NoteSnapper(scale,NOTE_IDX[key],host.g);
         const det=new Detector(sr,host.g);
         let snap=rest, squeezed=false;
-        const gsh=new GrainShifter(grain), lsh=new LockedShifter(grain);
+        const gsh=new CPGranular(grain,density,0), lsh=new LockedShifter(grain);
         let target=0, corr=0, ratio=1;
         fx.latency=grain/2+2;
         // harmonizer: one more grain shifter per harmony voice, summed with the corrected voice
@@ -283,7 +316,7 @@ function dspFactory(){
           levelF=compile(hs.level??0.7,"harmonizer level",ns);
           keyChord=KEY_CHORDS[chord]||null;
           ivs=voicing(keyChord ? OFF_KEY_SHAPE.slice(0,tones.length) : tones, inv, oct);
-          voices=ivs.map(()=>new GrainShifter(grain));
+          voices=ivs.map(()=>new CPGranular(grain,density,0));
         }
         let vRatios=ivs.map(iv=>Math.pow(2,iv/12));
         let chordNote=null, chordNext=null, chordCount=0;
@@ -318,10 +351,9 @@ function dspFactory(){
               if(py&&hz>0) lsh.lock(sr/hz); lsh.begin(det.BLOCK);
               host.report({hz, cents: correct?cents:null, correction:corr, target: correct?snap.target:null, midi: hz>0?12*log2(hz/440)+69:null, autotune:correct, squeezed, harmony: voices.length?ivs.slice():null});
             }
-            const y= py ? lsh.tick(x,ratio) : gsh.tick(x,ratio,grain,density);
-            let out=x*(1-mix)+y*mix;
+            let out= py ? x*(1-mix)+lsh.tick(x,ratio)*mix : shiftMix(x,gsh.tick(x,ratio),mix);
             if(voices.length){
-              let hsum=0; for(let k=0;k<voices.length;k++) hsum+=voices[k].tick(x,vRatios[k],grain,density);
+              let hsum=0; for(let k=0;k<voices.length;k++) hsum+=shiftMix(x,voices[k].tick(x,vRatios[k]),1);
               out=(out+hsum*hl)*hg;
             }
             buf[i]=out;
@@ -331,12 +363,13 @@ function dspFactory(){
       }
       case "pitch_shift": case "granular_pitch_shift":{
         const semi=P("semitones",0);
-        const grain=(type==="pitch_shift"? num(spec.window,"window",1024) : num(spec.grain_size,"grain_size",512))*S;   // ASSUMED defaults
-        const taps= type==="pitch_shift" ? 2 : clamp(Math.round(num(spec.density,"density",2)),1,8);
-        if(type==="pitch_shift") num(spec.overlap,"overlap",128); else num(spec.spread,"spread",0);
-        const sh=new GrainShifter(grain); fx.latency=grain/2+2;
+        // window / overlap (bytes) and grain_size (samples) scale with the rate, as firmware at_rate() does
+        const sh= type==="pitch_shift"
+          ? new CPPitch(num(spec.window,"window",1024)*S, num(spec.overlap,"overlap",128)*S)
+          : new CPGranular(num(spec.grain_size,"grain_size",1024)*S, num(spec.density,"density",2), num(spec.spread,"spread",0));
+        fx.latency= type==="pitch_shift" ? sh.ws/2 : sh.g;
         fx.process=(buf,env)=>{ const r=Math.pow(2,semi(env)/12), mix=clamp(mixF(env),0,1);
-          for(let i=0;i<buf.length;i++){ const x=buf[i]; buf[i]=x*(1-mix)+sh.tick(x,r,grain,taps)*mix; } };
+          for(let i=0;i<buf.length;i++){ const x=buf[i]; buf[i]=shiftMix(x,sh.tick(x,r),mix); } };
         break;
       }
       case "distortion":{
@@ -402,18 +435,21 @@ function dspFactory(){
           const mix=clamp(mixF(env),0,1); bq.forEach(b=>coef(b,env));
           for(let i=0;i<buf.length;i++){ const x=buf[i]; let y=x;
             for(const b of bq){ const o=b.b0*y+b.b1*b.x1+b.b2*b.x2-b.a1*b.y1-b.a2*b.y2; b.x2=b.x1; b.x1=y; b.y2=b.y1; b.y1=o; y=o; }
-            buf[i]=x*(1-mix)+y*mix; }
+            buf[i]=mix<=0.01 ? x : mixDown(x*(1-mix)+y*mix,MIX_2); }
         };
         break;
       }
       case "phaser":{
-        const freq=P("frequency",1000), fbk=P("feedback",0.7), stages=clamp(Math.round(num(spec.stages,"stages",6)),1,24);   // ASSUMED defaults
-        const xs=new Float32Array(stages), ys=new Float32Array(stages); let last=0;
+        // audiofilters.Phaser, step for step (Q15 saturation as float clamps): feedback is held to 0.1..0.9,
+        // the all-pass coefficient is (1-f)/(1+f) with f the frequency over Nyquist, out = dry + wet*mix, near-hard limited.
+        const freq=P("frequency",1000), fbk=P("feedback",0.7), stages=Math.max(1,Math.round(num(spec.stages,"stages",6)));
+        const ap=new Float32Array(stages); let last=0;
         fx.process=(buf,env)=>{
-          const f=clamp(freq(env),20,sr*0.45), t=Math.tan(Math.PI*f/sr), a=(t-1)/(t+1), fb=clamp(fbk(env),-0.95,0.95), mix=clamp(mixF(env),0,1);
-          for(let i=0;i<buf.length;i++){ const x=buf[i]; let y=x+last*fb;
-            for(let s=0;s<stages;s++){ const o=a*y+xs[s]-a*ys[s]; xs[s]=y; ys[s]=o; y=o; }
-            last=y; buf[i]=x*(1-mix)+y*mix; }
+          const ny=sr/2, f=clamp(freq(env),0,ny)/ny, c=Math.trunc((1-f)/(1+f)*32767)/32768, fb=Math.trunc(clamp(fbk(env),0.1,0.9)*32767)/32768, mix=Math.trunc(clamp(mixF(env),0,1)*32767)/32768;
+          if(mix<=328/32768) return;
+          for(let i=0;i<buf.length;i++){ const x=buf[i]; let w=sat(x+sat(last*fb));
+            for(let j=0;j<stages;j++){ const a=sat(sat(w*-c)+ap[j]); ap[j]=sat(sat(a*c)+w); w=a; }
+            last=w; buf[i]=mixDown(x+sat(w*mix),MIX_HARD); }
         };
         break;
       }
