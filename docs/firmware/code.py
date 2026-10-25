@@ -194,7 +194,7 @@ HANDLE_DEAD_ZONE = 0.25
 
 # --- Record mode ---
 
-# Longest take, in seconds. Held in RAM (32 KB per second at 16 kHz) and
+# Longest take, in seconds. Held in RAM (48 KB per second at 24 kHz) and
 # written to flash after the take, so it is bounded by free memory.
 RECORD_SECONDS = 4
 # How fast the red LEDs flash in record mode, in seconds per toggle.
@@ -624,6 +624,9 @@ def enter_record_mode(ctx):
     ctx.chain = []
     if CAN_RECORD:
         ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE)
+        if ctx.recorder.seconds < RECORD_SECONDS:
+            print("record mode: memory is short, takes stop at {:.1f} s".format(
+                ctx.recorder.seconds))
     else:
         print("record mode: drive is read-only (edit mode), recording is off")
     ctx.blink_on = True

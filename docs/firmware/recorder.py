@@ -4,7 +4,7 @@
 """
 On-device sample recorder for the EP-2350.
 
-Records the mic into RAM while the handle is held, then writes a 16-bit mono
+Records the mic into RAM (in 16 KB pieces) while the handle is held, then writes a 16-bit mono
 WAV over the slot's file. Writing happens only after the take, because flash
 writes on the RP2350 stall the CPU and would drop audio mid-recording.
 
@@ -37,6 +37,8 @@ SAMPLE_RATE = 16000
 BLOCK_SIZE = 256        # samples per record() call (16 ms)
 TRIM_MS = 50            # dropped from the start of each take: handle click
 FADE_MS = 5             # fade-out at the end of each take, against a click
+CHUNK = 8192            # samples per buffer piece (16 KB)
+MIN_SECONDS = 1         # shortest take worth offering when memory is short
 
 
 def wav_header(frames, sample_rate=SAMPLE_RATE):
@@ -59,21 +61,38 @@ def _exists(path):
 
 
 class Recorder:
-    """Records up to ``seconds`` of mic audio into a preallocated buffer."""
+    """Records up to ``seconds`` of mic audio into preallocated buffers.
+
+    The take lives in CHUNK-sized pieces rather than one buffer: at 24 kHz a
+    4 s take is 192 KB, and after a few preset switches the heap rarely has
+    one free block that big even with plenty free in total. If the heap runs
+    out part way the take is shortened to what fit, down to MIN_SECONDS.
+    """
 
     def __init__(self, mic, seconds=4, sample_rate=SAMPLE_RATE):
         self.mic = mic
         self.sample_rate = sample_rate
-        self.seconds = seconds
-        self.capacity = int(seconds * sample_rate)
-        # One allocation up front, so a take cannot fail half way with
-        # MemoryError. ulab allocates it directly; a plain array would need a
-        # temporary list as big as the buffer.
-        if np is not None:
-            self._buf = np.zeros(self.capacity, dtype=np.int16)
-        else:
-            self._buf = array.array("h", bytes(self.capacity * 2))
+        wanted = int(seconds * sample_rate)
         self._block = array.array("h", [0] * BLOCK_SIZE)
+        # Allocated up front, so a take cannot fail half way with
+        # MemoryError. ulab allocates each chunk directly; a plain array
+        # would need a temporary list as big as the chunk.
+        self._chunks = []
+        size = 0
+        try:
+            while size < wanted:
+                n = min(CHUNK, wanted - size)
+                if np is not None:
+                    self._chunks.append(np.zeros(n, dtype=np.int16))
+                else:
+                    self._chunks.append(array.array("h", bytes(n * 2)))
+                size += n
+        except MemoryError:
+            if size < MIN_SECONDS * sample_rate:
+                self._chunks = None
+                raise
+        self.capacity = size
+        self.seconds = size / sample_rate
         self.frames = 0
         self.recording = False
         self._started = 0.0
@@ -92,20 +111,23 @@ class Recorder:
         self.recording = False
 
     def step(self):
-        """Record one block. Stops by itself when the buffer is full."""
+        """Record one block. Stops by itself when the buffers are full."""
         if not self.recording:
             return 0
         block = self._block
         got = self.mic.record(block, BLOCK_SIZE)
         got = min(got, self.capacity - self.frames)
-        if got > 0:
+        done = 0
+        while done < got:
+            chunk = self._chunks[(self.frames + done) // CHUNK]
+            at = (self.frames + done) % CHUNK
+            n = min(got - done, len(chunk) - at)
             if np is not None:
-                self._buf[self.frames:self.frames + got] = np.frombuffer(
-                    block, dtype=np.int16
-                )[:got]
+                chunk[at:at + n] = np.frombuffer(block, dtype=np.int16)[done:done + n]
             else:
-                self._buf[self.frames:self.frames + got] = block[:got]
-            self.frames += got
+                chunk[at:at + n] = block[done:done + n]
+            done += n
+        self.frames += got
         if self.frames >= self.capacity:
             self.recording = False
         return got
@@ -126,19 +148,25 @@ class Recorder:
         if frames <= 0:
             return 0
 
+        chunks = self._chunks
         fade = min(frames, self.sample_rate * FADE_MS // 1000)
-        buf = self._buf
         for i in range(fade):
             index = end - fade + i
-            buf[index] = int(buf[index]) * (fade - i) // fade
+            chunk = chunks[index // CHUNK]
+            chunk[index % CHUNK] = int(chunk[index % CHUNK]) * (fade - i) // fade
 
         tmp = path + ".tmp"
-        # A 1-D slice of either buffer type is contiguous and exposes the
-        # buffer protocol, so it is written without copying the take.
-        data = buf[start:end] if np is not None else memoryview(buf)[start:end]
         with open(tmp, "wb") as file:
             file.write(wav_header(frames, self.sample_rate))
-            file.write(data)
+            at = start
+            while at < end:
+                chunk = chunks[at // CHUNK]
+                lo = at % CHUNK
+                hi = min(len(chunk), lo + end - at)
+                # A 1-D slice of either buffer type is contiguous and exposes
+                # the buffer protocol, so it is written without a copy.
+                file.write(chunk[lo:hi] if np is not None else memoryview(chunk)[lo:hi])
+                at += hi - lo
         if _exists(path):
             os.remove(path)
         os.rename(tmp, path)
@@ -147,5 +175,5 @@ class Recorder:
         return frames
 
     def deinit(self):
-        self._buf = None
+        self._chunks = None
         self._block = None
