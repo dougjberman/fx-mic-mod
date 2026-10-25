@@ -383,7 +383,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     <p class="small muted">The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic.</p>
     <div class="match">
       <button class="btn" id="btn-match">Balance preset volume outputs</button>
-      <p class="small muted" id="match-help"><b>Optional.</b> Some chains come out much louder than others. Distortion is the usual culprit, and the volume jumps when you switch presets. This button tests what a sample audio signal sounds like through each effects preset, measures the relative output volumes, and turns the louder ones down to match the quietest. The mic can only turn a preset down, never up, so turn the volume knob up a little after if needed. It sets each preset's Output level, which you can still adjust by hand. Leave it alone if you like the jumps.</p>
+      <p class="small muted" id="match-help"><b>Optional.</b> Some chains come out much louder than others. Distortion is the usual culprit, and the volume jumps when you switch presets. This button tests what a sample audio signal sounds like through each effects preset, measures the relative output volumes, and turns the louder ones down to match Clean, so your voice and your samples stay at the same volume on every preset. The mic can only turn a preset down, never up, so one that comes out quieter than Clean stays at 100%. It sets each preset's Output level, which you can still adjust by hand. Leave it alone if you like the jumps.</p>
     </div>
   </section>
 
@@ -520,7 +520,7 @@ const STARTERS = [
 ];
 STARTERS.push(
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]});
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.6],[STARTERS[1],.45],[STARTERS[4],1],[STARTERS[5],.2]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Balance preset volume outputs
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],1],[STARTERS[1],1],[STARTERS[4],.7],[STARTERS[5],.55]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Balance preset volume outputs
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"oneshot"},{file:"4.wav",playmode:"oneshot"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -1286,8 +1286,9 @@ async function tryStart(kind){
   tryState.running = true; tryRender();
 }
 /* Balance preset volume outputs: run each preset offline on the sample singer, measure its
- * loudness, and set "level" so every preset comes out as loud as the quietest.
- * Only ever turns presets down: the firmware's mixer level tops out at 1.0. */
+ * loudness, and set "level" so every preset comes out as loud as the clean spot (preset 0), so
+ * switching presets, or firing a sample through one, doesn't change the volume. Only ever turns
+ * presets down: the firmware's mixer level tops out at 1.0, so a preset quieter than clean stays at 100%. */
 async function singerData(rate){
   const ctx = new OfflineAudioContext(1, 1, rate);
   try {
@@ -1310,15 +1311,17 @@ async function loudness(preset, data, rate){
 async function matchVolume(){
   const btn = $("#btn-match"); btn.disabled = true; const label = btn.textContent;
   try {
-    const rate = 32000, data = (await singerData(rate)).slice(0, rate*10);
+    const rate = deviceRate(), data = (await singerData(rate)).slice(0, rate*10);
     const presets = serialize().presets, louds = [];
+    btn.textContent = "Measuring clean…";
+    const clean = await loudness({list:[]}, data, rate);
     for (let i = 0; i < presets.length; i++){
       btn.textContent = "Measuring " + (i+1) + " of " + presets.length + "…";
       const q = Object.assign({}, presets[i]); delete q.level;
       louds.push(await loudness(q, data, rate));
     }
-    // the quietest preset sets the target: a mixer voice can't go above 1.0
-    const heard = louds.filter(x => x > 0), target = heard.length ? Math.min(...heard) : 0, report = [];
+    // clean sets the target: a mixer voice can't go above 1.0
+    const target = clean, report = [];
     louds.forEach((loud, i) => {
       const lv = loud > target ? Math.max(0.05, Math.round(target/loud*20)/20) : 1;
       if (lv >= 1) delete config.presets[i].level; else config.presets[i].level = lv;
@@ -1456,10 +1459,10 @@ const OLD_DEFAULTS = [
 const canon = v => Array.isArray(v) ? "["+v.map(canon).join(",")+"]"
   : v && typeof v==="object" ? "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+canon(v[k])).join(",")+"}" : JSON.stringify(v);
 // Levels the current defaults had before the last volume balancing pass; same presets, old level -> new level.
-const PREV_LEVELS = [.8, .6, 1, .25];
+const PREV_LEVELS = [[.8, .6, 1, .25], [.6, .45, 1, .2]];
 const withoutLevel = p => { const q = Object.assign({}, p); delete q.level; return canon(q); };
 config.presets.forEach((p, i) => { const d = DEFAULT_CONFIG.presets[i];
-  if (d && withoutLevel(p)===withoutLevel(d) && (p.level ?? 1)===PREV_LEVELS[i]){ config.presets[i] = clone(d); save(); } });
+  if (d && withoutLevel(p)===withoutLevel(d) && PREV_LEVELS.some(l => (p.level ?? 1)===l[i])){ config.presets[i] = clone(d); save(); } });
 for (const [i, json] of OLD_DEFAULTS)
   if (config.presets[i] && canon(config.presets[i])===canon(JSON.parse(json))){ config.presets[i] = clone(DEFAULT_CONFIG.presets[i]); save(); }
 // Slots 3 and 4 used to default to hold and start/stop. Untouched ones move to tap to play.
