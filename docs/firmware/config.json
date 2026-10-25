@@ -47,7 +47,7 @@
   "samples": [
     {"file": "1.wav", "playmode": "oneshot"},
     {"file": "2.wav", "playmode": "oneshot"},
-    {"file": "3.wav", "playmode": "hold"},
-    {"file": "4.wav", "playmode": "startstop"}
+    {"file": "3.wav", "playmode": "oneshot"},
+    {"file": "4.wav", "playmode": "oneshot"}
   ]
 }
