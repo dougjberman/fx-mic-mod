@@ -30,6 +30,8 @@ class RecorderTests(unittest.TestCase):
     def test_take_spans_chunks_in_order(self):
         rec = recorder.Recorder(RampMic(), seconds=1, sample_rate=24000)
         self.assertGreater(len(rec._chunks), 2)
+        # one mic read is 16 ms at any rate, so the loop keeps pace
+        self.assertEqual(len(rec._block), 384)
         rec.start()
         while rec.recording:
             rec.step()

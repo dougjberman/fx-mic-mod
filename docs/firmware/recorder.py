@@ -13,7 +13,7 @@ Usage::
     rec = Recorder(mic, seconds=4)
     rec.start()
     while rec.recording:
-        rec.step()          # blocks for one BLOCK_SIZE of audio
+        rec.step()          # blocks for one block (BLOCK_MS) of audio
     rec.save("/1.wav")
     rec.deinit()
 
@@ -34,7 +34,7 @@ except ImportError:
         np = None
 
 SAMPLE_RATE = 16000
-BLOCK_SIZE = 256        # samples per record() call (16 ms)
+BLOCK_MS = 16           # audio per record() call, the loop's pace
 TRIM_MS = 50            # dropped from the start of each take: handle click
 FADE_MS = 5             # fade-out at the end of each take, against a click
 CHUNK = 8192            # samples per buffer piece (16 KB)
@@ -73,7 +73,11 @@ class Recorder:
         self.mic = mic
         self.sample_rate = sample_rate
         wanted = int(seconds * sample_rate)
-        self._block = array.array("h", [0] * BLOCK_SIZE)
+        # Sized by time, not samples: a fixed 256 was 16 ms at 16 kHz but
+        # only 10.7 ms at 24 kHz, too short for the main loop's other work,
+        # so the mic overflowed mid-take and dropped audio.
+        self._block_size = sample_rate * BLOCK_MS // 1000
+        self._block = array.array("h", [0] * self._block_size)
         # Allocated up front, so a take cannot fail half way with
         # MemoryError. ulab allocates each chunk directly; a plain array
         # would need a temporary list as big as the chunk.
@@ -115,7 +119,7 @@ class Recorder:
         if not self.recording:
             return 0
         block = self._block
-        got = self.mic.record(block, BLOCK_SIZE)
+        got = self.mic.record(block, self._block_size)
         got = min(got, self.capacity - self.frames)
         done = 0
         while done < got:
