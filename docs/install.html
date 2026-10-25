@@ -366,7 +366,7 @@ picotool save -a ting-full-flash.bin</pre>
     <section class="step" id="install" data-step="install">
       <div class="step-head"><span class="step-num">05</span><h2>Install fx-mic-mod</h2><label class="mark"><input type="checkbox" data-done="install"> Done</label></div>
       <p>This copies the fx-mic-mod files to CIRCUITPY: <code>code.py</code> and its modules (<code>autotune.py</code>, <code>recorder.py</code>, <code>config_loader.py</code>), <code>boot.py</code>, and a starter <code>config.json</code> with four presets.</p>
-      <p>It also needs Adafruit's driver for the mic's audio chip, <code>adafruit_nau88l21.mpy</code>. Download the <b>10.x</b> library bundle from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>, unzip it, and choose its <code>lib</code> folder below. Only the driver and the <code>adafruit_register</code> folder it needs are copied from it. You can skip this if both are already on the drive.</p>
+      <p>It also needs Adafruit's driver for the mic's audio chip, <code>adafruit_nau88l21.mpy</code>. Download the <b>10.x</b> library bundle from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>, not the newest one listed: its files only load on the CircuitPython version they were built for, and the mic runs 10.x. Unzip it, and choose its <code>lib</code> folder below. Only the driver and the <code>adafruit_register</code> folder it needs are copied from it. You can skip this if both are already on the drive.</p>
       <div class="tool">
         <div class="row">
           <label class="filebtn">1. Choose the bundle's lib folder<input type="file" id="libInput" webkitdirectory multiple></label>
