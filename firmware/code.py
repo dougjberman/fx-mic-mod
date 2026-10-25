@@ -633,6 +633,23 @@ def enter_record_mode(ctx):
     ctx.blink_since = time.monotonic()
 
 
+def resync_mic():
+    """Bring the idle mic back into word sync before a take.
+
+    Between takes nothing reads the mic, and saving a take stalls the CPU on
+    flash writes, so the clock follower I2SIn can slip a word: the next take
+    then reads the empty channel (silence) or straddles two (static). It
+    re-syncs when something calls play() on it, so hand it to the idle
+    output voice for a moment, muted.
+    """
+    voice = mixer.voice[0]
+    level = voice.level
+    voice.level = 0.0
+    voice.play(mic, loop=True)
+    voice.stop()
+    voice.level = level
+
+
 def save_take(ctx):
     """Write the finished take over the selected slot's file, then reload it."""
     sample = sample_for_slot(ctx.white_active)
@@ -1162,6 +1179,7 @@ try:
             data_context.paddle_changed = None
             if data_context.active == RECORD_SPOT:
                 if held and data_context.recorder is not None:
+                    resync_mic()
                     data_context.recorder.start()
                     print("recording into slot {}".format(data_context.white_active))
             else:
