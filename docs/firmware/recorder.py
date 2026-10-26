@@ -36,13 +36,17 @@ except ImportError:
 SAMPLE_RATE = 16000
 BLOCK_MS = 16
 TRIM_MS = 50
+RELEASE_MS = 100
 FADE_MS = 5
+
+
 
 
 
 
 ONSET_LEVEL = 600
 PRE_ROLL_MS = 10
+POST_ROLL_MS = 150
 WRITE_SAMPLES = 2048
 CHUNK = 8192
 MIN_SECONDS = 1
@@ -92,8 +96,9 @@ class Recorder:
 
 
 
-    def __init__(self, mic, seconds=4, sample_rate=SAMPLE_RATE):
+    def __init__(self, mic, seconds=4, sample_rate=SAMPLE_RATE, trim=True):
         self.mic = mic
+        self.trim = trim
         self.sample_rate = sample_rate
         wanted = int(seconds * sample_rate)
 
@@ -122,6 +127,7 @@ class Recorder:
         self.seconds = size / sample_rate
         self.frames = 0
         self.recording = False
+        self.released = False
         self._started = 0.0
 
     @property
@@ -132,10 +138,13 @@ class Recorder:
     def start(self):
         self.frames = 0
         self.recording = True
+        self.released = False
         self._started = time.monotonic()
 
     def stop(self):
+        0
         self.recording = False
+        self.released = True
 
     def step(self):
         0
@@ -161,11 +170,34 @@ class Recorder:
 
     def take(self):
         0
-        start = min(self.frames, self.sample_rate * TRIM_MS // 1000)
-        onset = self._onset(start, self.frames)
-        if onset is not None:
-            start = max(start, onset - self.sample_rate * PRE_ROLL_MS // 1000)
-        return start, self.frames
+        rate = self.sample_rate
+        start = min(self.frames, rate * TRIM_MS // 1000)
+        end = self.frames
+        if self.released:
+            end = max(start, end - rate * RELEASE_MS // 1000)
+        if self.trim:
+            onset = self._onset(start, end)
+            if onset is not None:
+                start = max(start, onset - rate * PRE_ROLL_MS // 1000)
+                last = self._last_loud(start, end)
+                end = min(end, last + 1 + rate * POST_ROLL_MS // 1000)
+        return start, end
+
+    def _sample(self, index):
+        return int(self._chunks[index // CHUNK][index % CHUNK])
+
+    def _last_loud(self, start, end):
+        0
+        at = end
+        while at > start:
+            lo = max(start, (at - 1) // CHUNK * CHUNK)
+            if self._onset(lo, at) is not None:
+                for index in range(at - 1, lo - 1, -1):
+                    value = self._sample(index)
+                    if value >= ONSET_LEVEL or value <= -ONSET_LEVEL:
+                        return index
+            at = lo
+        return start
 
     def _onset(self, start, end):
         0

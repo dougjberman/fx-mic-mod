@@ -374,6 +374,13 @@ else:
 
 
 
+TRIM_TAKES = CONFIG.get("trim_takes", True)
+if not isinstance(TRIM_TAKES, bool):
+    print("trim_takes must be true or false; using true")
+    TRIM_TAKES = True
+
+
+
 
 SAMPLE_LEVEL = 1.0
 _sample_level = CONFIG.get("sample_level", SAMPLE_LEVEL)
@@ -630,7 +637,8 @@ def enter_record_mode(ctx):
 
     ctx.chain = []
     if CAN_RECORD:
-        ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE)
+        ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE,
+                                trim=TRIM_TAKES)
         if ctx.recorder.seconds < RECORD_SECONDS:
             print("record mode: memory is short, takes stop at {:.1f} s".format(
                 ctx.recorder.seconds))

@@ -45,9 +45,10 @@ chord needs the note).
   on entering record mode; raise it if there is room.
 - **Flash write time:** saving a 4 s take writes 128 KB. While it saves, one LED at a time runs down
   the mic (red 1 to white 4), at least one full sweep.
-- **Take start:** silence before the voice is cut, keeping 10 ms before the first sample over
-  about -35 dBFS (`ONSET_LEVEL` in recorder.py). If quiet starts get clipped, lower it; if hum
-  stops the trim, raise it.
+- **Take trim:** silence around the sound is cut, keeping 10 ms before the first sample over
+  about -35 dBFS (`ONSET_LEVEL` in recorder.py) and 150 ms after the last. If quiet starts get
+  clipped, lower it; if hum stops the trim, raise it. `"trim_takes": false` turns it off. A take
+  ended by letting go always loses its last 100 ms (`RELEASE_MS`), the release click.
 - **Samples through the preset** (`"sample_fx": "preset"`): non-autotune presets get a second
   `audiomixer.Mixer` at the chain input. Autotune presets stream the WAV from flash 512 bytes per
   block and mix it in Python before pitch detection. Check for crackle or `overflow` while a

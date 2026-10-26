@@ -36,13 +36,17 @@ except ImportError:
 SAMPLE_RATE = 16000
 BLOCK_MS = 16           # audio per record() call, the loop's pace
 TRIM_MS = 50            # dropped from the start of each take: handle click
+RELEASE_MS = 100        # dropped from the end of a take ended by letting go: handle release
 FADE_MS = 5             # fade-in and fade-out at the ends of each take, against a click
-# Silence before the voice comes in is cut, so the sample sounds the moment
-# it is triggered. The take starts PRE_ROLL_MS before the first sample at
-# ONSET_LEVEL (about -35 dBFS, just over the mic's hiss), so the attack stays
-# whole. A take that never gets that loud is kept as it is.
+# With trimming on, silence around the sound is cut, so the sample sounds
+# the moment it is triggered and stops when the sound does. The take starts
+# PRE_ROLL_MS before the first sample at ONSET_LEVEL (about -35 dBFS, just
+# over the mic's hiss), so the attack stays whole, and ends POST_ROLL_MS after
+# the last one, so a decay or reverb tail isn't chopped. A take that never
+# gets that loud is kept as it is.
 ONSET_LEVEL = 600
 PRE_ROLL_MS = 10
+POST_ROLL_MS = 150
 WRITE_SAMPLES = 2048    # samples per file write, so the save animation keeps moving
 CHUNK = 8192            # samples per buffer piece (16 KB)
 MIN_SECONDS = 1         # shortest take worth offering when memory is short
@@ -92,8 +96,9 @@ class Recorder:
     out part way the take is shortened to what fit, down to MIN_SECONDS.
     """
 
-    def __init__(self, mic, seconds=4, sample_rate=SAMPLE_RATE):
+    def __init__(self, mic, seconds=4, sample_rate=SAMPLE_RATE, trim=True):
         self.mic = mic
+        self.trim = trim
         self.sample_rate = sample_rate
         wanted = int(seconds * sample_rate)
         # Sized by time, not samples: a fixed 256 was 16 ms at 16 kHz but
@@ -122,6 +127,7 @@ class Recorder:
         self.seconds = size / sample_rate
         self.frames = 0
         self.recording = False
+        self.released = False
         self._started = 0.0
 
     @property
@@ -132,10 +138,13 @@ class Recorder:
     def start(self):
         self.frames = 0
         self.recording = True
+        self.released = False
         self._started = time.monotonic()
 
     def stop(self):
+        """End the take early, when the handle is let go."""
         self.recording = False
+        self.released = True
 
     def step(self):
         """Record one block. Stops by itself when the buffers are full."""
@@ -161,11 +170,34 @@ class Recorder:
 
     def take(self):
         """(start, end) sample indices of the usable take, after trimming."""
-        start = min(self.frames, self.sample_rate * TRIM_MS // 1000)
-        onset = self._onset(start, self.frames)
-        if onset is not None:
-            start = max(start, onset - self.sample_rate * PRE_ROLL_MS // 1000)
-        return start, self.frames
+        rate = self.sample_rate
+        start = min(self.frames, rate * TRIM_MS // 1000)
+        end = self.frames
+        if self.released:
+            end = max(start, end - rate * RELEASE_MS // 1000)
+        if self.trim:
+            onset = self._onset(start, end)
+            if onset is not None:
+                start = max(start, onset - rate * PRE_ROLL_MS // 1000)
+                last = self._last_loud(start, end)
+                end = min(end, last + 1 + rate * POST_ROLL_MS // 1000)
+        return start, end
+
+    def _sample(self, index):
+        return int(self._chunks[index // CHUNK][index % CHUNK])
+
+    def _last_loud(self, start, end):
+        """Index of the last sample at ONSET_LEVEL or louder (one exists)."""
+        at = end
+        while at > start:
+            lo = max(start, (at - 1) // CHUNK * CHUNK)
+            if self._onset(lo, at) is not None:
+                for index in range(at - 1, lo - 1, -1):
+                    value = self._sample(index)
+                    if value >= ONSET_LEVEL or value <= -ONSET_LEVEL:
+                        return index
+            at = lo
+        return start
 
     def _onset(self, start, end):
         """Index of the first sample at ONSET_LEVEL or louder, or None."""

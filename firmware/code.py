@@ -372,6 +372,13 @@ if isinstance(_dead_zone, (int, float)) and not isinstance(_dead_zone, bool) and
 else:
     print("handle_dead_zone must be a number from 0 to 0.5; using {}".format(HANDLE_DEAD_ZONE))
 
+# "trim_takes": false keeps the silence before and after the sound in a take
+# recorded on the mic. On by default (see recorder.ONSET_LEVEL).
+TRIM_TAKES = CONFIG.get("trim_takes", True)
+if not isinstance(TRIM_TAKES, bool):
+    print("trim_takes must be true or false; using true")
+    TRIM_TAKES = True
+
 # "sample_level": how loud samples play, 0..1. Full level by default, so a
 # take recorded on the mic plays back as loud as it was sung; the install
 # guide's converter brings imported files down to about the mic's level.
@@ -630,7 +637,8 @@ def enter_record_mode(ctx):
     """
     ctx.chain = []
     if CAN_RECORD:
-        ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE)
+        ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE,
+                                trim=TRIM_TAKES)
         if ctx.recorder.seconds < RECORD_SECONDS:
             print("record mode: memory is short, takes stop at {:.1f} s".format(
                 ctx.recorder.seconds))

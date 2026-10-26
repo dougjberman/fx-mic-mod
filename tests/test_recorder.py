@@ -67,6 +67,34 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual(start, 12000 - 24000 * recorder.PRE_ROLL_MS // 1000)
         self.assertEqual(end, 24000)
 
+    def _burst_take(self, trim):
+        class BurstMic:
+            """Silent, loud from 0.3 s to 0.5 s, then silent again."""
+            n = 0
+
+            def record(self, block, count):
+                for i in range(count):
+                    block[i] = 5000 if 7200 <= self.n + i < 12000 else 30
+                self.n += count
+                return count
+
+        rec = recorder.Recorder(BurstMic(), seconds=1, sample_rate=24000, trim=trim)
+        rec.start()
+        while rec.recording:
+            rec.step()
+        return rec
+
+    def test_silence_after_the_sound_is_cut(self):
+        start, end = self._burst_take(True).take()
+        self.assertEqual(start, 7200 - 24000 * recorder.PRE_ROLL_MS // 1000)
+        self.assertEqual(end, 12000 + 24000 * recorder.POST_ROLL_MS // 1000)
+
+    def test_trim_off_keeps_the_silence(self):
+        rec = self._burst_take(False)
+        rec.stop()  # let go: the release is cut even with trimming off
+        self.assertEqual(rec.take(), (24000 * recorder.TRIM_MS // 1000,
+                                      24000 - 24000 * recorder.RELEASE_MS // 1000))
+
     def test_a_quiet_take_is_kept_whole(self):
         class QuietMic:
             def record(self, block, count):
