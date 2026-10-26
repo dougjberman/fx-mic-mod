@@ -720,10 +720,10 @@ function autotuneCard(p, fx){
   NOTES.forEach(nm => keyRow.append(h("button",{"aria-pressed":String(nm===curKey), onclick:()=>{ fx.key=nm; changed(); }}, nm)));
   const scale = fx.scale||"chromatic";
   const scaleSeg = h("div",{class:"seg", role:"group", "aria-label":"Scale"},
-    [["chromatic","Every note"],["major","Major"],["minor","Minor"]].map(([v,l])=>h("button",{"aria-pressed":String(scale===v), onclick:()=>{ fx.scale=v; changed(); }}, l)));
+    [["chromatic","Chromatic"],["major","Major"],["minor","Minor"]].map(([v,l])=>h("button",{"aria-pressed":String(scale===v), onclick:()=>{ fx.scale=v; changed(); }}, l)));
   body.append(h("div",{class:"field"}, h("label",{}, "Scale"), scaleSeg));
   if (scale!=="chromatic") body.append(h("div",{class:"field"}, h("label",{}, "Key"), keyRow));
-  else body.append(h("p",{class:"small muted"},"Every note snaps to the nearest semitone, so the key doesn't matter. Pick Major or Minor to stay in a key."));
+  else body.append(h("p",{class:"small muted"},"Chromatic snaps every note to the nearest semitone, so the key doesn't matter. Pick Major or Minor to stay in a key."));
 
   // the handle gets one extra job: snap strength ("speed": "$handle") or a key change (squeeze_key / squeeze_scale)
   const alt = fx.squeeze_key!=null || fx.squeeze_scale!=null;
@@ -750,7 +750,7 @@ function autotuneCard(p, fx){
     const box = h("div",{class:"squeeze"});
     box.append(h("div",{class:"field"}, h("label",{}, "Squeezed scale"),
       h("div",{class:"seg", role:"group", "aria-label":"Squeezed scale"},
-        [["chromatic","Every note"],["major","Major"],["minor","Minor"]].map(([v,l])=>h("button",{"aria-pressed":String(aScale===v), onclick:()=>{ fx.squeeze_scale=v; if (fx.squeeze_key==null) fx.squeeze_key=aKey; changed(); }}, l)))));
+        [["chromatic","Chromatic"],["major","Major"],["minor","Minor"]].map(([v,l])=>h("button",{"aria-pressed":String(aScale===v), onclick:()=>{ fx.squeeze_scale=v; if (fx.squeeze_key==null) fx.squeeze_key=aKey; changed(); }}, l)))));
     if (aScale!=="chromatic"){
       const aRow = h("div",{class:"keys", role:"group", "aria-label":"Squeezed key"});
       NOTES.forEach(nm => aRow.append(h("button",{"aria-pressed":String(nm===aKey), onclick:()=>{ fx.squeeze_key=nm; if (fx.squeeze_scale==null) fx.squeeze_scale=aScale; changed(); }}, nm)));
@@ -798,7 +798,7 @@ function harmonizerCard(p, fx){
   const tune = p.list.find(f=>f.effect==="autotune" && f.enabled!==false);
   const tones = harmonyTones(fx);
   const isKey = !!LIB.KEY_CHORDS[chord];
-  // key chords need a major or minor key: "Every note" doesn't say which 3rd is meant
+  // key chords need a major or minor key: "Chromatic" doesn't say which 3rd is meant
   const keyed = !!(tune && (tune.scale==="major" || tune.scale==="minor"));
 
   // chord picker
