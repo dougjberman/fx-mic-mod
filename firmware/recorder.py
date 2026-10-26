@@ -36,7 +36,14 @@ except ImportError:
 SAMPLE_RATE = 16000
 BLOCK_MS = 16           # audio per record() call, the loop's pace
 TRIM_MS = 50            # dropped from the start of each take: handle click
-FADE_MS = 5             # fade-out at the end of each take, against a click
+FADE_MS = 5             # fade-in and fade-out at the ends of each take, against a click
+# Silence before the voice comes in is cut, so the sample sounds the moment
+# it is triggered. The take starts PRE_ROLL_MS before the first sample at
+# ONSET_LEVEL (about -35 dBFS, just over the mic's hiss), so the attack stays
+# whole. A take that never gets that loud is kept as it is.
+ONSET_LEVEL = 600
+PRE_ROLL_MS = 10
+WRITE_SAMPLES = 2048    # samples per file write, so the save animation keeps moving
 CHUNK = 8192            # samples per buffer piece (16 KB)
 MIN_SECONDS = 1         # shortest take worth offering when memory is short
 
@@ -155,15 +162,39 @@ class Recorder:
     def take(self):
         """(start, end) sample indices of the usable take, after trimming."""
         start = min(self.frames, self.sample_rate * TRIM_MS // 1000)
+        onset = self._onset(start, self.frames)
+        if onset is not None:
+            start = max(start, onset - self.sample_rate * PRE_ROLL_MS // 1000)
         return start, self.frames
 
-    def save(self, path):
+    def _onset(self, start, end):
+        """Index of the first sample at ONSET_LEVEL or louder, or None."""
+        at = start
+        while at < end:
+            chunk = self._chunks[at // CHUNK]
+            lo = at % CHUNK
+            hi = min(len(chunk), lo + end - at)
+            if np is not None:
+                part = chunk[lo:hi]
+                loud = (part >= ONSET_LEVEL) + (part <= -ONSET_LEVEL)
+                if np.max(loud):
+                    return at + int(np.argmax(loud))
+            else:
+                for i in range(lo, hi):
+                    if chunk[i] >= ONSET_LEVEL or chunk[i] <= -ONSET_LEVEL:
+                        return at + i - lo
+            at += hi - lo
+        return None
+
+    def save(self, path, tick=None):
         """Write the take to ``path`` as a WAV. Returns the frames written.
 
         Writes ``path + ".tmp"`` first and renames it over ``path``, so a power
         cut mid-write leaves the old sample in place, not a broken file. When
         the drive has no room for both, the old file goes first. A failed
         write removes its partial tmp, so it never holds space.
+
+        ``tick``, if given, is called between writes, for a busy animation.
         """
         start, end = self.take()
         frames = end - start
@@ -172,6 +203,11 @@ class Recorder:
 
         chunks = self._chunks
         fade = min(frames, self.sample_rate * FADE_MS // 1000)
+        if start > 0:
+            for i in range(fade):
+                index = start + i
+                chunk = chunks[index // CHUNK]
+                chunk[index % CHUNK] = int(chunk[index % CHUNK]) * i // fade
         for i in range(fade):
             index = end - fade + i
             chunk = chunks[index // CHUNK]
@@ -192,7 +228,9 @@ class Recorder:
                 while at < end:
                     chunk = chunks[at // CHUNK]
                     lo = at % CHUNK
-                    hi = min(len(chunk), lo + end - at)
+                    hi = min(len(chunk), lo + end - at, lo + WRITE_SAMPLES)
+                    if tick is not None:
+                        tick()
                     # A 1-D slice of either buffer type is contiguous and exposes
                     # the buffer protocol, so it is written without a copy.
                     file.write(chunk[lo:hi] if np is not None else memoryview(chunk)[lo:hi])

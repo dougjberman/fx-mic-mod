@@ -126,12 +126,11 @@ except ValueError as error:
     autotune.set_rate(RATE)
 
 
-
 _phase = CONFIG.get("feed_phase", autotune.FEED_PHASE)
-if _phase in (0, 1) and not isinstance(_phase, bool):
+if _phase is None or (_phase in (0, 1) and not isinstance(_phase, bool)):
     autotune.FEED_PHASE = _phase
 else:
-    print("feed_phase must be 0 or 1; using {}".format(autotune.FEED_PHASE))
+    print("feed_phase must be 0 or 1; using the default feed")
 
 
 RATE_SCALE = RATE / 16000
@@ -659,10 +658,9 @@ def save_take(ctx):
     path = "/{}".format(sample["file"])
 
     unload_wave_sample(ctx)
-    for _led in red_leds:
-        _led.value = False
+    waterfall = SaveWaterfall()
     try:
-        frames = ctx.recorder.save(path)
+        frames = ctx.recorder.save(path, tick=waterfall.step)
         print("saved {} ({:.2f} s), {} KB left on the drive".format(
             path, frames / RATE, (drive_free() or 0) // 1024))
     except OSError as error:
@@ -670,7 +668,41 @@ def save_take(ctx):
             path, error, (drive_free() or 0) // 1024))
     ctx.recorder.frames = 0
     load_selected_wave_sample(ctx)
+    waterfall.finish()
+    update_white_leds(ctx)
     update_red_leds(ctx)
+
+
+
+
+WATERFALL_STEP_SECONDS = 0.07
+
+
+class SaveWaterfall:
+    def __init__(self):
+        self.leds = red_leds + white_leds
+        self.started = time.monotonic()
+        self.lit = None
+        self.step()
+
+    def step(self):
+        index = int((time.monotonic() - self.started) / WATERFALL_STEP_SECONDS)
+        index %= len(self.leds)
+        if index != self.lit:
+            for at, _led in enumerate(self.leds):
+                _led.value = at == index
+            self.lit = index
+
+    def finish(self):
+        0
+        sweep = WATERFALL_STEP_SECONDS * len(self.leds)
+        passes = int((time.monotonic() - self.started) / sweep) + 1
+        end = self.started + passes * sweep
+        while time.monotonic() < end:
+            self.step()
+            time.sleep(min(WATERFALL_STEP_SECONDS, max(0.0, end - time.monotonic())))
+        for _led in self.leds:
+            _led.value = False
 
 
 class HandleValue:

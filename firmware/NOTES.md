@@ -35,13 +35,19 @@ chord needs the note).
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.
-- **FEED_PHASE** in autotune.py: flip it between 0 and 1 if there is steady crackle.
+- **FEED_PHASE** in autotune.py: the default (None) feeds the shifter a two-block window, so the
+  order of blocks no longer depends on when a preset loads. If an autotune preset crackles all the
+  way through on some loads and not others, try 0 or 1 to compare with the older double buffer.
 - **Recording after playback:** record mode stops the mic feeding the mixer, then calls
   `mic.record()`. Check that the first block of a take is not stale audio from before the squeeze
   (the 50 ms trim and 0.1 s settle should cover it).
 - **Take length:** `RECORD_SECONDS = 4` uses 128 KB of RAM. The serial console prints free memory
   on entering record mode; raise it if there is room.
-- **Flash write time:** saving a 4 s take writes 128 KB. The LEDs go dark while it saves.
+- **Flash write time:** saving a 4 s take writes 128 KB. While it saves, one LED at a time runs down
+  the mic (red 1 to white 4), at least one full sweep.
+- **Take start:** silence before the voice is cut, keeping 10 ms before the first sample over
+  about -35 dBFS (`ONSET_LEVEL` in recorder.py). If quiet starts get clipped, lower it; if hum
+  stops the trim, raise it.
 - **Samples through the preset** (`"sample_fx": "preset"`): non-autotune presets get a second
   `audiomixer.Mixer` at the chain input. Autotune presets stream the WAV from flash 512 bytes per
   block and mix it in Python before pitch detection. Check for crackle or `overflow` while a

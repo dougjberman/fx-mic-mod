@@ -37,6 +37,13 @@ SAMPLE_RATE = 16000
 BLOCK_MS = 16
 TRIM_MS = 50
 FADE_MS = 5
+
+
+
+
+ONSET_LEVEL = 600
+PRE_ROLL_MS = 10
+WRITE_SAMPLES = 2048
 CHUNK = 8192
 MIN_SECONDS = 1
 
@@ -155,10 +162,34 @@ class Recorder:
     def take(self):
         0
         start = min(self.frames, self.sample_rate * TRIM_MS // 1000)
+        onset = self._onset(start, self.frames)
+        if onset is not None:
+            start = max(start, onset - self.sample_rate * PRE_ROLL_MS // 1000)
         return start, self.frames
 
-    def save(self, path):
+    def _onset(self, start, end):
         0
+        at = start
+        while at < end:
+            chunk = self._chunks[at // CHUNK]
+            lo = at % CHUNK
+            hi = min(len(chunk), lo + end - at)
+            if np is not None:
+                part = chunk[lo:hi]
+                loud = (part >= ONSET_LEVEL) + (part <= -ONSET_LEVEL)
+                if np.max(loud):
+                    return at + int(np.argmax(loud))
+            else:
+                for i in range(lo, hi):
+                    if chunk[i] >= ONSET_LEVEL or chunk[i] <= -ONSET_LEVEL:
+                        return at + i - lo
+            at += hi - lo
+        return None
+
+    def save(self, path, tick=None):
+        0
+
+
 
 
 
@@ -172,6 +203,11 @@ class Recorder:
 
         chunks = self._chunks
         fade = min(frames, self.sample_rate * FADE_MS // 1000)
+        if start > 0:
+            for i in range(fade):
+                index = start + i
+                chunk = chunks[index // CHUNK]
+                chunk[index % CHUNK] = int(chunk[index % CHUNK]) * i // fade
         for i in range(fade):
             index = end - fade + i
             chunk = chunks[index // CHUNK]
@@ -192,7 +228,9 @@ class Recorder:
                 while at < end:
                     chunk = chunks[at // CHUNK]
                     lo = at % CHUNK
-                    hi = min(len(chunk), lo + end - at)
+                    hi = min(len(chunk), lo + end - at, lo + WRITE_SAMPLES)
+                    if tick is not None:
+                        tick()
 
 
                     file.write(chunk[lo:hi] if np is not None else memoryview(chunk)[lo:hi])

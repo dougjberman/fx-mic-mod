@@ -124,14 +124,13 @@ except ValueError as error:
     print("config: {}; using {}".format(error, DEFAULT_RATE))
     RATE = DEFAULT_RATE
     autotune.set_rate(RATE)
-# "feed_phase": 0 or 1, which half of the autotune feed buffer is written
-# while the other plays. The right one can differ between sample rates; the
-# wrong one crackles steadily on autotune presets only.
+# "feed_phase": leave it out for the default feed, or 0 or 1 for the older
+# double buffer (see autotune.FEED_PHASE).
 _phase = CONFIG.get("feed_phase", autotune.FEED_PHASE)
-if _phase in (0, 1) and not isinstance(_phase, bool):
+if _phase is None or (_phase in (0, 1) and not isinstance(_phase, bool)):
     autotune.FEED_PHASE = _phase
 else:
-    print("feed_phase must be 0 or 1; using {}".format(autotune.FEED_PHASE))
+    print("feed_phase must be 0 or 1; using the default feed")
 # Sample counts in config.json (grain sizes, pitch_shift windows) are written
 # for 16 kHz, so they keep their length in time at other rates.
 RATE_SCALE = RATE / 16000
@@ -659,10 +658,9 @@ def save_take(ctx):
     path = "/{}".format(sample["file"])
     # The slot's WaveFile holds the file open; release it before replacing it.
     unload_wave_sample(ctx)
-    for _led in red_leds:
-        _led.value = False
+    waterfall = SaveWaterfall()
     try:
-        frames = ctx.recorder.save(path)
+        frames = ctx.recorder.save(path, tick=waterfall.step)
         print("saved {} ({:.2f} s), {} KB left on the drive".format(
             path, frames / RATE, (drive_free() or 0) // 1024))
     except OSError as error:
@@ -670,7 +668,41 @@ def save_take(ctx):
             path, error, (drive_free() or 0) // 1024))
     ctx.recorder.frames = 0
     load_selected_wave_sample(ctx)
+    waterfall.finish()
+    update_white_leds(ctx)
     update_red_leds(ctx)
+
+
+# While a take saves, one LED at a time runs down the mic, red 1 at the top
+# to white 4 at the bottom, then starts again at the top.
+WATERFALL_STEP_SECONDS = 0.07
+
+
+class SaveWaterfall:
+    def __init__(self):
+        self.leds = red_leds + white_leds
+        self.started = time.monotonic()
+        self.lit = None
+        self.step()
+
+    def step(self):
+        index = int((time.monotonic() - self.started) / WATERFALL_STEP_SECONDS)
+        index %= len(self.leds)
+        if index != self.lit:
+            for at, _led in enumerate(self.leds):
+                _led.value = at == index
+            self.lit = index
+
+    def finish(self):
+        """Run out the current pass, so even a quick save shows a full sweep."""
+        sweep = WATERFALL_STEP_SECONDS * len(self.leds)
+        passes = int((time.monotonic() - self.started) / sweep) + 1
+        end = self.started + passes * sweep
+        while time.monotonic() < end:
+            self.step()
+            time.sleep(min(WATERFALL_STEP_SECONDS, max(0.0, end - time.monotonic())))
+        for _led in self.leds:
+            _led.value = False
 
 
 class HandleValue:

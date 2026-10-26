@@ -218,6 +218,20 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(h._chord_intervals(57), h._key_intervals(57))
         self.assertEqual(h._chord_intervals(45), h._key_intervals(57))
 
+    def test_feed_holds_the_last_two_blocks_in_order(self):
+        # The chain pulls the feed two blocks at a time, whenever it likes, so
+        # after every write the buffer must read oldest block first.
+        import array
+        import autotune
+        A, n = autotune.Autotune, autotune.BLOCK_SIZE
+        h = A.__new__(A)
+        h._out = array.array("h", [0] * (2 * n))
+        view = memoryview(h._out)
+        h._front, h._back, h._half = view[:n], view[n:], 0
+        for k in range(1, 5):
+            h._feed_block(array.array("h", [k] * n))
+            self.assertEqual(list(h._out), [k - 1] * n + [k] * n)
+
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
             self.cl.create_effects({"list": [{"effect": "autotune"}]})
@@ -286,22 +300,30 @@ class DeviceScenarioTests(unittest.TestCase):
             self.assertAlmostEqual(take.getnframes() / 24000, 3.95, delta=0.03)
         self.assertFalse(any(name.endswith(".tmp") for name in s["files"]))
 
-        # the red LEDs count the second take down 4 -> 3 -> 2 -> 1 -> 0, a second each
+        # the red LEDs count the second take down 4 -> 3 -> 2 -> 1, a second each
         reds = [(t, c) for t, c in transitions(s["red_counts"]) if 7.0 < t < 11.2]
         counts = [c for _, c in reds]
         # before the take the reds flash 0/4; the countdown starts at the first 3
         reds = reds[counts.index(3):]
-        self.assertEqual([c for _, c in reds[:4]], [3, 2, 1, 0])
-        for (t0, _), (t1, _) in zip(reds, reds[1:4]):
+        self.assertEqual([c for _, c in reds[:3]], [3, 2, 1])
+        for (t0, _), (t1, _) in zip(reds, reds[1:3]):
             self.assertAlmostEqual(t1 - t0, 1.0, delta=0.05)
+
+        # while each take saves, one LED at a time runs top to bottom
+        sweep = ["LED_RED1", "LED_RED2", "LED_RED3", "LED_RED4",
+                 "LED_WHITE1", "LED_WHITE2", "LED_WHITE3", "LED_WHITE4"]
+        lit = [tuple(names) for _, names in transitions(s["lit_log"])]
+        singles = [names[0] for names in lit if len(names) == 1]
+        text = " ".join(singles)
+        self.assertEqual(text.count(" ".join(sweep)), 2, singles)
 
         # in record mode the red LEDs flash all together while no take runs,
         # and the white LEDs hold the slot count steady
-        reds_idle = [c for t, c in transitions(s["red_counts"]) if 3.6 < t < 6.0]
+        reds_idle = [c for t, c in transitions(s["red_counts"]) if 3.6 < t < 5.0]
         self.assertIn(0, reds_idle)
         self.assertIn(4, reds_idle)
         self.assertTrue(set(reds_idle) <= {0, 4}, reds_idle)
-        whites = [w for t, w in transitions(s["white_log"]) if 3.6 < t < 6.0]
+        whites = [w for t, w in transitions(s["white_log"]) if 3.6 < t < 5.0]
         self.assertNotIn([], whites)
 
     def test_samples_through_the_preset(self):

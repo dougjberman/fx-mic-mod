@@ -61,7 +61,13 @@ GRAIN_DENSITY = 2
 
 
 
-FEED_PHASE = 1
+
+
+
+
+
+
+FEED_PHASE = None
 
 
 
@@ -610,6 +616,13 @@ def key_by_name(name):
                       .replace("GB", "F#").replace("AB", "G#").replace("BB", "A#"))
 
 
+
+def _feed_sample(buffer, fmt):
+    0
+    import audiocore
+    return audiocore.RawSample(buffer, sample_rate=fmt["sample_rate"],
+                               single_buffer=FEED_PHASE is None)
+
 class Autotune:
     0
 
@@ -670,8 +683,9 @@ class Autotune:
 
 
         self._out = array.array("h", [0] * (BLOCK_SIZE * 2))
-        self.feed = audiocore.RawSample(
-            self._out, sample_rate=fmt["sample_rate"], single_buffer=False)
+        view = memoryview(self._out)
+        self._front, self._back = view[:BLOCK_SIZE], view[BLOCK_SIZE:]
+        self.feed = _feed_sample(self._out, fmt)
 
         self.shifter = None
         self.shifter_name = None
@@ -720,8 +734,7 @@ class Autotune:
                 count = len(tones) - 1
                 self.mixer = audiomixer.Mixer(voice_count=count + 1, **fmt)
                 for _ in range(count):
-                    self._feeds.append(audiocore.RawSample(
-                        self._out, sample_rate=fmt["sample_rate"], single_buffer=False))
+                    self._feeds.append(_feed_sample(self._out, fmt))
                     self.voices.append(_make_native_shifter(
                         audiodelays, fmt, 1.0, grain_size, density)[0])
                 if self._key_chord:
@@ -835,6 +848,10 @@ class Autotune:
         return voicing(tones, self._inversion, self._octave)
 
     def _feed_block(self, block):
+        if FEED_PHASE is None:
+            self._front[:] = self._back
+            self._back[:] = block
+            return
         start = (self._half ^ FEED_PHASE) * BLOCK_SIZE
         self._out[start:start + BLOCK_SIZE] = block
         self._half ^= 1

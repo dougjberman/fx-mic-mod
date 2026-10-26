@@ -85,9 +85,9 @@ A top-level `"sample_level"` (0..1, default 1) turns every sample down. A take r
 already sits at the voice's level; the install guide's converter brings imported files to about that
 level too.
 
-A top-level `"feed_phase"` (0 or 1, default 1) picks which half of the autotune stage's double buffer
-is written while the other plays. If autotune presets crackle steadily and clean ones don't, try the
-other value.
+A top-level `"feed_phase"` (0 or 1) switches the autotune stage back to its older double buffer,
+written half by half. Leave it out: the default feed keeps blocks in order however a preset loads.
+It is only there to compare against if autotune presets crackle and clean ones don't.
 
 | type | params |
 |---|---|

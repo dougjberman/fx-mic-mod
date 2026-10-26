@@ -59,9 +59,15 @@ SHIFT_ENGINE = "native"
 GRAIN_SIZE = 512        # native grain length in samples (at 16 kHz); bigger = smoother, more latency
 GRAIN_DENSITY = 2       # native overlapping grains (1..8)
 
-# If the output crackles steadily, flip this between 0 and 1. It picks which
-# half of the double-buffered RawSample is written while the other one plays.
-FEED_PHASE = 1
+# How processed blocks reach the pitch shifter. The chain pulls the feed two
+# blocks at a time, at a moment that has no fixed relation to when a preset
+# loads. None (the default) keeps the feed as a two-block window, oldest block
+# first: each block is written to the end and the previous one slides to the
+# front, so the pull always reads the last two blocks in order, whenever it
+# comes. 0 or 1 is the older double buffer, written half by half; one of the
+# two values plays the blocks out of order and crackles all the way through,
+# and which one depended on the moment the preset loaded.
+FEED_PHASE = None
 
 # Retune speed. `speed` 0..1 (0 = natural, 1 = hard snap) is mapped to the
 # fraction of the remaining correction applied per 16 ms block, from
@@ -610,6 +616,13 @@ def key_by_name(name):
                       .replace("GB", "F#").replace("AB", "G#").replace("BB", "A#"))
 
 
+
+def _feed_sample(buffer, fmt):
+    """The RawSample the shifters read processed blocks from (see FEED_PHASE)."""
+    import audiocore
+    return audiocore.RawSample(buffer, sample_rate=fmt["sample_rate"],
+                               single_buffer=FEED_PHASE is None)
+
 class Autotune:
     """One autotune stage: mic in, corrected voice out of self.output.
 
@@ -670,8 +683,9 @@ class Autotune:
         # Python writes each processed block into the half of this buffer
         # that is not playing; the audio pipeline loops over it.
         self._out = array.array("h", [0] * (BLOCK_SIZE * 2))
-        self.feed = audiocore.RawSample(
-            self._out, sample_rate=fmt["sample_rate"], single_buffer=False)
+        view = memoryview(self._out)
+        self._front, self._back = view[:BLOCK_SIZE], view[BLOCK_SIZE:]
+        self.feed = _feed_sample(self._out, fmt)
 
         self.shifter = None
         self.shifter_name = None
@@ -720,8 +734,7 @@ class Autotune:
                 count = len(tones) - 1
                 self.mixer = audiomixer.Mixer(voice_count=count + 1, **fmt)
                 for _ in range(count):
-                    self._feeds.append(audiocore.RawSample(
-                        self._out, sample_rate=fmt["sample_rate"], single_buffer=False))
+                    self._feeds.append(_feed_sample(self._out, fmt))
                     self.voices.append(_make_native_shifter(
                         audiodelays, fmt, 1.0, grain_size, density)[0])
                 if self._key_chord:
@@ -835,6 +848,10 @@ class Autotune:
         return voicing(tones, self._inversion, self._octave)
 
     def _feed_block(self, block):
+        if FEED_PHASE is None:
+            self._front[:] = self._back
+            self._back[:] = block
+            return
         start = (self._half ^ FEED_PHASE) * BLOCK_SIZE
         self._out[start:start + BLOCK_SIZE] = block
         self._half ^= 1

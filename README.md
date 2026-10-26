@@ -37,7 +37,7 @@ instructions to match your mic.
 | TOP + MIDDLE 0.8 s | Power off. |
 
 **Record mode:** all four red LEDs flash together and the white LEDs show the slot to record into. MIDDLE picks the slot,
-squeeze and hold the handle to record, release to save. The red LEDs stop flashing and count down the 4 second max sample length as you record.
+squeeze and hold the handle to record, release to save. The red LEDs stop flashing and count down the 4 second max sample length as you record. While the take saves, a light runs down the mic from the top red LED to the bottom white one. Silence before your first sound is trimmed, so the sample starts right on it.
 A recording immediately replaces the slot's WAV. BOTTOM plays it back to decide if you want another take.
 
 ## Two power-on modes (boot.py)

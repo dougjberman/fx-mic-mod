@@ -106,6 +106,10 @@ def main():
             [round(t, 3), [k for k, v in sorted(leds.items()) if v and k.startswith("LED_WHITE")]]
             for t, leds in script.led_log
         ],
+        "lit_log": [
+            [round(t, 3), [k for k, v in sorted(leds.items()) if v and k.startswith("LED_")]]
+            for t, leds in script.led_log
+        ],
     }
     print("SUMMARY " + json.dumps(summary))
 

@@ -42,7 +42,49 @@ class RecorderTests(unittest.TestCase):
         start = 24000 * recorder.TRIM_MS // 1000
         self.assertEqual(frames, 24000 - start)
         fade = 24000 * recorder.FADE_MS // 1000
-        self.assertEqual(list(data[:-fade]), [(start + i) % 30000 for i in range(frames - fade)])
+        self.assertEqual(list(data[fade:-fade]),
+                         [(start + i) % 30000 for i in range(fade, frames - fade)])
+        # faded in from silence, against a click
+        self.assertEqual(data[0], 0)
+        self.assertLess(data[fade // 2], start + fade // 2)
+
+    def test_silence_before_the_voice_is_cut(self):
+        class LateMic:
+            """Silent for half a second, then loud."""
+            n = 0
+
+            def record(self, block, count):
+                for i in range(count):
+                    block[i] = 0 if self.n + i < 12000 else 5000
+                self.n += count
+                return count
+
+        rec = recorder.Recorder(LateMic(), seconds=1, sample_rate=24000)
+        rec.start()
+        while rec.recording:
+            rec.step()
+        start, end = rec.take()
+        self.assertEqual(start, 12000 - 24000 * recorder.PRE_ROLL_MS // 1000)
+        self.assertEqual(end, 24000)
+
+    def test_a_quiet_take_is_kept_whole(self):
+        class QuietMic:
+            def record(self, block, count):
+                for i in range(count):
+                    block[i] = 100 if i % 2 else -100
+                return count
+
+        rec = recorder.Recorder(QuietMic(), seconds=1, sample_rate=24000)
+        rec.start()
+        while rec.recording:
+            rec.step()
+        self.assertEqual(rec.take(), (24000 * recorder.TRIM_MS // 1000, 24000))
+
+    def test_save_ticks_while_it_writes(self):
+        rec = self._take()
+        ticks = []
+        rec.save(os.path.join(tempfile.mkdtemp(), "1.wav"), tick=lambda: ticks.append(1))
+        self.assertGreaterEqual(len(ticks), (24000 - 1200) // recorder.WRITE_SAMPLES)
 
     def _take(self):
         rec = recorder.Recorder(RampMic(), seconds=1, sample_rate=24000)
