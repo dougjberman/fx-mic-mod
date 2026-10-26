@@ -692,28 +692,33 @@ WATERFALL_STEP_SECONDS = 0.07
 
 
 class SaveWaterfall:
+    """Steps one LED at a time, never skipping one: a flash write can stall
+    longer than a step, and then the next step just comes late."""
+
     def __init__(self):
         self.leds = red_leds + white_leds
-        self.started = time.monotonic()
-        self.lit = None
+        for _led in self.leds:
+            _led.value = False
+        self.lit = -1
+        self.moved = 0.0
         self.step()
 
     def step(self):
-        index = int((time.monotonic() - self.started) / WATERFALL_STEP_SECONDS)
-        index %= len(self.leds)
-        if index != self.lit:
-            for at, _led in enumerate(self.leds):
-                _led.value = at == index
-            self.lit = index
+        now = time.monotonic()
+        if self.lit < 0 or now - self.moved >= WATERFALL_STEP_SECONDS:
+            self.lit += 1
+            self.moved = now
+            index = self.lit % len(self.leds)
+            self.leds[index - 1].value = False
+            self.leds[index].value = True
 
     def finish(self):
-        """Run out the current pass, so even a quick save shows a full sweep."""
-        sweep = WATERFALL_STEP_SECONDS * len(self.leds)
-        passes = int((time.monotonic() - self.started) / sweep) + 1
-        end = self.started + passes * sweep
-        while time.monotonic() < end:
+        """Run out the current pass to the bottom LED, so even a quick save
+        shows a full sweep."""
+        while self.lit % len(self.leds) != len(self.leds) - 1:
+            time.sleep(max(0.0, WATERFALL_STEP_SECONDS - (time.monotonic() - self.moved)))
             self.step()
-            time.sleep(min(WATERFALL_STEP_SECONDS, max(0.0, end - time.monotonic())))
+        time.sleep(WATERFALL_STEP_SECONDS)
         for _led in self.leds:
             _led.value = False
 
