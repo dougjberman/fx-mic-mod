@@ -52,6 +52,22 @@ def wav_header(frames, sample_rate=SAMPLE_RATE):
     )
 
 
+def drive_free(path="/"):
+    """Bytes free on the drive holding ``path``, or None if unknown."""
+    try:
+        stat = os.statvfs(path)
+    except (AttributeError, OSError):
+        return None
+    return stat[0] * stat[4]
+
+
+def _remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def _exists(path):
     try:
         os.stat(path)
@@ -145,7 +161,9 @@ class Recorder:
         """Write the take to ``path`` as a WAV. Returns the frames written.
 
         Writes ``path + ".tmp"`` first and renames it over ``path``, so a power
-        cut mid-write leaves the old sample in place, not a broken file.
+        cut mid-write leaves the old sample in place, not a broken file. When
+        the drive has no room for both, the old file goes first. A failed
+        write removes its partial tmp, so it never holds space.
         """
         start, end = self.take()
         frames = end - start
@@ -160,17 +178,28 @@ class Recorder:
             chunk[index % CHUNK] = int(chunk[index % CHUNK]) * (fade - i) // fade
 
         tmp = path + ".tmp"
-        with open(tmp, "wb") as file:
-            file.write(wav_header(frames, self.sample_rate))
-            at = start
-            while at < end:
-                chunk = chunks[at // CHUNK]
-                lo = at % CHUNK
-                hi = min(len(chunk), lo + end - at)
-                # A 1-D slice of either buffer type is contiguous and exposes
-                # the buffer protocol, so it is written without a copy.
-                file.write(chunk[lo:hi] if np is not None else memoryview(chunk)[lo:hi])
-                at += hi - lo
+        # A take that failed before leaves a partial tmp; it only eats space.
+        _remove(tmp)
+        size = 44 + 2 * frames
+        free = drive_free(path)
+        if free is not None and free < size + 4096 and _exists(path):
+            # No room for the new take beside the old one: give up the old one.
+            _remove(path)
+        try:
+            with open(tmp, "wb") as file:
+                file.write(wav_header(frames, self.sample_rate))
+                at = start
+                while at < end:
+                    chunk = chunks[at // CHUNK]
+                    lo = at % CHUNK
+                    hi = min(len(chunk), lo + end - at)
+                    # A 1-D slice of either buffer type is contiguous and exposes
+                    # the buffer protocol, so it is written without a copy.
+                    file.write(chunk[lo:hi] if np is not None else memoryview(chunk)[lo:hi])
+                    at += hi - lo
+        except OSError:
+            _remove(tmp)
+            raise
         if _exists(path):
             os.remove(path)
         os.rename(tmp, path)

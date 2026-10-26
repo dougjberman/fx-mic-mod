@@ -44,6 +44,66 @@ class RecorderTests(unittest.TestCase):
         fade = 24000 * recorder.FADE_MS // 1000
         self.assertEqual(list(data[:-fade]), [(start + i) % 30000 for i in range(frames - fade)])
 
+    def _take(self):
+        rec = recorder.Recorder(RampMic(), seconds=1, sample_rate=24000)
+        rec.start()
+        while rec.recording:
+            rec.step()
+        return rec
+
+    def test_failed_save_leaves_no_tmp(self):
+        rec = self._take()
+        folder = tempfile.mkdtemp()
+        path = os.path.join(folder, "4.wav")
+        with open(path + ".tmp", "wb") as stale:
+            stale.write(b"x" * 1000)
+        with open(path, "wb") as old:
+            old.write(b"old")
+        real_open = recorder.open if hasattr(recorder, "open") else open
+
+        class Full:
+            def __init__(self, f):
+                self.f = f
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                self.f.close()
+            def write(self, data):
+                raise OSError(28, "No space left on device")
+
+        recorder.open = lambda p, m: Full(real_open(p, m))
+        try:
+            with self.assertRaises(OSError):
+                rec.save(path)
+        finally:
+            del recorder.open
+        self.assertEqual(sorted(os.listdir(folder)), ["4.wav"])
+        with open(path, "rb") as old:
+            self.assertEqual(old.read(), b"old")
+
+    def test_low_drive_gives_up_old_file_first(self):
+        rec = self._take()
+        folder = tempfile.mkdtemp()
+        path = os.path.join(folder, "4.wav")
+        with open(path, "wb") as old:
+            old.write(b"old" * 1000)
+        seen = []
+        real_free = recorder.drive_free
+
+        def free(p="/"):
+            seen.append(os.path.exists(path))
+            return 1000
+
+        recorder.drive_free = free
+        try:
+            frames = rec.save(path)
+        finally:
+            recorder.drive_free = real_free
+        self.assertEqual(seen, [True])
+        with wave.open(path) as take:
+            self.assertEqual(take.getnframes(), frames)
+        self.assertEqual(os.listdir(folder), ["4.wav"])
+
     def test_short_memory_shortens_the_take(self):
         made = []
         real = recorder.array.array

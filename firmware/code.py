@@ -85,7 +85,7 @@ from config_loader import (
     preset_level,
     sample_routing,
 )
-from recorder import Recorder
+from recorder import Recorder, drive_free
 
 # Where to look for the preset config
 CONFIG_PATHS = ("/config.json", "/ep2350_circuitpython_config.json")
@@ -587,7 +587,8 @@ def select_preset(ctx, index):
     update_red_leds(ctx)
     update_white_leds(ctx)
     if ctx.active == RECORD_SPOT:
-        print("record mode, {} bytes free".format(gc.mem_free()))
+        print("record mode, {} bytes free, {} KB left on the drive".format(
+            gc.mem_free(), (drive_free() or 0) // 1024))
     else:
         print(
             "preset {} of {}{} ({} effects{}), {} bytes free".format(
@@ -660,9 +661,11 @@ def save_take(ctx):
         _led.value = False
     try:
         frames = ctx.recorder.save(path)
-        print("saved {} ({:.2f} s)".format(path, frames / RATE))
+        print("saved {} ({:.2f} s), {} KB left on the drive".format(
+            path, frames / RATE, (drive_free() or 0) // 1024))
     except OSError as error:
-        print("{} not saved: {}".format(path, error))
+        print("{} not saved: {}, {} KB left on the drive".format(
+            path, error, (drive_free() or 0) // 1024))
     ctx.recorder.frames = 0
     load_selected_wave_sample(ctx)
     update_red_leds(ctx)
