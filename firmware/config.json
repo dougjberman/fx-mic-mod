@@ -35,7 +35,7 @@
     {
       "name": "Squeeze monster",
       "comment": "From Adafruit's demo pack: the handle bends pitch from -12 to +12 semitones.",
-      "level": 0.12,
+      "level": 0.25,
       "list": [
         {"effect": "pitch_shift", "semitones": {"block": "math", "operation": "constrained_lerp", "a": -12, "b": 12, "c": "$handle"}, "mix": 1, "window": 1024, "overlap": 128},
         {"effect": "distortion", "drive": 0.6, "pre_gain": 36, "post_gain": -11, "mode": "overdrive", "soft_clip": true, "mix": 1},
