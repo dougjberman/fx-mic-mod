@@ -210,7 +210,7 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
     <ol id="railList">
       <li><a href="#prep"><span class="n">00</span>Before you start<span class="dot"></span></a></li>
       <li><a href="#backup"><span class="n">01</span>Back up the disk<span class="dot"></span></a></li>
-      <li><a href="#stock"><span class="n">02</span>Save stock firmware<span class="dot"></span></a></li>
+      <li><a href="#stock"><span class="n">02</span>Download the files<span class="dot"></span></a></li>
       <li><a href="#boot"><span class="n">03</span>Enter boot mode<span class="dot"></span></a></li>
       <li><a href="#flash"><span class="n">04</span>Flash CircuitPython<span class="dot"></span></a></li>
       <li><a href="#install"><span class="n">05</span>Install fx-mic-mod<span class="dot"></span></a></li>
@@ -260,8 +260,13 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
 
     <!-- 02 -->
     <section class="step" id="stock" data-step="stock">
-      <div class="step-head"><span class="step-num">02</span><h2>Keep a copy of the stock firmware</h2><label class="mark"><input type="checkbox" data-done="stock"> Done</label></div>
-      <p>Teenage Engineering publishes every firmware release as a zip with a <code>.uf2</code> inside. That file is your way back to the original mic, so download it now while you're thinking about it.</p>
+      <div class="step-head"><span class="step-num">02</span><h2>Download everything first</h2><label class="mark"><input type="checkbox" data-done="stock"> Done</label></div>
+      <p>From step 03 on you'll be holding the handle in, so get all three downloads now and keep them in one folder, for example <code>fx-mic-mod</code> in Downloads.</p>
+      <ol class="how">
+        <li><b>CircuitPython 10.3.1</b> for the EP-2350, the same file for the Ting and the FX Mic: <a href="https://downloads.circuitpython.org/bin/teenage_engineering_ep2350/en_US/adafruit-circuitpython-teenage_engineering_ep2350-en_US-10.3.1.uf2" target="_blank" rel="noopener">adafruit-circuitpython-teenage_engineering_ep2350-en_US-10.3.1.uf2</a>. Other versions and languages are on <a href="https://circuitpython.org/board/teenage_engineering_ep2350/" target="_blank" rel="noopener">circuitpython.org</a>.</li>
+        <li><b>Adafruit's 10.x library bundle</b> from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>. Pick the 10.x one, not the newest listed: its files only load on the CircuitPython version they were built for. Unzip it. Step 05 needs its <code>lib</code> folder.</li>
+        <li><b>The stock firmware</b>, your way back to the original mic. Pick the latest version below and unzip it, so you have its <code>.uf2</code>.</li>
+      </ol>
       <div class="tablebox"><table>
         <thead><tr><th>Version</th><th>Date</th><th>Notes</th></tr></thead>
         <tbody>
@@ -345,11 +350,7 @@ picotool save -a ting-full-flash.bin</pre>
     <!-- 04 -->
     <section class="step" id="flash" data-step="flash">
       <div class="step-head"><span class="step-num">04</span><h2>Flash CircuitPython</h2><label class="mark"><input type="checkbox" data-done="flash"> Done</label></div>
-      <p>Download the EP-2350's CircuitPython build (the same one for the Ting and the FX Mic). The board has had official builds since 10.3, so pick the stable one:</p>
-      <ul class="how">
-        <li><a href="https://downloads.circuitpython.org/bin/teenage_engineering_ep2350/en_US/adafruit-circuitpython-teenage_engineering_ep2350-en_US-10.3.1.uf2" target="_blank" rel="noopener">adafruit-circuitpython-teenage_engineering_ep2350-en_US-10.3.1.uf2</a> (stable, recommended)</li>
-        <li>Other versions and languages: <a href="https://circuitpython.org/board/teenage_engineering_ep2350/" target="_blank" rel="noopener">circuitpython.org/board/teenage_engineering_ep2350</a></li>
-      </ul>
+      <p>With the mic in boot mode and the handle still squeezed, choose the CircuitPython <code>.uf2</code> you downloaded in <a href="#stock">step 02</a>, then pick the boot drive.</p>
       <div class="tool">
         <div class="row">
           <label class="filebtn">1. Choose the .uf2 file<input type="file" id="uf2Input" accept=".uf2"></label>
@@ -367,7 +368,7 @@ picotool save -a ting-full-flash.bin</pre>
     <section class="step" id="install" data-step="install">
       <div class="step-head"><span class="step-num">05</span><h2>Install fx-mic-mod</h2><label class="mark"><input type="checkbox" data-done="install"> Done</label></div>
       <p>This copies the fx-mic-mod files to CIRCUITPY: <code>code.py</code> and its modules (<code>autotune.py</code>, <code>recorder.py</code>, <code>config_loader.py</code>), <code>boot.py</code>, and a starter <code>config.json</code> with four presets. The copies on the mic leave out the source comments, which saves about 50 KB for recordings. The commented source is in the project repository.</p>
-      <p>It also needs Adafruit's driver for the mic's audio chip, <code>adafruit_nau88l21.mpy</code>. Download the <b>10.x</b> library bundle from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>, not the newest one listed: its files only load on the CircuitPython version they were built for, and the mic runs 10.x. Unzip it, and choose its <code>lib</code> folder below. Only the driver and the <code>adafruit_register</code> folder it needs are copied from it. You can skip this if both are already on the drive.</p>
+      <p>It also needs Adafruit's driver for the mic's audio chip, <code>adafruit_nau88l21.mpy</code>. Choose the <code>lib</code> folder from the 10.x library bundle you unzipped in <a href="#stock">step 02</a>. Only the driver and the <code>adafruit_register</code> folder it needs are copied from it. You can skip this if both are already on the drive.</p>
       <div class="tool">
         <div class="row">
           <label class="filebtn">1. Choose the bundle's lib folder<input type="file" id="libInput" webkitdirectory multiple></label>
@@ -448,7 +449,7 @@ picotool save -a ting-full-flash.bin</pre>
       <p>This puts Teenage Engineering's own firmware back and copies your backed-up samples onto it. You need the stock firmware from step 02 and your backup zip from step 01.</p>
       <ol class="how">
         <li><b>Plug the mic into your computer</b> with a USB-C data cable. Leave it plugged in until the end.</li>
-        <li><b>Unzip the TE firmware</b> from step 02, so you have its <code>.uf2</code> file.</li>
+        <li><b>Have the stock <code>.uf2</code> ready</b> before you start: the one you unzipped in <a href="#stock">step 02</a>. If you don't have it, download and unzip it now.</li>
         <li><b>Put the mic in boot mode.</b> The mic can be on or off. Squeeze the handle all the way in and keep holding it until step 4 finishes. Under the lower lid, double-click the small dark button just above the USB-C port.<br><b>Worked:</b> all the lights go out, and a drive called <b>RP2350</b> appears on your computer (CIRCUITPY goes away). The lights going out is normal.<br><b>Didn't work:</b> the lights stay on and CIRCUITPY is still there. Double-click again, a bit faster. If it still won't go, keep squeezing and use <b>Reboot to boot mode</b> in the <a href="#console">step 06 console</a>.</li>
         <li><b>Flash the stock firmware.</b> In <a href="#flash">step 04</a>, click <b>Choose the .uf2 file</b> and pick TE's file, then <b>Pick the boot drive and flash</b> and choose RP2350.<br><b>Worked:</b> RP2350 disappears within a few seconds, the mic restarts, a white LED lights, and a drive called <b>TING DISK</b> or <b>FX-MIC DISK</b> appears. Now you can let go of the handle. Your computer may warn that the drive wasn't ejected, and the page may say the drive went away during the write. Both are expected: what counts is the new drive appearing.</li>
         <li><b>Copy your samples back</b> with the tool below: choose your unzipped backup folder, then pick the TING DISK or FX-MIC DISK drive. Or copy the files across by hand.</li>
