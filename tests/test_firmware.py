@@ -235,6 +235,50 @@ class LoaderTests(unittest.TestCase):
         finally:
             autotune.FEED_PHASE = saved
 
+    def test_feed_sync_puts_the_older_block_first_for_the_burst(self):
+        # The chain reads both halves in one burst every two blocks; the write
+        # just before the burst must go to the second half, wherever it falls.
+        import array
+        import autotune
+        A, n, B = autotune.Autotune, autotune.BLOCK_SIZE, autotune.BLOCK_NS
+        for burst_at in (3, 10, 19, 26, 35):  # ms after the spin starts
+            for phase in (0, 1):
+                clock = {"t": 0}
+
+                def now():
+                    t = clock["t"]
+                    clock["t"] += 100000  # 0.1 ms per loop pass
+                    if t < burst_at * 1000000 <= clock["t"]:
+                        clock["t"] += 4000000  # the burst takes 4 ms
+                    return t
+
+                class Mic:
+                    def record(self, block, count):
+                        # wait for the next block edge, 5 ms into the clock
+                        clock["t"] += B - (clock["t"] - 5000000) % B
+                        return count
+
+                h = A.__new__(A)
+                h.mic, h._block, h._zeros = Mic(), array.array("h", [0] * n), array.array("h", [0] * n)
+                h._out, h._half = array.array("h", [0] * (2 * n)), 0
+                saved = autotune.time.monotonic_ns, autotune.FEED_PHASE
+                autotune.time.monotonic_ns, autotune.FEED_PHASE = now, phase
+                try:
+                    h._sync_feed()
+                    edge = clock["t"] - 100000
+                    # blocks then land at edge + m blocks; find the last before a burst
+                    halves = []
+                    for m in range(1, 6):
+                        h._feed_block(array.array("h", [m] * n))
+                        halves.append((edge + m * B, 0 if h._out[0] == m else 1))
+                finally:
+                    autotune.time.monotonic_ns, autotune.FEED_PHASE = saved
+                bursts = [burst_at * 1000000 + j * 2 * B for j in range(8)]
+                for b in bursts:
+                    before = [half for t, half in halves if t < b]
+                    if before and b < halves[-1][0]:
+                        self.assertEqual(before[-1], 1, (burst_at, phase, b))
+
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
             self.cl.create_effects({"list": [{"effect": "autotune"}]})

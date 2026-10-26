@@ -63,9 +63,15 @@ GRAIN_DENSITY = 2
 
 
 
-
-
 FEED_PHASE = 1
+
+
+
+
+
+
+FEED_SYNC = True
+BLOCK_NS = 16000000
 
 
 
@@ -775,7 +781,39 @@ class Autotune:
                 for voice, feed in zip(self.voices, self._feeds):
                     voice.play(feed, loop=True)
             self.shifter.play(self.feed, loop=True)
+            if FEED_SYNC and FEED_PHASE is not None:
+                self._sync_feed()
         self._started = True
+
+    def _sync_feed(self):
+        0
+
+        now = time.monotonic_ns
+
+        began = prev = now()
+        gap = burst = 0
+        while prev - began < 2 * BLOCK_NS + BLOCK_NS // 4:
+            t = now()
+            if t - prev > gap:
+                gap, burst = t - prev, prev
+            prev = t
+
+
+        block = self._block
+        for _ in range(6):
+            t = now()
+            self.mic.record(block, BLOCK_SIZE)
+            edge = now()
+            if edge - t > BLOCK_NS // 2:
+                break
+
+
+        k = ((burst - edge) // BLOCK_NS) % 2
+
+        self._half = (1 ^ k) ^ FEED_PHASE
+        self._feed_block(self._zeros)
+        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long".format(
+            ((burst - edge) % (2 * BLOCK_NS)) / 1e6, gap / 1e6))
 
     def deinit(self):
         self.stop_sample()
