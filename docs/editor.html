@@ -650,7 +650,7 @@ function renderEditor(){
         oninput:(e)=>{ p.name=e.target.value; changedQuiet(); renderSlots(); }})),
       h("div",{class:"row preset-tools"},
         h("label",{class:"small muted", for:"starter"}, "Start from"),
-        h("select",{class:"text", id:"starter", onchange:(e)=>{ if(e.target.value==="") return; const s=clone(STARTERS[+e.target.value]); config.presets[selected]=s; changed(); }},
+        h("select",{class:"text", id:"starter", onchange:(e)=>{ if(e.target.value==="") return; const s=clone(STARTERS[+e.target.value]), d=DEFAULT_CONFIG.presets.find(q=>q.name===s.name); if (d && typeof d.level==="number") s.level=d.level; config.presets[selected]=s; changed(); }},
           h("option",{value:""},"Choose…"), STARTERS.map((s,i)=>h("option",{value:i}, s.name))),
         h("button",{class:"icon-btn", title:"Move preset left", "aria-label":"Move preset left", disabled:selected===0||null, onclick:()=>movePreset(-1)}, "←"),
         h("button",{class:"icon-btn", title:"Move preset right", "aria-label":"Move preset right", disabled:selected===config.presets.length-1||null, onclick:()=>movePreset(1)}, "→"),
