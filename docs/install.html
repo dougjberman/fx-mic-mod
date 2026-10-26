@@ -373,14 +373,10 @@ picotool save -a ting-full-flash.bin</pre>
           <button class="go" id="installBtn">2. Pick CIRCUITPY and install</button>
         </div>
         <label class="mark" style="color: var(--ink);"><input type="checkbox" id="keepConfig" checked> Keep my presets if CIRCUITPY already has a config.json</label>
-        <label class="mark" style="color: var(--ink);"><input type="checkbox" id="keepOld"> Keep the existing code.py as code_prev.py (uses drive space that recordings need)</label>
+        <label class="mark" style="color: var(--ink);"><input type="checkbox" id="keepOld"> Keep the existing code.py as code_prev.py</label>
         <div class="status" id="codeStatus">No driver chosen yet. That's fine if it's already in CIRCUITPY/lib.</div>
         <pre id="bootOut" hidden></pre>
-        <div id="spare" hidden>
-          <p class="status" id="spareStatus"></p>
-          <div id="spareList" style="display: grid; gap: 4px;"></div>
-          <div class="row"><button class="ghost" id="spareBtn">Remove the ticked files</button></div>
-        </div>
+        <div class="status" id="spareStatus" hidden></div>
       </div>
       <div class="note"><b>After installing, turn the mic off and on again.</b> To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together until the lights go out (about a second), then let go. If it stays on, unplug the USB cable and take out the batteries. Once it's dark, squeeze the handle to turn it back on. <b>Working looks like:</b> white LED 1 stays lit, the red LEDs are off (the clean spot), and CIRCUITPY shows up on your computer again. If white LED 1 instead blinks twice every few seconds, the code stopped on an error: connect the serial console below and click Reload to see it. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
       <details><summary>Optional: copy samples from your backup</summary>
@@ -797,6 +793,7 @@ while True:
     if (!libFiles.length && !haveDriver) { status("codeStatus", `CIRCUITPY is missing lib/${DRIVER} or lib/${REGISTER}. Choose the bundle's lib folder first (step 1 above).`, "bad"); return; }
     const keepConfig = $("keepConfig").checked && await hasFile(dir, "config.json");
     try {
+      await tidyDrive(dir);
       let n = 0; const total = files.length + libFiles.length;
       for (const f of libFiles) { await writeFile(dir, f.path, f.file); status("codeStatus", `Copying… ${++n}/${total}`); }
       for (const f of files) {
@@ -810,63 +807,46 @@ while True:
       }
       status("codeStatus", "Installed" + (keepConfig ? " (your config.json was kept)" : "") + ". Turn the mic off and on again to finish: hold the orange and " + (window.siteDevice ? siteDevice.word("mid") : "white") + " buttons together until the lights go out, let go, then squeeze the handle to turn it back on. White LED 1 staying lit means it worked; two blinks every few seconds means an error, which the serial console below will show. Open the serial console below to watch it start.", "ok");
       markDone("install");
-      await listSpare(dir);
     } catch (e) {
       status("codeStatus", "The mic didn't accept the files (" + e.message + "). If fx-mic-mod is already installed, the drive is read-only: turn the mic off, hold the orange button while you squeeze the handle to power it on, and try again. If CIRCUITPY is full, delete old files from lib/ first.", "bad");
     }
   });
 
   // Recorded takes need room on the drive: a full 4 s take is about 190 KB, and saving one
-  // briefly needs room for the old take as well. List what fx-mic-mod doesn't use, so it can go.
-  const USED = new Set(FIRMWARE.concat(["selftest.py", "boot_out.txt", "settings.toml", "lib/" + DRIVER]));
-  const SYSTEM = /^(\..*|System Volume Information|sd)$/;
-  let spareDir = null;
+  // briefly needs room for the old take as well. So the install clears leftovers nobody needs:
+  // macOS "._" shadow files, Chrome's ".crswap" files from an interrupted copy, and an old
+  // code_prev.py unless the box above keeps it. Anything else is only named, never removed.
+  const USED = new Set(FIRMWARE.concat(["selftest.py", "boot_out.txt", "settings.toml", "lib/" + DRIVER, "lib/" + REGISTER]));
+  const JUNK = /^\._|\.crswap$/;
   async function sizeOf(h) {
     if (h.kind === "file") return (await h.getFile()).size;
     let n = 0; for await (const [, c] of h.entries()) n += await sizeOf(c); return n;
   }
-  async function listSpare(dir) {
-    spareDir = dir;
+  async function tidyDrive(dir) {
     let samples = [];
     try { samples = (JSON.parse(await tryRead(dir, "config.json") || "{}").samples || []).map(x => x && x.file).filter(Boolean); } catch (e) {}
     for (let i = 1; i <= 4; i++) samples.push(i + ".wav");
-    const spare = [], used = { n: 0 };
+    let freed = 0; const other = [];
     const look = async (d, prefix) => {
       for await (const [name, h] of d.entries()) {
         const path = prefix + name;
-        if (!prefix && SYSTEM.test(name)) continue;
-        if (path === "lib" && h.kind === "directory") { await look(h, "lib/"); continue; }
-        const size = await sizeOf(h);
-        if (USED.has(path) || path === "lib/" + REGISTER || (!prefix && samples.includes(name))) { used.n += size; continue; }
-        spare.push({ dir: d, name, path: path + (h.kind === "directory" ? "/" : ""), size });
+        if (JUNK.test(name) || (path === "code_prev.py" && !$("keepOld").checked)) {
+          try { const n = await sizeOf(h); await d.removeEntry(name, { recursive: true }); freed += n; } catch (e) {}
+        } else if (h.kind === "directory" && (path === "lib" || path === "lib/" + REGISTER)) await look(h, path + "/");
+        else if (path.startsWith("lib/" + REGISTER + "/")) continue;
+        else if (!prefix && /^(\.|System Volume Information$|sd$)/.test(name)) continue;
+        else if (!USED.has(path) && !(!prefix && samples.includes(name))) {
+          const n = await sizeOf(h); if (n >= 10240) other.push(path + " (" + Math.round(n / 1024) + " KB)");
+        }
       }
     };
     await look(dir, "");
-    const kb = n => Math.ceil(n / 1024) + " KB";
-    $("spare").hidden = false;
-    $("spareList").replaceChildren(...spare.map((f, i) => {
-      const l = document.createElement("label"); l.className = "mark"; l.style.color = "var(--ink)";
-      const c = document.createElement("input"); c.type = "checkbox"; c.dataset.i = i; c.checked = f.path === "code_prev.py" && !$("keepOld").checked;
-      l.append(c, " " + f.path + " (" + kb(f.size) + ")"); return l;
-    }));
-    $("spareList").files = spare;
-    $("spareBtn").hidden = !spare.length;
-    status("spareStatus", spare.length
-      ? "fx-mic-mod and your samples use " + kb(used.n) + ". These files on CIRCUITPY aren't used by fx-mic-mod. Removing them leaves more room for recordings."
-      : "fx-mic-mod and your samples use " + kb(used.n) + ", and nothing else is taking up space on CIRCUITPY.", spare.length ? "" : "ok");
+    const lines = [];
+    if (freed) lines.push("Cleared " + Math.ceil(freed / 1024) + " KB of leftover files to make room for recordings.");
+    if (other.length) lines.push("Also on the drive but not used by fx-mic-mod: " + other.join(", ") + ". Delete them if you don't need them, to make room for recordings.");
+    $("spareStatus").hidden = !lines.length;
+    status("spareStatus", lines.join(" "));
   }
-  $("spareBtn").addEventListener("click", async () => {
-    const spare = $("spareList").files || [];
-    const picked = Array.from($("spareList").querySelectorAll("input:checked")).map(c => spare[+c.dataset.i]);
-    if (!picked.length) { status("spareStatus", "Tick the files to remove first."); return; }
-    try {
-      for (const f of picked) await f.dir.removeEntry(f.name, { recursive: true });
-      await listSpare(spareDir);
-      status("spareStatus", "Removed " + picked.map(f => f.path).join(", ") + ". " + $("spareStatus").textContent, "ok");
-    } catch (e) {
-      status("spareStatus", "Couldn't remove a file (" + e.message + "). The drive may be read-only: power the mic on in edit mode and install again.", "bad");
-    }
-  });
 
   // ---------- 05 samples ----------
   // The firmware plays only 16-bit mono WAVs at its own rate (24 kHz unless config.json sets
