@@ -225,6 +225,14 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 .notice{border-radius:10px;padding:10px 14px;font-size:14px;border:1px solid var(--line);background:var(--panel-2)}
 .notice.bad{border-color:var(--bad);color:var(--bad)}
 .notice.ok{border-color:var(--ok);color:var(--ok)}
+/* Work in progress: three dots pulse after the text until the next notice replaces it (as on the install page). */
+.notice.busy::after{content:"";display:inline-block;width:1.6em;height:.5em;margin-left:.5em;vertical-align:middle;
+  background:radial-gradient(circle closest-side,currentColor 90%,transparent) 0 50%/.5em .5em no-repeat,
+             radial-gradient(circle closest-side,currentColor 90%,transparent) 50% 50%/.5em .5em no-repeat,
+             radial-gradient(circle closest-side,currentColor 90%,transparent) 100% 50%/.5em .5em no-repeat;
+  animation:busy 1s ease-in-out infinite}
+@keyframes busy{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.notice.busy::after{animation:none;opacity:.6}}
 .steps{margin:0;padding-left:20px;display:grid;gap:4px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:20;max-width:calc(100vw - 32px)}
 /* try-it bar */
@@ -1141,6 +1149,8 @@ $("#btn-save").addEventListener("click", async ()=>{
   let dir;
   try { dir = await window.showDirectoryPicker({id:"circuitpy", mode:"readwrite"}); }
   catch(e){ if (e.name!=="AbortError") notice("Couldn't open the folder picker here: "+e.message+". Use Download instead.", "bad"); return; }
+  const btn = $("#btn-save"); btn.disabled = true;
+  notice("Saving to the mic", "busy");
   try {
     let isTing = false;
     try { await dir.getFileHandle("code.py"); isTing = true; } catch(e){}
@@ -1152,7 +1162,7 @@ $("#btn-save").addEventListener("click", async ()=>{
     track("save-to-mic-done");
   } catch(e){
     notice("The mic didn't accept the file. It's probably in play mode, where your computer can only read it. Turn the mic off, hold the orange button while you turn it on, then save again.", "bad");
-  }
+  } finally { btn.disabled = false; }
 });
 
 /* ---------------------------- share link ---------------------------- *
