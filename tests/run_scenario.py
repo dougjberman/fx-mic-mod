@@ -9,7 +9,8 @@ import runpy
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FIRMWARE = os.path.join(os.path.dirname(HERE), "firmware")
+# FX_FIRMWARE runs another copy, such as the slimmed one the site installs.
+FIRMWARE = os.environ.get("FX_FIRMWARE") or os.path.join(os.path.dirname(HERE), "firmware")
 sys.path.insert(0, HERE)
 sys.path.insert(0, FIRMWARE)
 

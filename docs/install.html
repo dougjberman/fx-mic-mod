@@ -365,7 +365,7 @@ picotool save -a ting-full-flash.bin</pre>
     <!-- 05 -->
     <section class="step" id="install" data-step="install">
       <div class="step-head"><span class="step-num">05</span><h2>Install fx-mic-mod</h2><label class="mark"><input type="checkbox" data-done="install"> Done</label></div>
-      <p>This copies the fx-mic-mod files to CIRCUITPY: <code>code.py</code> and its modules (<code>autotune.py</code>, <code>recorder.py</code>, <code>config_loader.py</code>), <code>boot.py</code>, and a starter <code>config.json</code> with four presets.</p>
+      <p>This copies the fx-mic-mod files to CIRCUITPY: <code>code.py</code> and its modules (<code>autotune.py</code>, <code>recorder.py</code>, <code>config_loader.py</code>), <code>boot.py</code>, and a starter <code>config.json</code> with four presets. The copies on the mic leave out the source comments, which saves about 50 KB for recordings. The commented source is in the project repository.</p>
       <p>It also needs Adafruit's driver for the mic's audio chip, <code>adafruit_nau88l21.mpy</code>. Download the <b>10.x</b> library bundle from <a href="https://circuitpython.org/libraries" target="_blank" rel="noopener">circuitpython.org/libraries</a>, not the newest one listed: its files only load on the CircuitPython version they were built for, and the mic runs 10.x. Unzip it, and choose its <code>lib</code> folder below. Only the driver and the <code>adafruit_register</code> folder it needs are copied from it. You can skip this if both are already on the drive.</p>
       <div class="tool">
         <div class="row">
@@ -373,9 +373,14 @@ picotool save -a ting-full-flash.bin</pre>
           <button class="go" id="installBtn">2. Pick CIRCUITPY and install</button>
         </div>
         <label class="mark" style="color: var(--ink);"><input type="checkbox" id="keepConfig" checked> Keep my presets if CIRCUITPY already has a config.json</label>
-        <label class="mark" style="color: var(--ink);"><input type="checkbox" id="keepOld" checked> Rename the existing code.py to code_prev.py first</label>
+        <label class="mark" style="color: var(--ink);"><input type="checkbox" id="keepOld"> Keep the existing code.py as code_prev.py (uses drive space that recordings need)</label>
         <div class="status" id="codeStatus">No driver chosen yet. That's fine if it's already in CIRCUITPY/lib.</div>
         <pre id="bootOut" hidden></pre>
+        <div id="spare" hidden>
+          <p class="status" id="spareStatus"></p>
+          <div id="spareList" style="display: grid; gap: 4px;"></div>
+          <div class="row"><button class="ghost" id="spareBtn">Remove the ticked files</button></div>
+        </div>
       </div>
       <div class="note"><b>After installing, turn the mic off and on again.</b> To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together until the lights go out (about a second), then let go. If it stays on, unplug the USB cable and take out the batteries. Once it's dark, squeeze the handle to turn it back on. <b>Working looks like:</b> white LED 1 stays lit, the red LEDs are off (the clean spot), and CIRCUITPY shows up on your computer again. If white LED 1 instead blinks twice every few seconds, the code stopped on an error: connect the serial console below and click Reload to see it. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
       <details><summary>Optional: copy samples from your backup</summary>
@@ -805,8 +810,61 @@ while True:
       }
       status("codeStatus", "Installed" + (keepConfig ? " (your config.json was kept)" : "") + ". Turn the mic off and on again to finish: hold the orange and " + (window.siteDevice ? siteDevice.word("mid") : "white") + " buttons together until the lights go out, let go, then squeeze the handle to turn it back on. White LED 1 staying lit means it worked; two blinks every few seconds means an error, which the serial console below will show. Open the serial console below to watch it start.", "ok");
       markDone("install");
+      await listSpare(dir);
     } catch (e) {
       status("codeStatus", "The mic didn't accept the files (" + e.message + "). If fx-mic-mod is already installed, the drive is read-only: turn the mic off, hold the orange button while you squeeze the handle to power it on, and try again. If CIRCUITPY is full, delete old files from lib/ first.", "bad");
+    }
+  });
+
+  // Recorded takes need room on the drive: a full 4 s take is about 190 KB, and saving one
+  // briefly needs room for the old take as well. List what fx-mic-mod doesn't use, so it can go.
+  const USED = new Set(FIRMWARE.concat(["selftest.py", "boot_out.txt", "settings.toml", "lib/" + DRIVER]));
+  const SYSTEM = /^(\..*|System Volume Information|sd)$/;
+  let spareDir = null;
+  async function sizeOf(h) {
+    if (h.kind === "file") return (await h.getFile()).size;
+    let n = 0; for await (const [, c] of h.entries()) n += await sizeOf(c); return n;
+  }
+  async function listSpare(dir) {
+    spareDir = dir;
+    let samples = [];
+    try { samples = (JSON.parse(await tryRead(dir, "config.json") || "{}").samples || []).map(x => x && x.file).filter(Boolean); } catch (e) {}
+    for (let i = 1; i <= 4; i++) samples.push(i + ".wav");
+    const spare = [], used = { n: 0 };
+    const look = async (d, prefix) => {
+      for await (const [name, h] of d.entries()) {
+        const path = prefix + name;
+        if (!prefix && SYSTEM.test(name)) continue;
+        if (path === "lib" && h.kind === "directory") { await look(h, "lib/"); continue; }
+        const size = await sizeOf(h);
+        if (USED.has(path) || path === "lib/" + REGISTER || (!prefix && samples.includes(name))) { used.n += size; continue; }
+        spare.push({ dir: d, name, path: path + (h.kind === "directory" ? "/" : ""), size });
+      }
+    };
+    await look(dir, "");
+    const kb = n => Math.ceil(n / 1024) + " KB";
+    $("spare").hidden = false;
+    $("spareList").replaceChildren(...spare.map((f, i) => {
+      const l = document.createElement("label"); l.className = "mark"; l.style.color = "var(--ink)";
+      const c = document.createElement("input"); c.type = "checkbox"; c.dataset.i = i; c.checked = f.path === "code_prev.py" && !$("keepOld").checked;
+      l.append(c, " " + f.path + " (" + kb(f.size) + ")"); return l;
+    }));
+    $("spareList").files = spare;
+    $("spareBtn").hidden = !spare.length;
+    status("spareStatus", spare.length
+      ? "fx-mic-mod and your samples use " + kb(used.n) + ". These files on CIRCUITPY aren't used by fx-mic-mod. Removing them leaves more room for recordings."
+      : "fx-mic-mod and your samples use " + kb(used.n) + ", and nothing else is taking up space on CIRCUITPY.", spare.length ? "" : "ok");
+  }
+  $("spareBtn").addEventListener("click", async () => {
+    const spare = $("spareList").files || [];
+    const picked = Array.from($("spareList").querySelectorAll("input:checked")).map(c => spare[+c.dataset.i]);
+    if (!picked.length) { status("spareStatus", "Tick the files to remove first."); return; }
+    try {
+      for (const f of picked) await f.dir.removeEntry(f.name, { recursive: true });
+      await listSpare(spareDir);
+      status("spareStatus", "Removed " + picked.map(f => f.path).join(", ") + ". " + $("spareStatus").textContent, "ok");
+    } catch (e) {
+      status("spareStatus", "Couldn't remove a file (" + e.message + "). The drive may be read-only: power the mic on in edit mode and install again.", "bad");
     }
   });
 

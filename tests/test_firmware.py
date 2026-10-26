@@ -205,15 +205,35 @@ class LoaderTests(unittest.TestCase):
 
 
 class SiteCopyTests(unittest.TestCase):
+    SITE = os.path.join(os.path.dirname(HERE), "docs", "firmware")
+
     def test_site_serves_the_current_firmware(self):
-        # docs/firmware/ is what the install page copies to the Ting.
-        site = os.path.join(os.path.dirname(HERE), "docs", "firmware")
-        for name in os.listdir(site):
-            with open(os.path.join(site, name), "rb") as a, open(os.path.join(FIRMWARE, name), "rb") as b:
-                self.assertEqual(a.read(), b.read(), "docs/firmware/%s is stale: copy it from firmware/" % name)
-        self.assertEqual(
-            sorted(os.listdir(site)),
-            sorted(n for n in os.listdir(FIRMWARE) if n.endswith((".py", ".json"))))
+        # docs/firmware/ is what the install page copies to the Ting: firmware/
+        # without comments or docstrings.
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+        import slim_firmware
+        names = sorted(n for n in os.listdir(self.SITE) if n != "__pycache__")
+        self.assertEqual(names, slim_firmware.site_names())
+        for name in names:
+            with open(os.path.join(self.SITE, name), "rb") as file:
+                self.assertEqual(file.read(), slim_firmware.site_copy(name),
+                                 "docs/firmware/%s is stale: run tools/slim_firmware.py" % name)
+            with open(os.path.join(FIRMWARE, name), "rb") as file:
+                lines = file.read().count(b"\n")
+            if name.endswith(".py"):
+                # line for line, so a traceback from the mic matches firmware/
+                self.assertEqual(slim_firmware.site_copy(name).count(b"\n"), lines, name)
+
+    def test_site_copy_runs(self):
+        os.environ.update(FX_FIRMWARE=self.SITE, PYTHONDONTWRITEBYTECODE="1")
+        try:
+            root, out, s = run("record")
+        finally:
+            del os.environ["FX_FIRMWARE"], os.environ["PYTHONDONTWRITEBYTECODE"]
+        self.assertIn("autotune now C major", out)
+        self.assertEqual(s["active"], s["record_spot"])
+        with wave.open(os.path.join(root, "2.wav")) as take:
+            self.assertAlmostEqual(take.getnframes() / 24000, 3.95, delta=0.03)
 
 
 class DeviceScenarioTests(unittest.TestCase):

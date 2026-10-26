@@ -1,16 +1,16 @@
-# autotune.py - chromatic autotune stage for the Teenage Engineering EP-2350 "ting"
-#
-# Usable on its own (see code.py) or as the first stage of a longer effects
-# chain. Python has to see the audio to find the pitch, so this stage owns the
-# mic: it records blocks, detects pitch, snaps to the scale, and plays the
-# corrected voice out of `Autotune.output`, which any audiodelays /
-# audiofilters / audiofreeverb effect (or a mixer voice) can play.
-#
-#   mic.record() -> detect + snap -> double-buffered RawSample
-#       -> audiodelays.GranularPitchShift (C, OLA grains) -> Autotune.output
-#
-# Call Autotune.step() once per loop pass. It blocks for one BLOCK_SIZE of
-# audio (16 ms), which also paces the caller's loop to real time.
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 import array
 import math
@@ -18,48 +18,48 @@ import struct
 import time
 
 try:
-    from ulab import numpy as np  # CircuitPython build with ulab
+    from ulab import numpy as np
 except ImportError:
     try:
-        import numpy as np  # desktop CPython, for testing the DSP
+        import numpy as np
     except ImportError:
         np = None
 
-# ---------------------------------------------------------------------------
-# Settings
-# ---------------------------------------------------------------------------
 
-# The rate the mic runs at. code.py calls set_rate() with config.json's
-# "sample_rate" before building anything; the sizes below are for 16 kHz and
-# set_rate() scales them, so a block stays 16 ms and the window 32 ms.
+
+
+
+
+
+
 SAMPLE_RATE = 16000
-RATES = (16000, 24000, 32000, 48000)  # multiples of 8 kHz, so the detector can decimate evenly
-BUFFER_SIZE = 512       # pitch analysis window (32 ms)
-BLOCK_SIZE = 256        # audio hop per loop pass (16 ms); BUFFER_SIZE must be 2x this
+RATES = (16000, 24000, 32000, 48000)
+BUFFER_SIZE = 512
+BLOCK_SIZE = 256
 
-MIN_HZ = 80.0           # lowest pitch the detector looks for
-MAX_HZ = 500.0          # highest pitch the detector looks for
-VOICED_THRESHOLD = 0.15 # YIN threshold: lower = stricter about what counts as a note
-HARMONY_SETTLE = 3      # detections a new note must hold before a key chord moves to it (~100 ms)
-DETECT_EVERY = 2        # find the pitch every N blocks (16 ms each); the chip can't do every one
-MIN_RMS = 250           # below this input level (int16 units) treat as silence
+MIN_HZ = 80.0
+MAX_HZ = 500.0
+VOICED_THRESHOLD = 0.15
+HARMONY_SETTLE = 3
+DETECT_EVERY = 2
+MIN_RMS = 250
 
-# "native": audiodelays.GranularPitchShift (or PitchShift on older firmware)
-# "python": pure-Python OLA shifter below (reference, likely too slow)
+
+
 SHIFT_ENGINE = "native"
-GRAIN_SIZE = 512        # native grain length in samples (at 16 kHz); bigger = smoother, more latency
-GRAIN_DENSITY = 2       # native overlapping grains (1..8)
+GRAIN_SIZE = 512
+GRAIN_DENSITY = 2
 
-# If the output crackles steadily, flip this between 0 and 1. It picks which
-# half of the double-buffered RawSample is written while the other one plays.
+
+
 FEED_PHASE = 1
 
-# Retune speed. `speed` 0..1 (0 = natural, 1 = hard snap) is mapped to the
-# fraction of the remaining correction applied per 16 ms block, from
-# NATURAL_RATE (about a 200 ms glide) up to 1.0 (instant).
+
+
+
 NATURAL_RATE = 0.08
-HUMANIZE_CENTS = 30     # humanize = 1 leaves up to this much of the error alone
-NOTE_HYSTERESIS = 0.3   # semitones past the halfway point before switching notes
+HUMANIZE_CENTS = 30
+NOTE_HYSTERESIS = 0.3
 
 KEYS = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 SCALES = (
@@ -70,10 +70,10 @@ SCALES = (
 
 INV_LN2 = 1.0 / math.log(2.0)
 
-# Harmonizer chords: name -> semitones above the sung note, which is the root
-# and is included as 0. Four notes at most (the voice plus three harmony
-# voices), so five-note chords leave out their 5th, the usual jazz voicing,
-# and 11ths and 13ths keep only their colour tones.
+
+
+
+
 CHORDS = (
     ("octave", (0, 12)),
     ("maj3", (0, 4)),
@@ -114,22 +114,22 @@ CHORDS = (
     ("m13", (0, 3, 10, 21)),
     ("quartal", (0, 5, 10, 15)),
 )
-# Chords built from the autotune key instead: scale steps above the note
-# autotune snapped to, so singing E in C major gives E minor, and F gives F
-# major. They need a major or minor scale to say which 3rd is meant; with
-# "Every note" (chromatic) they fall back to the key's major scale, and the
-# editor offers them only with a major or minor key.
+
+
+
+
+
 KEY_CHORDS = (
     ("key_third", (0, 2)),
     ("key_triad", (0, 2, 4)),
     ("key_seventh", (0, 2, 4, 6)),
 )
-# A key chord sung on a note outside the scale falls back to this shape.
+
 OFF_KEY_SHAPE = (0, 4, 7, 10)
 
 
 def chord_by_name(name):
-    """(tones, is_key_chord) for a harmonizer chord name."""
+    0
     for chord_name, tones in CHORDS:
         if chord_name == name:
             return tones, False
@@ -140,20 +140,20 @@ def chord_by_name(name):
 
 
 def max_inversion(tones):
-    """Highest inversion a chord allows. Chords with an octave in them
-    (octave, power) only come in root position."""
+    0
+
     return 0 if any(t % 12 == 0 for t in tones[1:]) else len(tones) - 1
 
 
 def voicing(tones, inversion=0, octave=0):
-    """Harmony intervals around the sung note for a chord in an inversion.
+    0
 
-    Inversion n lifts the lowest n chord tones an octave, then drops the
-    whole chord an octave, so the sung note is still in it and the harmony
-    moves below the voice: C major sung on C gives E, G above (root
-    position), E, G below (1st), or G below and E above (2nd). The sung note
-    itself is left out; ``octave`` moves the harmony by whole octaves.
-    """
+
+
+
+
+
+
     tones = list(tones)
     for _ in range(inversion):
         tones.append(tones.pop(0) + 12)
@@ -164,37 +164,37 @@ def voicing(tones, inversion=0, octave=0):
 
 
 def log2(x):
-    # math.log2 is not in every CircuitPython build
+
     return math.log(x) * INV_LN2
 
 
-# ---------------------------------------------------------------------------
-# Pitch detection
-# ---------------------------------------------------------------------------
-#
-# Doug's detector summed |x[i] - x[i + offset]| over BUFFER_SIZE - offset
-# samples and took the smallest sum. Two problems on real voices:
-#   1. Longer offsets sum fewer samples, so they win too often and the
-#      detector reads an octave (or more) low (196 Hz came back as 98 Hz).
-#   2. The integer offset is too coarse for autotune: at 400 Hz one sample of
-#      period is about 40 cents.
-# This version keeps the same idea (difference between the waveform and a
-# delayed copy of itself) with these changes:
-#   - every offset compares the same number of samples (fixes the octave bias)
-#   - squared differences + YIN normalisation, taking the FIRST dip under the
-#     threshold rather than the global minimum (fewer octave errors)
-#   - search at 4 kHz, then refine at 8 kHz around the hit and use parabolic
-#     interpolation for a fractional period
-#   - ulab does the inner loop in C. The original pure-Python double loop is
-#     ~170 x 400 = 68k operations per call, roughly a second on an RP2350.
-#   - On a real Ting every ulab operation costs ~0.3 us per element, and the
-#     first version (full 16 kHz refine, 8 kHz search) took 14 ms of a 16 ms
-#     block on its own, more with effects running. So the search runs at
-#     4 kHz and the refine at 8 kHz, and Autotune only detects every
-#     DETECT_EVERY blocks.
 
-_COARSE = 4     # search at SAMPLE_RATE / _COARSE = 4 kHz
-_FINE = 2       # refine at 8 kHz
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_COARSE = 4
+_FINE = 2
 
 
 def _set_detector():
@@ -203,20 +203,20 @@ def _set_detector():
     _COARSE = SAMPLE_RATE // 4000
     _FINE = SAMPLE_RATE // 8000
     _RATE_F = SAMPLE_RATE / _FINE
-    _MIN_LAG_F = int(_RATE_F / MAX_HZ)              # 16 at 8 kHz
-    _MAX_LAG_F = int(_RATE_F / MIN_HZ)              # 100
-    _N_D = BUFFER_SIZE // _COARSE                   # 128 samples at 4 kHz
-    _MAX_LAG_D = _MAX_LAG_F * _FINE // _COARSE + 1  # 51
+    _MIN_LAG_F = int(_RATE_F / MAX_HZ)
+    _MAX_LAG_F = int(_RATE_F / MIN_HZ)
+    _N_D = BUFFER_SIZE // _COARSE
+    _MAX_LAG_D = _MAX_LAG_F * _FINE // _COARSE + 1
     _MIN_LAG_D = max(2, _MIN_LAG_F * _FINE // _COARSE)
-    _WIN_D = _N_D - _MAX_LAG_D                      # samples compared per lag at 4 kHz
-    _WIN_F = BUFFER_SIZE // _FINE - _MAX_LAG_F - 3  # samples compared per lag at 8 kHz
+    _WIN_D = _N_D - _MAX_LAG_D
+    _WIN_F = BUFFER_SIZE // _FINE - _MAX_LAG_F - 3
 
 
 _set_detector()
 
 
 def set_rate(rate):
-    """Run at ``rate`` Hz, one of RATES. Call before making an Autotune."""
+    0
     global SAMPLE_RATE, BUFFER_SIZE, BLOCK_SIZE, GRAIN_SIZE
     if rate not in RATES:
         raise ValueError("sample_rate must be one of {}".format(RATES))
@@ -246,21 +246,21 @@ def _diff_at_py(x, lag, width):
 
 
 def _halve(x):
-    """Crude low-pass and decimate by 2."""
+    0
     if np is not None:
         return (x[0::2] + x[1::2]) * 0.5
     return [(x[i] + x[i + 1]) * 0.5 for i in range(0, len(x) - 1, 2)]
 
 
 def _third(x):
-    """Crude low-pass and decimate by 3."""
+    0
     if np is not None:
         return (x[0::3] + x[1::3] + x[2::3]) * (1.0 / 3.0)
     return [(x[i] + x[i + 1] + x[i + 2]) / 3.0 for i in range(0, len(x) - 2, 3)]
 
 
 def _decimate(x, factor):
-    """Decimate by ``factor`` (1, 2, 3, 4, 6 or 8) in halving and third steps."""
+    0
     while factor > 1:
         if factor % 2 == 0:
             x, factor = _halve(x), factor // 2
@@ -270,13 +270,13 @@ def _decimate(x, factor):
 
 
 def detect_pitch_autocorrelation(buffer):
-    """Return the fundamental in Hz of the last BUFFER_SIZE samples, or 0.0.
+    0
 
-    `buffer` is an int16 array (or list) of BUFFER_SIZE samples.
-    """
+
+
     if np is not None:
-        xf = _decimate(np.array(buffer, dtype=_FLOAT), _FINE)   # 8 kHz
-        xd = _halve(xf)                                         # 4 kHz
+        xf = _decimate(np.array(buffer, dtype=_FLOAT), _FINE)
+        xd = _halve(xf)
         xd = xd - np.mean(xd)
         sq = (xd * xd).tolist()
         diff = _diff_at
@@ -290,10 +290,10 @@ def detect_pitch_autocorrelation(buffer):
     if math.sqrt(sum(sq) / _N_D) < MIN_RMS:
         return 0.0
 
-    # Cumulative-mean-normalised difference (YIN) at 4 kHz. With ulab, the
-    # difference at every lag comes from one convolution:
-    #   d(lag) = sum x[i]^2 + sum x[i+lag]^2 - 2 sum x[i] x[i+lag]
-    # so the loop below only does scalar sums.
+
+
+
+
     fast = np is not None and _CONVOLVE
     if fast:
         cross = np.convolve(xd, xd[_WIN_D - 1::-1])
@@ -317,7 +317,7 @@ def detect_pitch_autocorrelation(buffer):
             prev = norm
             continue
         if norm < VOICED_THRESHOLD:
-            # walk down to the bottom of this dip, then stop
+
             found = True
             if norm < best_val:
                 best_val, best_lag = norm, lag
@@ -331,7 +331,7 @@ def detect_pitch_autocorrelation(buffer):
     if best_lag == 0 or (not found and best_val > 0.4):
         return 0.0
 
-    # Refine at 8 kHz around the coarse hit
+
     centre = best_lag * _COARSE // _FINE
     lo = max(2, centre - 2)
     hi = min(_MAX_LAG_F + 1, centre + 3)
@@ -346,43 +346,43 @@ def detect_pitch_autocorrelation(buffer):
     return _RATE_F / period
 
 
-# ---------------------------------------------------------------------------
-# Note snapping
-# ---------------------------------------------------------------------------
+
+
+
 
 def calculate_chromatic_ratio(current_hz):
-    """
-    Calculates the exact pitch-shift multiplier to snap to the nearest semitone
-    """
-    if current_hz < 50.0 or current_hz > 1000.0:  # Ignore background noise/screeches
+    0
+
+
+    if current_hz < 50.0 or current_hz > 1000.0:
         return 1.0
 
-    # Step 1: Convert Hz to a fractional MIDI note number
+
     midi_note_fractional = 12 * log2(current_hz / 440.0) + 69
 
-    # Step 2: Snap to the nearest whole integer chromatic note
+
     target_midi_note = round(midi_note_fractional)
 
-    # Step 3: Convert the perfect target note back into Hz
+
     target_hz = 440.0 * (2.0 ** ((target_midi_note - 69) / 12.0))
 
-    # Step 4: The ratio used to stretch/squash the audio buffer
+
     shift_ratio = target_hz / current_hz
     return shift_ratio
 
 
 class NoteSnapper:
-    """Same maths as calculate_chromatic_ratio, plus scales and hysteresis.
+    0
 
-    Hysteresis keeps a note held at the boundary between two semitones from
-    flickering back and forth (the warble you hear from naive autotune).
-    """
+
+
+
 
     def __init__(self):
         self.allowed = SCALES[0][1]
-        self.root = 0           # 0 = C, 2 = D, 9 = A ...
+        self.root = 0
         self.target = None
-        self._leap = None       # a far note heard once, waiting to be heard again
+        self._leap = None
 
     def set_scale(self, pitch_classes, root=None):
         self.allowed = pitch_classes
@@ -400,7 +400,7 @@ class NoteSnapper:
         return best
 
     def correction_semitones(self, current_hz):
-        """Semitones to shift by (target - sung), or None when there is no note."""
+        0
         if current_hz < 50.0 or current_hz > 1000.0:
             self.target = None
             return None
@@ -411,8 +411,8 @@ class NoteSnapper:
         elif abs(midi - self.target) > abs(midi - nearest) + 2 * NOTE_HYSTERESIS:
             self.target = nearest
         elif abs(midi - self.target) > 1.5:
-            # Jumped well away: follow once the same note is heard twice in a
-            # row, so a one-off octave error doesn't swap the harmony chord.
+
+
             if self._leap == nearest:
                 self.target = nearest
                 self._leap = None
@@ -423,19 +423,19 @@ class NoteSnapper:
         return self.target - midi
 
 
-# ---------------------------------------------------------------------------
-# Pure-Python OLA granular pitch shifter (SHIFT_ENGINE = "python")
-# ---------------------------------------------------------------------------
-#
-# Two Hann-windowed read taps run through a short history buffer, half a grain
-# apart. Each tap reads at `ratio` x the write speed, so its delay drifts; when
-# a tap's delay wraps around the grain, its window is at zero, so the jump is
-# silent. The two windows always sum to 1 (sin^2 + cos^2), which is overlap-add
-# of 50%-overlapped grains, each resampled by `ratio`.
-#
-# The grain is kept at a whole number of detected pitch periods, so the two
-# taps stay in phase with each other. Without that, mixing two copies of the
-# voice 16 ms apart gives a hollow comb-filter sound even at ratio 1.0.
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class OLAPitchShifter:
     WIN_LEN = 512
@@ -448,7 +448,7 @@ class OLAPitchShifter:
         self.mask = history - 1
         self.hist = array.array("h", [0] * history)
         self.w = 0
-        self.p = 0.25  # tap A grain position, 0..1 (0.25 + 0.5 offsets tap B)
+        self.p = 0.25
         n = self.WIN_LEN
         self.win = array.array("f", [math.sin(math.pi * i / n) ** 2 for i in range(n)])
 
@@ -461,8 +461,8 @@ class OLAPitchShifter:
         hist, mask, size, win = self.hist, self.mask, self.size, self.win
         wl = self.WIN_LEN
         g = self.grain
-        # glide the grain length toward the pitch-locked length across the
-        # block; changing it in one step makes both taps jump and click
+
+
         dg = (self.target_grain - g) * 0.25 / n
         dp = (1.0 - ratio) / g
         p = self.p
@@ -472,12 +472,12 @@ class OLAPitchShifter:
             pb = p + 0.5
             if pb >= 1.0:
                 pb -= 1.0
-            # tap A
+
             r = w - p * g - 2.0 + size
             i0 = int(r)
             s0 = hist[i0 & mask]
             va = s0 + (hist[(i0 + 1) & mask] - s0) * (r - i0)
-            # tap B
+
             r = w - pb * g - 2.0 + size
             i0 = int(r)
             s0 = hist[i0 & mask]
@@ -512,12 +512,12 @@ def _make_native_shifter(audiodelays, fmt, mix, grain_size, density):
 
 
 class WaveReader:
-    """Streams a 16-bit mono WAV from the drive one block at a time.
+    0
 
-    Lets a sample be mixed into the autotune feed, and so be tuned like the
-    voice, without loading the whole file into RAM: each 16 ms block reads
-    512 bytes.
-    """
+
+
+
+
 
     def __init__(self, path, loop=False):
         self.loop = loop
@@ -555,7 +555,7 @@ class WaveReader:
                 f.seek(size + (size & 1), 1)
 
     def read(self):
-        """Fill ``buf`` with the next block. Returns how many samples."""
+        0
         if self.done:
             return 0
         if self.left <= 0:
@@ -575,7 +575,7 @@ class WaveReader:
 
 
 def _value(param):
-    # plain number, or a synthio block (LFO / Math) that reports .value
+
     return getattr(param, "value", param)
 
 
@@ -592,25 +592,25 @@ def key_by_name(name):
 
 
 class Autotune:
-    """One autotune stage: mic in, corrected voice out of self.output.
+    0
 
-    Parameters match the "autotune" effect in the preset config.json:
-      key        "C".."B" (sharps or flats)
-      scale      "chromatic", "major" or "minor"
-      speed      0 = natural glide .. 1 = hard snap (number or synthio block)
-      humanize   0..1, leaves small errors (vibrato, scoops) partly uncorrected
-      mix        dry/corrected balance (number or synthio block)
-      grain_size, density   native GranularPitchShift grain settings
-    and, from a "harmonizer" effect in the same preset:
-      harmony    a chord name from CHORDS or KEY_CHORDS, or None
-      inversion  0 = root position, 1 = 1st inversion ...
-      harmony_octave   moves the harmony voices by whole octaves
-      harmony_level    harmony volume against the voice (number or block)
-      correct    False runs the harmonizer without retuning the voice
-    fmt is the shared audio format dict (sample_rate, bits_per_sample,
-    samples_signed, channel_count, buffer_size). All but grain_size, density
-    and engine can be changed later through the attributes / set_key_scale().
-    """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def __init__(self, mic, fmt, key="C", scale="chromatic", speed=1.0,
                  humanize=0.0, mix=1.0, grain_size=None,
@@ -628,25 +628,25 @@ class Autotune:
         self.snapper = NoteSnapper()
         self.set_key_scale(key, scale)
         self.hz = 0.0
-        self.cents = None        # how far the sung note is from its target
-        self.correction = 0.0    # semitones currently applied
+        self.cents = None
+        self.correction = 0.0
         self._target = 0.0
         self._window = array.array("h", [0] * BUFFER_SIZE)
         self._block = array.array("h", [0] * BLOCK_SIZE)
         self._half = 0
         self._turn = 0
         self.busy_ms = 0.0
-        # Mic level, 0 or 1, applied before pitch detection. Used when
-        # samples are mixed into this stage, so the paddle can mute the mic
-        # without muting the sample.
+
+
+
         self.gate = 1
-        # The WaveReader being mixed in, or None, and its level in 256ths.
+
         self.sample = None
         self.sample_gain = 256
         self._zeros = array.array("h", [0] * BLOCK_SIZE)
 
-        # Python writes each processed block into the half of this buffer
-        # that is not playing; the audio pipeline loops over it.
+
+
         self._out = array.array("h", [0] * (BLOCK_SIZE * 2))
         self.feed = audiocore.RawSample(
             self._out, sample_rate=fmt["sample_rate"], single_buffer=False)
@@ -666,9 +666,9 @@ class Autotune:
             self.output = self.shifter
         self._started = False
 
-        # Harmonizer: one more shifter per harmony voice, each fed the same
-        # blocks through its own RawSample over self._out, and all of them
-        # summed with the corrected voice on a mixer.
+
+
+
         self.voices = []
         self._feeds = []
         self.mixer = None
@@ -676,8 +676,8 @@ class Autotune:
         self._level = None
         self._intervals = []
         self._key_chord = False
-        # The note the key chord is built on, and a new note waiting to
-        # take over (see _chord_intervals).
+
+
         self._chord_note = None
         self._chord_next = None
         self._chord_count = 0
@@ -719,9 +719,9 @@ class Autotune:
         self.snapper.set_scale(scale_by_name(scale), key_by_name(key))
 
     def play_sample(self, path, loop=False):
-        """Mix the WAV at ``path`` into the voice from the next block on, so
-        it is tuned and goes through the rest of the chain. Replaces any
-        sample already playing."""
+        0
+
+
         self.stop_sample()
         self.sample = WaveReader(path, loop)
 
@@ -731,8 +731,8 @@ class Autotune:
             self.sample = None
 
     def start(self):
-        """Wire the feed into the shifter. Call after the downstream chain is
-        wired, mirroring Adafruit's demo where the mic is connected last."""
+        0
+
         if self.shifter is not None and not self._started:
             if self.mixer is not None:
                 self.mixer.voice[0].play(self.shifter, loop=True)
@@ -755,17 +755,17 @@ class Autotune:
         if level == self._level:
             return
         self._level = level
-        # Keep the sum about as loud as the voice alone.
+
         gain = 1.0 / math.sqrt(1.0 + len(self.voices) * level * level)
         self.mixer.voice[0].level = gain
         for index in range(len(self.voices)):
             self.mixer.voice[index + 1].level = gain * level
 
     def _chord_intervals(self, note):
-        """Key chord intervals around the snapped ``note``. The chord only
-        moves to a new note once it has held for HARMONY_SETTLE detections;
-        until then the harmony keeps singing the last chord's tones, so a
-        passing or wavering note doesn't flip the whole chord."""
+        0
+
+
+
         if self._chord_note is None or note == self._chord_note:
             self._chord_note = note
             self._chord_next = None
@@ -781,7 +781,7 @@ class Autotune:
         return [chord - note + i for i in self._key_intervals(chord)]
 
     def _key_intervals(self, note):
-        """Harmony intervals for a key chord on the snapped MIDI note."""
+        0
         allowed = self.snapper.allowed
         if len(allowed) == 12:
             allowed = SCALES[1][1]
@@ -801,7 +801,7 @@ class Autotune:
         self._half ^= 1
 
     def step(self, speed_override=None):
-        """Process one block. Blocks for BLOCK_SIZE samples of audio."""
+        0
         block = self._block
         got = self.mic.record(block, BLOCK_SIZE)
         began = time.monotonic_ns()
@@ -817,20 +817,20 @@ class Autotune:
                 block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
             if sample.done:
                 self.stop_sample()
-        # Hand the block to the pitch shifter straight away, at the same
-        # moment every pass. Writing it after the pitch search made the write
-        # land at a different point in the playing buffer on detect and
-        # non-detect passes, sometimes in the half being played: crackle.
-        # The shift amount set below applies from the next grain. (The Python
-        # OLA fallback shifts the block itself, so it still writes at the end.)
+
+
+
+
+
+
         if self.ola is None:
             self._feed_block(block)
         window = self._window
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]
         window[BLOCK_SIZE:BUFFER_SIZE] = block
 
-        # Without retuning, only a key chord needs to know the note. Pitch
-        # is found every DETECT_EVERY blocks; between, the last target holds.
+
+
         self._turn = (self._turn + 1) % DETECT_EVERY
         if not (self.enabled and (self.correct or self._key_chord)):
             self.cents = None
@@ -843,7 +843,7 @@ class Autotune:
             semis = self.snapper.correction_semitones(self.hz) if self.hz > 0 else None
             if semis is not None:
                 self.cents = -semis * 100
-                # humanize: leave up to HUMANIZE_CENTS of the error alone
+
                 slack = _value(self.humanize) * HUMANIZE_CENTS / 100.0
                 if semis > slack:
                     semis -= slack
@@ -853,7 +853,7 @@ class Autotune:
                     semis = 0.0
                 self._target = semis
             else:
-                # silence / noise: relax back toward no shift
+
                 self._target *= 0.9 ** DETECT_EVERY
         if not self.correct:
             self._target = 0.0
@@ -876,16 +876,16 @@ class Autotune:
             for voice, interval in zip(self.voices, self._intervals):
                 voice.semitones = self.correction + interval
             self._set_levels()
-        # Python time this block took, in ms. Over ~16 ms (one block of audio)
-        # and the mic overflows; code.py prints it with each overflow.
+
+
         self.busy_ms = (time.monotonic_ns() - began) / 1e6
         return got
 
 
 
 def bench(hz=150.0, runs=5):
-    """Time the pitch search on this chip, for the serial console:
-    >>> import autotune; autotune.bench()"""
+    0
+
     buf = array.array("h", [int(6000 * math.sin(2 * math.pi * hz * i / SAMPLE_RATE)) for i in range(BUFFER_SIZE)])
     best = None
     for _ in range(runs):

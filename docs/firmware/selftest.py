@@ -1,26 +1,26 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 fx-mic-mod contributors
-#
+
 # SPDX-License-Identifier: MIT
-"""
-On-device checks for fx-mic-mod, driven over the serial REPL by
-tools/ting_test.py on the computer. Nothing here runs at power-on.
+0
 
-Stop code.py with Ctrl-C, then for example:
 
-    >>> import selftest
-    >>> selftest.info()
-    >>> selftest.build_all()
-    >>> selftest.run({"list": [{"effect": "autotune"}]}, "/selftest/notes.wav")
 
-Every result is one line, "@@" followed by JSON, so the computer can pick
-them out of the other console output. Audio heard by the mic comes back as
-base64 lines between "@@" wav_begin and wav_end records.
 
-Audio checks are an acoustic loopback: a test WAV goes in where the mic
-normally would, the preset plays it out of the speaker, and the mic records
-what the speaker plays. The mic never feeds the output during a check, so
-nothing can howl.
-"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 import array
 import binascii
@@ -45,12 +45,12 @@ import synthio
 import adafruit_nau88l21
 import autotune
 
-# Same audio settings as code.py (its default rate).
+
 RATE = 24000
 autotune.set_rate(RATE)
 
-from autotune import BLOCK_SIZE, Autotune, detect_pitch_autocorrelation  # noqa: E402  after set_rate
-from config_loader import create_preset, preset_level, uses_tune_stage  # noqa: E402
+from autotune import BLOCK_SIZE, Autotune, detect_pitch_autocorrelation
+from config_loader import create_preset, preset_level, uses_tune_stage
 MIC_GAIN = 14
 ADC_VOLUME = 0
 HEADPHONE_VOLUME = 0
@@ -64,10 +64,10 @@ FORMAT = {
 }
 AUTOTUNE_FORMAT = dict(FORMAT, buffer_size=2 * BLOCK_SIZE)
 
-# Output level for loopback checks, in dB on the DAC. Loud enough for the mic
-# to hear the speaker clearly, quiet enough not to clip it.
+
+
 LOOPBACK_DB = -12
-# Base64 lines carry this many bytes of audio each.
+
 CHUNK_BYTES = 384
 
 
@@ -86,7 +86,7 @@ def load_config(path="/config.json"):
 
 
 class Rig:
-    """The codec, mic and output mixer, brought up the way code.py does."""
+    0
 
     def __init__(self):
         self.i2s = audiobusio.I2SOut(board.I2S_BIT_CLOCK, board.I2S_WS, board.I2S_DOUT)
@@ -122,7 +122,7 @@ def rig():
 
 
 class TapMic:
-    """Hands autotune the real mic's timing, and keeps what the mic heard."""
+    0
 
     def __init__(self, mic, capture):
         self.mic = mic
@@ -154,7 +154,7 @@ class HandleValue:
 
 
 class Chain:
-    """One preset wired like code.py's build(), with a WAV as its input."""
+    0
 
     def __init__(self, rig_, preset, source, capture=None, handle=1.0):
         self.rig = rig_
@@ -176,7 +176,7 @@ class Chain:
             tune_args.pop("squeeze_key", None)
             tune_args.pop("squeeze_scale", None)
             self.tune = Autotune(self.tap, fmt, **tune_args)
-            # The mic only paces autotune; the WAV is the voice.
+
             self.tune.gate = 0
             self.tune.play_sample(source)
             inlet, loop = self.tune.output, True
@@ -196,7 +196,7 @@ class Chain:
             self.tune.start()
 
     def step(self):
-        """One 16 ms block of mic capture, for presets without autotune."""
+        0
         self.tap.record(self._block(), BLOCK_SIZE)
 
     def _block(self):
@@ -217,7 +217,7 @@ class Chain:
 
 
 def info():
-    """Firmware, memory, drive mode, and which audio modules exist."""
+    0
     gc.collect()
     modules = {}
     for name in ("audiodelays", "audiofilters", "audiofreeverb", "ulab"):
@@ -248,10 +248,10 @@ def info():
 
 
 def build_all(cycles=3, config_path="/config.json"):
-    """Build and free every preset in config.json, ``cycles`` times each.
+    0
 
-    Reports memory each preset takes and whether freeing it gives it all
-    back (a leak shows as ``leak`` growing with cycles)."""
+
+
     config = load_config(config_path)
     for index, preset in enumerate(config.get("presets", ())):
         build(preset, index + 1, cycles)
@@ -280,7 +280,7 @@ def build(preset, index=0, cycles=3):
 
 
 def _spin(ms):
-    """Count tight-loop passes in ``ms`` milliseconds."""
+    0
     end = now_ms() + ms
     count = 0
     while now_ms() < end:
@@ -289,12 +289,12 @@ def _spin(ms):
 
 
 def run(preset, source, seconds=3.0, handle=1.0, name="", capture=True, stream=True):
-    """Play ``source`` through ``preset`` out of the speaker for ``seconds``.
+    0
 
-    Measures how much of each 16 ms block the Python side of autotune needs,
-    whether it kept up (``blocks`` against ``expected_blocks``), and for
-    presets without autotune how much CPU the native effects leave for Python. With ``capture``, the mic records
-    the speaker and the take is streamed back."""
+
+
+
+
     r = rig()
     gc.collect()
     samples = int(seconds * RATE)
@@ -318,17 +318,17 @@ def run(preset, source, seconds=3.0, handle=1.0, name="", capture=True, stream=T
     started = now_ms()
     try:
         if chain.tune is None:
-            # Native effects run in the background; what they take shows in
-            # how far a tight loop gets, against the same loop at rest. The
-            # test WAVs start with a second of silence to cover this.
+
+
+
             idle = _spin_idle()
             spare = _spin(500) / idle if idle else None
         started = now_ms()
         while now_ms() - started < seconds * 1000:
             if chain.tune is not None:
                 chain.tune.step()
-                # Time from the mic handing over a block to the block being
-                # done: the Python share of the 16 ms budget.
+
+
                 busy.append((time.monotonic_ns() - chain.tap.returned) // 1000)
             else:
                 chain.step()
@@ -354,7 +354,7 @@ _idle_count = None
 
 
 def _spin_idle():
-    """Tight-loop passes in 500 ms with only the bare mixer running."""
+    0
     global _idle_count
     if _idle_count is None:
         _idle_count = _spin(500)
@@ -362,7 +362,7 @@ def _spin_idle():
 
 
 def send_wav(buf, count, name=""):
-    """Stream ``count`` samples of ``buf`` as base64 lines."""
+    0
     emit("wav_begin", name=name, rate=RATE, samples=count)
     view = memoryview(buf)
     step = CHUNK_BYTES // 2
@@ -373,8 +373,8 @@ def send_wav(buf, count, name=""):
 
 
 def detect(source):
-    """Run the pitch detector over a WAV, without real time, and report the
-    pitch it finds for each 16 ms block and how long detection takes."""
+    0
+
     reader = autotune.WaveReader(source)
     window = array.array("h", [0] * autotune.BUFFER_SIZE)
     found = []
@@ -396,7 +396,7 @@ def detect(source):
 
 
 def leds(seconds_each=0.4):
-    """Light each LED in turn: red 1-4, then white 1-4."""
+    0
     names = ["LED_RED1", "LED_RED2", "LED_RED3", "LED_RED4",
              "LED_WHITE1", "LED_WHITE2", "LED_WHITE3", "LED_WHITE4"]
     for name in names:
@@ -411,7 +411,7 @@ def leds(seconds_each=0.4):
 
 
 def controls(seconds=20.0):
-    """Report button, paddle, handle and knob changes for ``seconds``."""
+    0
     keys = keypad.Keys((board.BUTTON_TOP, board.BUTTON_MIDDLE, board.BUTTON_BOTTOM),
                        value_when_pressed=False, pull=True)
     paddle = digitalio.DigitalInOut(board.HANDLE_OUT)
@@ -445,7 +445,7 @@ def controls(seconds=20.0):
 
 
 def mic_level(seconds=1.0):
-    """Record the room through the mic with nothing playing."""
+    0
     r = rig()
     r.mixer.voice[0].stop()
     block = array.array("h", [0] * BLOCK_SIZE)
@@ -466,7 +466,7 @@ def mic_level(seconds=1.0):
 
 
 def write_file(path, b64_lines):
-    """Write a file sent from the computer as base64 lines (record mode only)."""
+    0
     folder = path.rsplit("/", 1)[0]
     if folder:
         try:
@@ -480,7 +480,7 @@ def write_file(path, b64_lines):
 
 
 def done():
-    """Free the audio hardware."""
+    0
     global _rig
     if _rig is not None:
         _rig.deinit()

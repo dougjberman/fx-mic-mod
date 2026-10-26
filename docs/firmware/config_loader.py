@@ -1,86 +1,86 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tim Cocks for Adafruit Industries
-#
+
 # SPDX-License-Identifier: MIT
-"""
-Build CircuitPython audio effect objects from JSON config data.
+0
 
-The JSON describes only the end-user tunable parameters of an effect -- the
-things that change how it sounds. The audio format arguments are
-a property of the audio chain, not of the preset, so they are supplied by the
-caller and ignored if they appear in the JSON.
 
-A single effect is a dict with an ``"effect"`` key naming the type::
 
-    {"effect": "echo", "max_delay_ms": 1000, "delay_ms": 500,
-     "decay": 0.5, "mix": 1.0, "freq_shift": false}
 
-Any effect may also carry ``"enabled": false`` to take it out of the chain
-without deleting it from the config -- `create_effect_chain` and
-`create_effects` skip it entirely. Omitting ``"enabled"`` (or setting it
-``true``) builds the effect as normal.
 
-Usage::
 
-    import json
-    from config_loader import create_effect, create_effect_chain
 
-    config = json.load(open("/ep2350_circuitpython_config.json"))
-    specs = config["presets"][0]["list"]
 
-    chain = create_effect_chain(specs, sample_rate=48000, channel_count=2,
-                                buffer_size=1024, source=mic)
-    audio.play(chain[-1])
 
-Block inputs
-------------
 
-Most tunable parameters are `synthio.BlockInput`, meaning they take a constant
-*or* a block that varies over time. Anywhere a block is allowed the JSON may be:
 
-* a number -- ``"mix": 0.6``
-* ``null`` -- treated by synthio as 0
-* a block object -- ``{"block": "lfo", ...}`` or ``{"block": "math", ...}``
-* ``"$name"`` -- a reference to a shared block (see below)
 
-An LFO takes the same keyword arguments as `synthio.LFO`::
 
-    {"block": "lfo", "waveform": "sine", "rate": 0.25,
-     "scale": 400, "offset": 600, "phase_offset": 0.0,
-     "once": false, "interpolate": true}
 
-``waveform`` is a shape name (``"triangle"``, ``"sine"``, ``"square"``,
-``"saw"``/``"ramp_up"``, ``"ramp_down"``), ``{"shape": "sine", "size": 256}``
-when the sample count matters, or a literal list of 16-bit signed ints.
-Omitting it uses synthio's built-in triangle.
 
-A Math block takes an operation name from `synthio.MathOperation`::
 
-    {"block": "math", "operation": "constrained_lerp",
-     "a": 0.1, "b": 0.9, "c": "$handle"}
 
-``rate``/``scale``/``offset``/``phase_offset`` and ``a``/``b``/``c`` are block
-inputs themselves, so blocks nest.
 
-Writing the same block object twice builds two independent blocks. To drive
-several parameters from one block, name it and refer to it with ``"$name"``.
-Names come from a ``"blocks"`` mapping on the preset (or the whole config)::
 
-    {"blocks": {"sweep": {"block": "lfo", "rate": 0.2,
-                          "scale": 1200, "offset": 2000}},
-     "list": [{"effect": "filter",
-               "filter": {"mode": "low_pass", "frequency": "$sweep"}},
-              {"effect": "phaser", "frequency": "$sweep", "stages": 8}]}
 
-and from the ``blocks`` argument of `create_effect`, which is how host code
-hands the config a value only it can produce -- a knob, say::
 
-    handle = synthio.Math(synthio.MathOperation.SUM, 0.0, 0.0, 0.0)
-    chain = create_preset(preset, source=mic, blocks={"handle": handle})
-    ...
-    handle.a = pot.value / 65535     # in the main loop
 
-Host-supplied blocks win over same-named definitions in the config.
-"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 import array
 import math
@@ -88,8 +88,8 @@ import math
 import audiofilters
 import synthio
 
-# Audio format arguments. These are set by the caller from the hardware
-# configuration, so they are skipped if a config file specifies them.
+
+
 FORMAT_ARGS = (
     "buffer_size",
     "sample_rate",
@@ -99,9 +99,9 @@ FORMAT_ARGS = (
 )
 
 
-# Converters all take (value, name, blocks) so they are interchangeable in the
-# parameter tables; only the block-input ones look at `blocks`.
-# pylint: disable=unused-argument, too-many-locals
+
+
+
 
 
 def _int(value, name, blocks=None):
@@ -123,12 +123,12 @@ def _bool(value, name, blocks=None):
 
 
 def _block(value, name, blocks=None):
-    """Convert one synthio.BlockInput parameter.
+    0
 
-    A number stays a number, ``null`` becomes ``None`` (synthio reads it as 0),
-    a dict builds an `synthio.LFO` or `synthio.Math`, and ``"$name"`` looks up a
-    shared block.
-    """
+
+
+
+
     if value is None:
         return None
     if isinstance(value, bool):
@@ -147,11 +147,11 @@ def _block(value, name, blocks=None):
 
 
 def _distortion_mode(value, name, blocks=None):
-    """Map "clip"/"LOFI"/... to an audiofilters.DistortionMode."""
+    0
 
     if not isinstance(value, str):
         raise ValueError("{} must be a string".format(name))
-    # "wavefold" is what the editor used to call WAVESHAPE
+
     upper = "WAVESHAPE" if value.upper() == "WAVEFOLD" else value.upper()
     try:
         return getattr(audiofilters.DistortionMode, upper)
@@ -160,12 +160,12 @@ def _distortion_mode(value, name, blocks=None):
 
 
 class _Blocks:
-    """The ``"$name"`` namespace for one chain build.
+    0
 
-    Holds the config's ``"blocks"`` definitions plus any ready-made blocks the
-    host passed in, and caches what it builds so that two parameters referring
-    to ``"$sweep"`` share one LFO instead of getting one each.
-    """
+
+
+
+
 
     def __init__(self, definitions=None):
         self._definitions = definitions or {}
@@ -173,7 +173,7 @@ class _Blocks:
         self._resolving = []
 
     def get(self, ref, name):
-        """Resolve a ``"$name"`` reference to a block."""
+        0
         key = ref[1:]
         if not key:
             raise ValueError("{} has an empty block reference".format(name))
@@ -190,7 +190,7 @@ class _Blocks:
             if definition is None or isinstance(definition, (dict, float, int, str)):
                 block = _block(definition, "block ${}".format(key), self)
             else:
-                # Already a synthio object, handed in by the host.
+
                 block = definition
         finally:
             self._resolving.pop()
@@ -207,7 +207,7 @@ def _as_blocks(blocks):
 
 _WAVEFORM_SIZE = 64
 
-# Shape name -> waveform[i] for phase i/size, as a float in -1.0 to 1.0.
+
 _WAVEFORM_SHAPES = {
     "triangle": lambda t: 4 * t if t < 0.25 else (2 - 4 * t if t < 0.75 else 4 * t - 4),
     "square": lambda t: 1.0 if t < 0.5 else -1.0,
@@ -245,11 +245,11 @@ def _generate_waveform(shape, size, name):
 
 
 def _waveform(value, name, blocks=None):
-    """Build an LFO waveform buffer.
+    0
 
-    A shape name, ``{"shape": ..., "size": ...}``, or a literal list of 16-bit
-    signed samples. ``None`` leaves synthio's built-in triangle in place.
-    """
+
+
+
     if value is None:
         return None
 
@@ -282,7 +282,7 @@ def _waveform(value, name, blocks=None):
 
 
 def _math_operation(value, name, blocks=None):
-    """Map "lerp"/"SCALE_OFFSET"/... to a synthio.MathOperation."""
+    0
 
     if not isinstance(value, str):
         raise ValueError("{} must be a string".format(name))
@@ -293,7 +293,7 @@ def _math_operation(value, name, blocks=None):
         raise ValueError("unknown math operation: {}".format(value)) from exc
 
 
-# block type -> (module, class, {parameter: converter}, (required parameters,))
+
 _BLOCKS = {
     "lfo": (
         "LFO",
@@ -322,7 +322,7 @@ _BLOCKS = {
 
 
 def _make_block(spec, name, blocks):
-    """Build one synthio.LFO or synthio.Math from a ``{"block": ...}`` dict."""
+    0
 
     kind = spec.get("block", spec.get("type"))
     if kind is None:
@@ -351,17 +351,17 @@ def _make_block(spec, name, blocks):
 
 
 def _biquad(value, name, blocks=None):
-    """Build synthio.Biquad object(s) for audiofilters.Filter.
+    0
 
-    Accepts one filter dict or a list of them, to run several biquads in
-    series::
 
-        "filter": {"mode": "LOW_PASS", "frequency": 800, "Q": 0.7071}
-        "filter": [{"mode": "HIGH_PASS", "frequency": 100},
-                   {"mode": "LOW_PASS", "frequency": 4000}]
 
-    ``frequency``, ``Q`` and ``A`` are block inputs, so a filter can be swept.
-    """
+
+
+
+
+
+
+
 
     if isinstance(value, (list, tuple)):
         return [_biquad(item, name, blocks) for item in value]
@@ -383,18 +383,18 @@ def _biquad(value, name, blocks=None):
     if "Q" in value:
         kwargs["Q"] = _block(value["Q"], "Q", blocks)
     if value.get("A") is not None:
-        # Gain of peaking and shelving filters: A = 10 ** (dBgain / 40).
+
         kwargs["A"] = _block(value["A"], "A", blocks)
 
     return synthio.Biquad(mode, **kwargs)
 
 
 def _taps(value, name, blocks=None):
-    """Tap positions/levels for audiodelays.MultiTapDelay.
+    0
 
-    Each tap is either a position (0.0 - 1.0 of the delay buffer) or a
-    ``[position, level]`` pair: ``"taps": [[0.666, 0.7], 1.0]``.
-    """
+
+
+
     if value is None:
         return None
     if not isinstance(value, (list, tuple)):
@@ -411,10 +411,10 @@ def _taps(value, name, blocks=None):
     return tuple(taps)
 
 
-# effect name -> (module name, class name, {parameter: converter})
-#
-# Only sound-affecting constructor parameters are listed; everything in
-# FORMAT_ARGS is deliberately absent.
+
+
+
+
 EFFECTS = {
     "chorus": (
         "audiodelays",
@@ -445,7 +445,7 @@ EFFECTS = {
             "mix": _block,
             "grain_size": _int,
             "density": _int,
-            # Not a block input: the core reads spread as a plain float.
+
             "spread": _float,
         },
     ),
@@ -511,7 +511,7 @@ EFFECTS = {
     ),
 }
 
-# Friendlier spellings accepted for the "effect" key.
+
 ALIASES = {
     "reverb": "freeverb",
     "delay": "echo",
@@ -523,11 +523,11 @@ ALIASES = {
 
 
 def _normalize(name):
-    """ "GranularPitchShift", "granular pitch shift", "reverb" -> table key."""
+    0
     if not isinstance(name, str):
         raise ValueError("effect name must be a string")
 
-    # Insert underscores at CamelCase boundaries so class names work directly.
+
     out = ""
     for i, char in enumerate(name):
         if char.isupper() and i and not name[i - 1].isupper():
@@ -552,19 +552,19 @@ def create_effect(
     samples_signed=True,
     buffer_size=1024,
 ):
-    """Create one audio effect object from a JSON effect dict.
+    0
 
-    :param dict spec: The effect config. Must have an ``"effect"`` key naming
-        the effect type; every other key is a tunable parameter of that effect.
-    :param dict blocks: Blocks that ``"$name"`` parameters may refer to. Values
-        are either block config dicts or ready-made `synthio` block objects.
-    :param int sample_rate: Frame rate of the audio chain, in Hz.
-    :param int channel_count: 1 = mono, 2 = stereo.
-    :param int bits_per_sample: Bit depth of the audio chain.
-    :param bool samples_signed: Whether chain samples are signed.
-    :param int buffer_size: Size in bytes of each of the effect's two buffers.
-    :return: The constructed effect, ready to be given a source with ``play()``.
-    """
+
+
+
+
+
+
+
+
+
+
+
     if not isinstance(spec, dict):
         raise ValueError("effect config must be a dict")
     if "effect" not in spec:
@@ -583,9 +583,9 @@ def create_effect(
     }
     for name, value in spec.items():
         if name == "effect" or name == "enabled" or name in FORMAT_ARGS:
-            # Format args come from the audio chain, not the preset; "enabled"
-            # is handled by the caller (create_effect_chain/create_effects),
-            # which skips disabled specs before they ever reach here.
+
+
+
             continue
         if name not in params:
             raise ValueError("{} has no parameter {}".format(class_name, name))
@@ -602,11 +602,11 @@ def create_effect(
 
 
 def _is_enabled(spec, name):
-    """Whether an effect spec's ``"enabled"`` key allows it into the chain.
+    0
 
-    Missing means enabled -- ``"enabled"`` is opt-out, not opt-in, so existing
-    configs without the key are unaffected.
-    """
+
+
+
     if "enabled" not in spec:
         return True
     value = spec["enabled"]
@@ -616,21 +616,21 @@ def _is_enabled(spec, name):
 
 
 def create_effects(preset, blocks=None, **format_args):
-    """Create the effects of a preset dict, without wiring them together.
+    0
 
-    For callers that build their own graph -- notably ones that have to wire
-    from the output backwards -- and still want the preset's shared blocks.
 
-    An effect spec with ``"enabled": false`` is skipped entirely, same as in
-    `create_effect_chain`.
 
-    :param preset: A preset dict, ``{"blocks": ..., "list": ...}``, or a bare
-        list of effect configs.
-    :param dict blocks: Ready-made blocks (or block configs) from the host.
-    :param format_args: Audio format arguments, passed to `create_effect`.
-    :return: The list of effect objects, in signal-flow order, unconnected,
-        omitting any that were disabled.
-    """
+
+
+
+
+
+
+
+
+
+
+
     if isinstance(preset, dict):
         specs = preset.get("list", ())
         definitions = preset.get("blocks", None)
@@ -647,26 +647,26 @@ def create_effects(preset, blocks=None, **format_args):
 
 
 def _namespace(definitions, blocks):
-    """The ``"$name"`` namespace for one preset build."""
+    0
     if definitions is not None and not isinstance(definitions, dict):
         raise ValueError('"blocks" must be a mapping of name to block')
 
-    # The preset's definitions and the host's blocks share one namespace, so
-    # that "$name" means the same object wherever it appears in the preset.
-    # The host's win, letting a config name a fallback for a knob that this
-    # particular program does not provide.
+
+
+
+
     namespace = dict(definitions) if definitions else {}
     if blocks:
         namespace.update(blocks)
     return _Blocks(namespace)
 
 
-# --- Autotune ---
 
-# Spellings of the "effect" key that mean autotune, after `_normalize`-style
-# folding. Autotune is not an audio effect object: it owns the mic (Python has
-# to see the audio to find the pitch), so the host builds it from the keyword
-# arguments `create_preset` returns, and it always heads the chain.
+
+
+
+
+
 AUTOTUNE_NAMES = ("autotune", "auto_tune")
 
 
@@ -676,7 +676,7 @@ def _str(value, name, blocks=None):
     return value
 
 
-# parameter -> converter, matching autotune.Autotune's keyword arguments
+
 AUTOTUNE_PARAMS = {
     "key": _str,
     "scale": _str,
@@ -685,20 +685,20 @@ AUTOTUNE_PARAMS = {
     "mix": _block,
     "grain_size": _int,
     "density": _int,
-    # Taken by the host, not autotune.Autotune: the key / scale to switch to
-    # while the handle is squeezed far in.
+
+
     "squeeze_key": _str,
     "squeeze_scale": _str,
 }
 
 
-# The harmonizer runs inside the autotune stage, which already holds the
-# voice block by block: its harmony voices are more shifters fed the same
-# blocks. A preset may have one; without autotune, the stage runs with the
-# voice left untuned.
+
+
+
+
 HARMONIZER_NAMES = ("harmonizer", "harmony")
 
-# parameter -> (converter, autotune.Autotune keyword)
+
 HARMONIZER_PARAMS = {
     "chord": (_str, "harmony"),
     "inversion": (_int, "inversion"),
@@ -718,7 +718,7 @@ def is_harmonizer(spec):
 
 
 def uses_tune_stage(spec):
-    """Whether a spec runs in the Python autotune stage (autotune or harmonizer)."""
+    0
     return is_autotune(spec) or is_harmonizer(spec)
 
 
@@ -730,8 +730,8 @@ def is_autotune(spec):
 
 
 def _uses_handle(value, defs, seen=()):
-    """Whether a parameter value refers to ``"$handle"``: directly, inside an
-    inline block, or through the preset's named ``blocks``."""
+    0
+
     if isinstance(value, str):
         if value == "$handle":
             return True
@@ -747,17 +747,17 @@ def _uses_handle(value, defs, seen=()):
 
 
 def create_preset(preset, blocks=None, **format_args):
-    """Create a preset's autotune settings and its effects, without wiring.
+    0
 
-    Like `create_effects`, but also accepts one ``{"effect": "autotune"}``
-    spec, which may sit anywhere in the list: autotune always runs first,
-    because pitch detection needs the dry voice.
 
-    :return: ``(autotune, effects)`` -- ``autotune`` is a dict of keyword
-        arguments for ``autotune.Autotune`` (block parameters already
-        resolved), or ``None`` if the preset has no enabled autotune;
-        ``effects`` is the list `create_effects` would return for the rest.
-    """
+
+
+
+
+
+
+
+
     if isinstance(preset, dict):
         specs = preset.get("list", ())
         definitions = preset.get("blocks", None)
@@ -823,14 +823,14 @@ def create_preset(preset, blocks=None, **format_args):
     return tune, effects
 
 
-# --- Samples ---
 
-# Recognized values for a sample's "playmode":
-#
-# * "oneshot"   -- plays through once when the button is pressed.
-# * "hold"      -- loops for as long as the button stays held down.
-# * "startstop" -- starts looping on press, keeps looping until the button is
-#                  pressed again to stop it.
+
+
+
+
+
+
+
 PLAYMODES = ("oneshot", "hold", "startstop")
 
 
@@ -844,39 +844,39 @@ def _playmode(value, name, blocks=None):
 
 
 def load_samples(config, max_samples=None):
-    """Read the ``"samples"`` list out of a parsed config dict.
+    0
 
-    Each entry names a wave file, how a button press should play it back, and
-    optionally an effect chain to run the wave through::
 
-        {"file": "3.wav", "playmode": "oneshot",
-         "effects": [{"effect": "freeverb", "mix": 0.6}]}
 
-    ``playmode`` is one of `PLAYMODES` and defaults to ``"oneshot"`` when
-    omitted. ``effects`` is a list of effect specs in the same shape as a
-    preset's ``"list"`` -- and defaults to an empty list when omitted, meaning
-    the wave plays unprocessed. Like a preset, a sample may also carry a
-    ``"blocks"`` mapping naming LFOs/Math blocks that its effects refer to by
-    ``"$name"``::
 
-        {"file": "3.wav",
-         "blocks": {"wobble": {"block": "lfo", "rate": 4, "scale": 3}},
-         "effects": [{"effect": "pitch_shift", "semitones": "$wobble"}]}
 
-    Pass the whole entry to `create_effects` (or `create_preset`) to build it
-    -- its ``"blocks"``/``"effects"`` line up with `create_effects`'s
-    ``"blocks"``/``"list"`` -- and it will pick up both the sample's own block
-    definitions and any host-supplied blocks (like a hardware knob) the same
-    way a preset does. The host is responsible for actually opening the file,
-    building the effects, and driving playback according to the mode -- this
-    only parses and validates the list.
 
-    :param dict config: A parsed config file, as from ``json.load``.
-    :param int max_samples: Cap on how many entries are returned, or ``None``
-        for no cap.
-    :return: A list of ``{"file": str, "playmode": str, "effects": list,
-        "blocks": dict}`` dicts, in config order.
-    """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     samples = config.get("samples", ())
     if not isinstance(samples, (list, tuple)):
         raise ValueError('"samples" must be a list')
@@ -919,16 +919,16 @@ SAMPLE_FX_MODES = ("own", "preset")
 
 
 def preset_level(preset):
-    """A preset's output level: the optional ``"level"`` key, 0.0 to 1.0.
+    0
 
-    It scales the whole preset (mic and, with samples played through the
-    preset, the sample too) so loud chains such as distortion can be brought
-    down to match the others. The editor's Match volume button sets it.
-    Missing means 1.0, full level, which is how every preset sounded before.
 
-    :param dict preset: One entry of the config's ``"presets"`` list.
-    :return: The level as a float.
-    """
+
+
+
+
+
+
+
     level = preset.get("level", 1.0) if isinstance(preset, dict) else 1.0
     if isinstance(level, bool) or not isinstance(level, (int, float)):
         raise ValueError('"level" must be a number from 0.0 to 1.0')
@@ -938,16 +938,16 @@ def preset_level(preset):
 
 
 def sample_routing(config):
-    """Where samples get their effects: the top-level ``"sample_fx"`` key.
+    0
 
-    * ``"own"`` (the default, and how Adafruit's packs work): each sample runs
-      through its own ``"effects"`` list, whatever preset is selected.
-    * ``"preset"``: samples play dry into the selected preset's chain, the
-      same chain the mic goes through. Their own ``"effects"`` are ignored.
 
-    :param dict config: A parsed config file, as from ``json.load``.
-    :return: ``"own"`` or ``"preset"``.
-    """
+
+
+
+
+
+
+
     mode = config.get("sample_fx", "own")
     if not isinstance(mode, str) or mode.lower() not in SAMPLE_FX_MODES:
         raise ValueError('"sample_fx" must be "own" or "preset"')

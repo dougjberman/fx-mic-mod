@@ -74,8 +74,9 @@ One static site, deployed by Cloudflare from `docs/` (see `wrangler.jsonc`):
   mic (or a sample singer) using `ting-dsp.js`, a Web Audio approximation of the firmware. Saves
   `config.json` straight to CIRCUITPY in Chrome and Edge, or downloads it elsewhere.
 
-`docs/firmware/` must match `firmware/`. A test fails if they drift, so copy the files over after
-changing the firmware.
+`docs/firmware/` holds `firmware/` without comments or docstrings, line for line, so the mic's
+small drive keeps room for recordings and tracebacks still match the source. A test fails if they
+drift, so run `python3 tools/slim_firmware.py` after changing the firmware.
 
 ## Presets
 
