@@ -22,11 +22,11 @@
     {
       "name": "Chipmunks in space",
       "comment": "Adafruit's Chipmunk space, plus a chorus of chipmunks and a lighter echo.",
-      "level": 0.8,
+      "level": 0.6,
       "list": [
         {"effect": "filter", "filter": {"mode": "high_pass", "frequency": 200, "Q": 0.7071}, "mix": 1},
-        {"effect": "granular_pitch_shift", "semitones": 8, "density": 2, "mix": 1, "grain_size": 512, "spread": 0},
-        {"effect": "chorus", "voices": 3, "delay_ms": 30, "mix": 0.5, "max_delay_ms": 50},
+        {"effect": "granular_pitch_shift", "semitones": 8, "density": 2, "mix": 0.67, "grain_size": 512, "spread": 0},
+        {"effect": "chorus", "voices": 3, "delay_ms": 40, "mix": 0.7, "max_delay_ms": 50},
         {"effect": "echo", "max_delay_ms": 1200, "delay_ms": 750, "decay": 0.25, "mix": 0.09, "freq_shift": true},
         {"effect": "freeverb", "roomsize": 0.5, "damp": 0.55, "mix": 0.6}
       ]
