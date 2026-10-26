@@ -114,6 +114,14 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .status { font-family: var(--f-mono); font-size: 12.5px; color: var(--muted); min-height: 1.2em; overflow-wrap: anywhere; }
 .status.ok { color: var(--green); }
 .status.bad { color: var(--accent-text); }
+/* Work in progress: three dots pulse after the text until the next status replaces it. */
+.status.busy::after { content: ""; display: inline-block; width: 1.6em; height: .5em; margin-left: .5em; vertical-align: middle;
+  background: radial-gradient(circle closest-side, currentColor 90%, transparent) 0 50% / .5em .5em no-repeat,
+              radial-gradient(circle closest-side, currentColor 90%, transparent) 50% 50% / .5em .5em no-repeat,
+              radial-gradient(circle closest-side, currentColor 90%, transparent) 100% 50% / .5em .5em no-repeat;
+  animation: busy 1s ease-in-out infinite; }
+@keyframes busy { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .status.busy::after { animation: none; opacity: .6; } }
 main, .step, .step > * { min-width: 0; }
 .how a, .how code { overflow-wrap: anywhere; }
 .tablebox { max-width: 100%; overflow-x: auto; max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
@@ -595,7 +603,8 @@ while True:
 
   // ---------- helpers ----------
   function setChip(id, text, ok) { const c = $(id); c.textContent = text; c.className = "chip " + (ok ? "ok" : "no"); }
-  function status(id, text, kind) { const s = $(id); s.textContent = text; s.className = "status" + (kind ? " " + kind : ""); }
+  // A status still in progress ("Copying… 2/6") shows the busy dots unless it says otherwise.
+  function status(id, text, kind) { if (kind === undefined && text.includes("…")) kind = "busy"; const s = $(id); s.textContent = text; s.className = "status" + (kind ? " " + kind : ""); }
   function fmtBytes(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(2) + " MB"; }
   function today() { return new Date().toISOString().slice(0, 10); }
 
@@ -622,7 +631,7 @@ while True:
 
   async function pickDir(mode, statusId) {
     if (!hasFs) { status(statusId, "This browser can't open drives. Use Chrome or Edge on a computer, or follow the manual steps.", "bad"); return null; }
-    try { return await window.showDirectoryPicker({ mode }); }
+    try { const dir = await window.showDirectoryPicker({ mode }); status(statusId, "Working…"); return dir; }
     catch (e) {
       if (e.name === "AbortError") { status(statusId, "Cancelled."); return null; }
       if (isBlockError(e) || framed) { showBlocked(); status(statusId, "Drive access is blocked in this view. Save the standalone flasher above, or use the manual steps.", "bad"); return null; }
@@ -792,6 +801,7 @@ while True:
   }
   $("installBtn").addEventListener("click", async () => {
     let files;
+    status("codeStatus", "Getting the fx-mic-mod files…");
     try {
       files = await Promise.all(FIRMWARE.map(async (name) => {
         const r = await fetch("firmware/" + name, { cache: "no-store" });
