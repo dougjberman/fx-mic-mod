@@ -335,7 +335,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
         <button id="mode-simple" aria-pressed="true">Simple</button>
         <button id="mode-adv" aria-pressed="false">Advanced</button>
       </div>
-      <label class="btn ghost" for="file-open" title="Pick a config.json from the mic's CIRCUITPY drive or your computer">Load existing config.json</label>
+      <label class="btn ghost" for="file-open" title="Pick a config.json from the mic's CIRCUITPY drive or your computer">Open a config.json</label>
       <input id="file-open" type="file" accept=".json,application/json" hidden>
       <button class="btn" id="btn-copy">Copy</button>
       <button class="btn" id="btn-download">Download</button>
@@ -408,9 +408,10 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <section id="editor" style="display:grid;gap:14px"></section>
 
   <section class="panel" style="display:grid;gap:12px">
-    <div class="row spread"><h2>Samples</h2><button class="btn small" id="btn-load-samples" title="Read 1.wav to 4.wav from the mic's drive so you can hear them here">Load samples from the mic</button></div>
+    <div class="row spread"><h2>Samples</h2><button class="btn small" id="btn-load-samples" title="Copy 1.wav to 4.wav from the mic's drive into this page, so you can hear them here">Copy samples from the mic</button></div>
     <div class="small muted sample-help">
-      <p>Samples can be loaded onto the mic here with the preset editor, or recorded on the mic on its own, with no computer connected. On the mic, the <span data-dw="mid">white</span> button picks a slot and the <span data-dw="bot">grey</span> button plays it.</p>
+      <p>There are two ways to get samples onto the mic: copy WAV files from your computer with the <a href="install.html#samples">sample copier on the Install page</a>, or record them on the mic itself, with no computer needed. On the mic, the <span data-dw="mid">white</span> button picks a slot and the <span data-dw="bot">grey</span> button plays it.</p>
+      <p>The WAVs below are only for hearing each slot here, with its effects. Choosing one doesn't change the mic, and Save to mic saves your settings, not the WAVs.</p>
       <p>To record a sample directly on the mic:</p>
       <ul>
         <li>Press the orange button to step past preset 4 into Record mode, where all four red lights start blinking.</li>
@@ -1065,7 +1066,7 @@ function renderSamples(){
   });
 }
 
-/* Hearing the slots here: load a WAV per slot (or all four from the mic's
+/* Hearing the slots here: choose a WAV per slot (or all four from the mic's
  * drive) and play it through the same engine as the Try-it bar, so it gets the
  * slot's own effects or the selected preset, as "sample_fx" says. */
 const slotAudio = [null, null, null, null];
@@ -1109,11 +1110,11 @@ function slotPlayer(i){
       onkeydown:(e)=>{ if ((e.key===" "||e.key==="Enter") && !e.repeat){ e.preventDefault(); greyDown(i); } },
       onkeyup:(e)=>{ if (e.key===" "||e.key==="Enter") greyUp(i); }}, h("span",{class:"dot","aria-hidden":"true"}), h("span",{"data-dw":"Bot"}, siteDevice.word("Bot"))),
     h("button",{class:"btn small ghost", disabled: a ? null : true, onclick:()=>{ trySend({stopSample:true}); slotLooping = null; }, "aria-label":"Stop slot "+(i+1)}, "Stop"),
-    h("label",{class:"btn small ghost", for:id}, a ? "Replace WAV" : "Load a WAV"), input,
-    h("span",{class:"small muted mono"}, a ? a.name+" \u00b7 "+a.sec.toFixed(1)+" s" : "Nothing loaded to hear here yet"));
+    h("label",{class:"btn small ghost", for:id}, a ? "Choose another WAV" : "Choose a WAV"), input,
+    h("span",{class:"small muted mono"}, a ? a.name+" \u00b7 "+a.sec.toFixed(1)+" s" : "No WAV to hear yet"));
 }
 $("#btn-load-samples").addEventListener("click", async ()=>{
-  if (!canPickFolder){ toast("This browser can't open the mic's drive. Use Load a WAV on each slot instead."); return; }
+  if (!canPickFolder){ toast("This browser can't open the mic's drive. Use Choose a WAV on each slot instead."); return; }
   let dir;
   try { dir = await window.showDirectoryPicker({id:"circuitpy", mode:"read"}); }
   catch(e){ if (e.name!=="AbortError") toast("Couldn't open the folder picker: "+e.message); return; }
@@ -1124,7 +1125,7 @@ $("#btn-load-samples").addEventListener("click", async ()=>{
     catch(e){}
   }
   renderSamples();
-  toast(found.length ? "Loaded "+found.join(", ") : "No slot files found there. Pick the mic's drive (CIRCUITPY).");
+  toast(found.length ? "Copied "+found.join(", ") : "No slot files found there. Pick the mic's drive (CIRCUITPY).");
 });
 
 function render(){
@@ -1143,8 +1144,8 @@ function restore(){ try { const t = localStorage.getItem(KEY); if (t) return nor
 
 /* ---------------------------- file I/O ----------------------------- */
 function adoptText(text, source){
-  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Loaded "+source); }
-  catch(e){ notice("Couldn't load "+source+": "+e.message, "bad"); }
+  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Opened "+source); }
+  catch(e){ notice("Couldn't open "+source+": "+e.message, "bad"); }
 }
 $("#file-open").addEventListener("change", async (e)=>{ const f=e.target.files[0]; if(!f) return; track("load-file"); adoptText(await f.text(), f.name); e.target.value=""; });
 document.addEventListener("dragover", e=>e.preventDefault());

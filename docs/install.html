@@ -389,9 +389,9 @@ picotool save -a ting-full-flash.bin</pre>
         <div class="status" id="spareStatus" hidden></div>
       </div>
       <div class="note"><b>After installing, turn the mic off and on again.</b> The mic restarts its code by itself when the files land, but the part that sets edit and record mode only runs at power-on, so this one power cycle is needed to finish. (Saving presets from the editor later doesn't need it.) To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together until the lights go out (about a second), then let go. If it stays on, unplug the USB cable and take out the batteries. Once it's dark, squeeze the handle to turn it back on. <b>Working looks like:</b> white LED 1 stays lit, the red LEDs are off (the clean spot), and CIRCUITPY shows up on your computer again. If white LED 1 instead blinks twice every few seconds, the code stopped on an error: connect the serial console below and click Restart code to see it. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
-      <details><summary>Optional: copy samples from your backup</summary>
+      <details id="samples"><summary>Optional: copy samples to the mic</summary>
         <div style="display: grid; gap: 10px; margin-top: 10px;">
-          <p>If your step 01 backup has WAV files you want on the mic, this copies them to CIRCUITPY. fx-mic-mod plays 16-bit mono WAVs at 24 kHz, so each file is converted to that on the way. Bought or downloaded samples are usually much louder than a voice through the mic, so by default they're also turned down to about the level the mic records at. Choose the backup zip or the WAV files, then pick CIRCUITPY with the mic in edit mode. A file whose name starts with 1 to 4 goes in that slot; any others fill the empty slots in order.</p>
+          <p>This copies WAV files to CIRCUITPY: from your step 01 backup, or any others you want on the mic. fx-mic-mod plays 16-bit mono WAVs at 24 kHz, so each file is converted to that on the way. Bought or downloaded samples are usually much louder than a voice through the mic, so by default they're also turned down to about the level the mic records at. Choose the backup zip or the WAV files, then pick CIRCUITPY with the mic in edit mode. A file whose name starts with 1 to 4 goes in that slot; any others fill the empty slots in order.</p>
           <div class="tool">
             <div class="row">
               <label class="filebtn">Choose the backup zip or WAVs<input type="file" id="samplesInput" accept=".zip,.wav,audio/wav,audio/x-wav" multiple></label>
@@ -1096,4 +1096,9 @@ while True:
 </script>
 
 <script src="site-motion.js"></script>
+<script>
+  // install.html#samples (linked from the editor) opens the sample copier.
+  function openFromHash(){ const d = location.hash === "#samples" && document.getElementById("samples"); if (d){ d.open = true; d.scrollIntoView(); } }
+  openFromHash(); window.addEventListener("hashchange", openFromHash);
+</script>
 </body></html>
