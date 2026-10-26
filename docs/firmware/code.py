@@ -72,6 +72,11 @@ import digitalio
 import keypad
 
 import storage
+try:
+    import supervisor
+except ImportError:
+    supervisor = None
+import sys
 import synthio
 
 import adafruit_nau88l21
@@ -130,7 +135,7 @@ _phase = CONFIG.get("feed_phase", autotune.FEED_PHASE)
 if _phase is None or (_phase in (0, 1) and not isinstance(_phase, bool)):
     autotune.FEED_PHASE = _phase
 else:
-    print("feed_phase must be 0 or 1; using the default feed")
+    print("feed_phase must be 0, 1 or null; using {}".format(autotune.FEED_PHASE))
 
 
 RATE_SCALE = RATE / 16000
@@ -1280,6 +1285,14 @@ try:
                 print("overflow (autotune took {:.1f} ms of 16)".format(data_context.tune.busy_ms))
             else:
                 print("overflow")
+
+
+
+        if supervisor is not None and supervisor.runtime.serial_bytes_available:
+            typed = sys.stdin.read(supervisor.runtime.serial_bytes_available)
+            if "f" in typed.lower() and autotune.FEED_PHASE is not None:
+                autotune.FEED_PHASE ^= 1
+                print("feed_phase now {}".format(autotune.FEED_PHASE))
 
 
 

@@ -72,6 +72,11 @@ import digitalio
 import keypad
 
 import storage
+try:
+    import supervisor
+except ImportError:  # desktop tests
+    supervisor = None
+import sys
 import synthio
 
 import adafruit_nau88l21
@@ -124,13 +129,13 @@ except ValueError as error:
     print("config: {}; using {}".format(error, DEFAULT_RATE))
     RATE = DEFAULT_RATE
     autotune.set_rate(RATE)
-# "feed_phase": leave it out for the default feed, or 0 or 1 for the older
-# double buffer (see autotune.FEED_PHASE).
+# "feed_phase": 0 or 1 for the double buffer, or null for the two-block
+# window (see autotune.FEED_PHASE).
 _phase = CONFIG.get("feed_phase", autotune.FEED_PHASE)
 if _phase is None or (_phase in (0, 1) and not isinstance(_phase, bool)):
     autotune.FEED_PHASE = _phase
 else:
-    print("feed_phase must be 0 or 1; using the default feed")
+    print("feed_phase must be 0, 1 or null; using {}".format(autotune.FEED_PHASE))
 # Sample counts in config.json (grain sizes, pitch_shift windows) are written
 # for 16 kHz, so they keep their length in time at other rates.
 RATE_SCALE = RATE / 16000
@@ -1280,6 +1285,14 @@ try:
                 print("overflow (autotune took {:.1f} ms of 16)".format(data_context.tune.busy_ms))
             else:
                 print("overflow")
+
+        # Typing f and Enter in the serial console flips the autotune feed's
+        # double buffer live (see autotune.FEED_PHASE), to test a crackle.
+        if supervisor is not None and supervisor.runtime.serial_bytes_available:
+            typed = sys.stdin.read(supervisor.runtime.serial_bytes_available)
+            if "f" in typed.lower() and autotune.FEED_PHASE is not None:
+                autotune.FEED_PHASE ^= 1
+                print("feed_phase now {}".format(autotune.FEED_PHASE))
 
         # Autotune and the recorder each block on one 16 ms mic read, which
         # paces the loop; otherwise nothing here needs to run faster.

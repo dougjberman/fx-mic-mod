@@ -65,9 +65,7 @@ GRAIN_DENSITY = 2
 
 
 
-
-
-FEED_PHASE = None
+FEED_PHASE = 1
 
 
 

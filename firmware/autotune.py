@@ -59,15 +59,13 @@ SHIFT_ENGINE = "native"
 GRAIN_SIZE = 512        # native grain length in samples (at 16 kHz); bigger = smoother, more latency
 GRAIN_DENSITY = 2       # native overlapping grains (1..8)
 
-# How processed blocks reach the pitch shifter. The chain pulls the feed two
-# blocks at a time, at a moment that has no fixed relation to when a preset
-# loads. None (the default) keeps the feed as a two-block window, oldest block
-# first: each block is written to the end and the previous one slides to the
-# front, so the pull always reads the last two blocks in order, whenever it
-# comes. 0 or 1 is the older double buffer, written half by half; one of the
-# two values plays the blocks out of order and crackles all the way through,
-# and which one depended on the moment the preset loaded.
-FEED_PHASE = None
+# How processed blocks reach the pitch shifter. 0 or 1 is a double buffer,
+# written half by half; the value picks which half is written while the other
+# plays. On a Ting, some loads of an autotune preset crackle all the way
+# through with either value and others don't, so typing f and Enter in the
+# serial console flips it live, to test. None keeps the feed as a two-block
+# window instead, oldest block first; on a Ting that crackled on every load.
+FEED_PHASE = 1
 
 # Retune speed. `speed` 0..1 (0 = natural, 1 = hard snap) is mapped to the
 # fraction of the remaining correction applied per 16 ms block, from

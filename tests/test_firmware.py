@@ -218,9 +218,8 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(h._chord_intervals(57), h._key_intervals(57))
         self.assertEqual(h._chord_intervals(45), h._key_intervals(57))
 
-    def test_feed_holds_the_last_two_blocks_in_order(self):
-        # The chain pulls the feed two blocks at a time, whenever it likes, so
-        # after every write the buffer must read oldest block first.
+    def test_feed_window_holds_the_last_two_blocks_in_order(self):
+        # feed_phase null: after every write the buffer reads oldest block first.
         import array
         import autotune
         A, n = autotune.Autotune, autotune.BLOCK_SIZE
@@ -228,9 +227,13 @@ class LoaderTests(unittest.TestCase):
         h._out = array.array("h", [0] * (2 * n))
         view = memoryview(h._out)
         h._front, h._back, h._half = view[:n], view[n:], 0
-        for k in range(1, 5):
-            h._feed_block(array.array("h", [k] * n))
-            self.assertEqual(list(h._out), [k - 1] * n + [k] * n)
+        saved, autotune.FEED_PHASE = autotune.FEED_PHASE, None
+        try:
+            for k in range(1, 5):
+                h._feed_block(array.array("h", [k] * n))
+                self.assertEqual(list(h._out), [k - 1] * n + [k] * n)
+        finally:
+            autotune.FEED_PHASE = saved
 
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
