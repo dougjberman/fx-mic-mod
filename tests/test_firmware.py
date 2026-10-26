@@ -199,6 +199,25 @@ class LoaderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             autotune.chord_by_name("maj6")
 
+    def test_key_chord_ignores_octave_errors(self):
+        import autotune
+        A = autotune.Autotune
+        h = A.__new__(A)
+        h.snapper = autotune.NoteSnapper()
+        h.snapper.set_scale(autotune.scale_by_name("major"), 0)
+        h._tones, h._inversion, h._octave = autotune.chord_by_name("key_triad")[0], 2, 0
+        h._chord_note = h._chord_next = None
+        h._chord_count = 0
+        g3 = h._chord_intervals(55)
+        # a G3 read an octave or two out for a moment keeps the same harmony
+        self.assertEqual(h._chord_intervals(43), g3)
+        self.assertEqual(h._chord_intervals(79), g3)
+        # a new note still takes over the chord once it holds
+        for _ in range(autotune.HARMONY_SETTLE - 1):
+            self.assertEqual(h._chord_intervals(57), [i - 2 for i in g3])
+        self.assertEqual(h._chord_intervals(57), h._key_intervals(57))
+        self.assertEqual(h._chord_intervals(45), h._key_intervals(57))
+
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
             self.cl.create_effects({"list": [{"effect": "autotune"}]})

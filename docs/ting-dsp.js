@@ -342,10 +342,13 @@ function dspFactory(){
               if(keyChord&&snap.target!==null){
                 // the chord moves to a new note only once it has held ~100 ms (firmware HARMONY_SETTLE)
                 const note=snap.target;
-                if(chordNote===null||note===chordNote){ chordNote=note; chordNext=null; }
-                else if(note===chordNext){ if(++chordCount>=settleN){ chordNote=note; chordNext=null; } }
-                else { chordNext=note; chordCount=1; }
-                ivs=keyIntervals(chordNote, snap, keyChord, inv, oct).map(iv=>chordNote-note+iv);
+                // by pitch class, voiced in the octave heard now, so a note read an octave out doesn't throw the harmony
+                const pc=((note%12)+12)%12;
+                if(chordNote===null||pc===chordNote){ chordNote=pc; chordNext=null; }
+                else if(pc===chordNext){ if(++chordCount>=settleN){ chordNote=pc; chordNext=null; } }
+                else { chordNext=pc; chordCount=1; }
+                let off=((chordNote-pc)%12+12)%12; if(off>6) off-=12;
+                ivs=keyIntervals(note+off, snap, keyChord, inv, oct).map(iv=>off+iv);
               }
               vRatios=ivs.map(iv=>Math.pow(2,(corr+iv)/12));
               if(py&&hz>0) lsh.lock(sr/hz); lsh.begin(det.BLOCK);

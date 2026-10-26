@@ -787,20 +787,28 @@ class Autotune:
         """Key chord intervals around the snapped ``note``. The chord only
         moves to a new note once it has held for HARMONY_SETTLE detections;
         until then the harmony keeps singing the last chord's tones, so a
-        passing or wavering note doesn't flip the whole chord."""
-        if self._chord_note is None or note == self._chord_note:
-            self._chord_note = note
+        passing or wavering note doesn't flip the whole chord.
+
+        Notes are compared by pitch class, and the held chord is voiced in
+        the octave of the note heard now. The detector sometimes reads a
+        voice an octave (or two) out for a moment; the chord is the same, and
+        the harmony must not jump an octave or two with it."""
+        pc = note % 12
+        if self._chord_note is None or pc == self._chord_note:
+            self._chord_note = pc
             self._chord_next = None
-        elif note == self._chord_next:
+        elif pc == self._chord_next:
             self._chord_count += 1
             if self._chord_count >= HARMONY_SETTLE:
-                self._chord_note = note
+                self._chord_note = pc
                 self._chord_next = None
         else:
-            self._chord_next = note
+            self._chord_next = pc
             self._chord_count = 1
-        chord = self._chord_note
-        return [chord - note + i for i in self._key_intervals(chord)]
+        offset = (self._chord_note - pc) % 12
+        if offset > 6:
+            offset -= 12
+        return [offset + i for i in self._key_intervals(note + offset)]
 
     def _key_intervals(self, note):
         """Harmony intervals for a key chord on the snapped MIDI note."""

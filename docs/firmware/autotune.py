@@ -788,19 +788,27 @@ class Autotune:
 
 
 
-        if self._chord_note is None or note == self._chord_note:
-            self._chord_note = note
+
+
+
+
+
+        pc = note % 12
+        if self._chord_note is None or pc == self._chord_note:
+            self._chord_note = pc
             self._chord_next = None
-        elif note == self._chord_next:
+        elif pc == self._chord_next:
             self._chord_count += 1
             if self._chord_count >= HARMONY_SETTLE:
-                self._chord_note = note
+                self._chord_note = pc
                 self._chord_next = None
         else:
-            self._chord_next = note
+            self._chord_next = pc
             self._chord_count = 1
-        chord = self._chord_note
-        return [chord - note + i for i in self._key_intervals(chord)]
+        offset = (self._chord_note - pc) % 12
+        if offset > 6:
+            offset -= 12
+        return [offset + i for i in self._key_intervals(note + offset)]
 
     def _key_intervals(self, note):
         0
