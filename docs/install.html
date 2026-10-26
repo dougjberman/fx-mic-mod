@@ -729,9 +729,17 @@ while True:
     const famName = fam === null ? "no family ID" : (FAMILIES[fam] || "unknown family 0x" + fam.toString(16));
     const blocks = buf.length / 512;
     if (fam === 0xe48bff56) { status("uf2Status", `${f.name} is built for the RP2040, not the EP-2350's RP2350. Download the teenage_engineering_ep2350 build.`, "bad"); return; }
+    // Where in flash it writes, and how much: tells a whole-flash image from an app-only one.
+    let lo = Infinity, hi = 0, payload = 0;
+    for (let o = 0; o < buf.length; o += 512) {
+      const addr = dv.getUint32(o + 12, true), n = dv.getUint32(o + 16, true);
+      if (dv.getUint32(o + 8, true) & 1) continue;  // "not main flash" blocks
+      lo = Math.min(lo, addr); hi = Math.max(hi, addr + n); payload += n;
+    }
+    const hex = n => "0x" + n.toString(16).padStart(8, "0");
     uf2 = f;
     $("uf2Flash").disabled = false;
-    status("uf2Status", `${f.name} · ${fmtBytes(f.size)} · ${blocks} blocks · ${famName}. Put the mic in boot mode, then pick its drive.`, "ok");
+    status("uf2Status", `${f.name} · ${fmtBytes(f.size)} · ${blocks} blocks · ${famName} · writes ${fmtBytes(payload)} at ${hex(lo)}–${hex(hi)}. Put the mic in boot mode, then pick its drive.`, "ok");
   });
   $("uf2Flash").addEventListener("click", async () => {
     if (!uf2) return;
