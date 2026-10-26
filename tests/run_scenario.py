@@ -24,6 +24,12 @@ def tap(t, key):
 
 
 SCENARIOS = {
+    # TOP + MIDDLE held 2 s on USB power: the mic can't turn off, and code.py
+    # must keep running rather than stop on claiming POWER_HOLD twice.
+    "shutdown_on_usb": dict(
+        presses=[(0.5, TOP, True), (0.5, MIDDLE, True), (2.5, TOP, False), (2.5, MIDDLE, False)],
+        end=4.0,
+    ),
     # TOP x1 -> preset 1 (autotune + effects), sing a flat note with the paddle
     # held; TOP x2 more -> record mode; 1 s take into slot 1; then a held
     # take that runs out of time into slot 2.

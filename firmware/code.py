@@ -290,6 +290,8 @@ class DataContext:
         self.middle_held = False
         # the `time.monotonic()` the combo started, or None while it is not both-down.
         self.combo_since = None
+        # board.POWER_HOLD, claimed the first time the combo fires
+        self.power_hold = None
 
         # Wiper position, in ADC counts, that `volume` was last computed from.
         # Starts far enough outside the 16-bit range that the first poll always
@@ -1155,9 +1157,16 @@ try:
                 print(
                     "TOP+MIDDLE held {}s: shutting down".format(SHUTDOWN_HOLD_SECONDS)
                 )
-                power_hold = digitalio.DigitalInOut(board.POWER_HOLD)
-                power_hold.direction = digitalio.Direction.OUTPUT
-                power_hold.value = False
+                # On batteries the mic is off before the next line. Over USB
+                # it stays powered and this loop carries on, so the pin is
+                # claimed only once (claiming it again raised "in use" and
+                # stopped code.py), and the combo waits to be let go.
+                if data_context.power_hold is None:
+                    data_context.power_hold = digitalio.DigitalInOut(board.POWER_HOLD)
+                    data_context.power_hold.direction = digitalio.Direction.OUTPUT
+                data_context.power_hold.value = False
+                print("still on: USB is powering the mic. Unplug USB and it turns off.")
+                data_context.combo_since = float("inf")
         else:
             data_context.combo_since = None
 

@@ -384,6 +384,11 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertEqual(third["max"], 4.0)
         self.assertEqual(fifth["max"], 7.0)
 
+    def test_shutdown_combo_over_usb_keeps_running(self):
+        root, out, s = run("shutdown_on_usb")
+        self.assertEqual(out.count("shutting down"), 1)
+        self.assertIn("Unplug USB and it turns off", out)
+
     def test_edit_mode_never_writes(self):
         root, out, s = run("readonly")
         self.assertIn("recording is off", out)

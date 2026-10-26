@@ -85,6 +85,12 @@ class _Pin:
 
 class DigitalInOut:
     def __init__(self, pin):
+        # Like CircuitPython, a pin can only be claimed once (POWER_HOLD is
+        # claimed by the shutdown combo, which runs again over USB power).
+        if pin.name == "POWER_HOLD":
+            if getattr(pin, "claimed", False):
+                raise ValueError("POWER_HOLD in use")
+            pin.claimed = True
         self.pin = pin
         self._value = False
         self.direction = None

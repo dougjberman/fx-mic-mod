@@ -291,6 +291,8 @@ class DataContext:
 
         self.combo_since = None
 
+        self.power_hold = None
+
 
 
 
@@ -1155,9 +1157,16 @@ try:
                 print(
                     "TOP+MIDDLE held {}s: shutting down".format(SHUTDOWN_HOLD_SECONDS)
                 )
-                power_hold = digitalio.DigitalInOut(board.POWER_HOLD)
-                power_hold.direction = digitalio.Direction.OUTPUT
-                power_hold.value = False
+
+
+
+
+                if data_context.power_hold is None:
+                    data_context.power_hold = digitalio.DigitalInOut(board.POWER_HOLD)
+                    data_context.power_hold.direction = digitalio.Direction.OUTPUT
+                data_context.power_hold.value = False
+                print("still on: USB is powering the mic. Unplug USB and it turns off.")
+                data_context.combo_since = float("inf")
         else:
             data_context.combo_since = None
 
