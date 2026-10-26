@@ -434,7 +434,7 @@ picotool save -a ting-full-flash.bin</pre>
         <li>Use the mic. Each press and squeeze prints a line: <code>preset 2 of 4</code>, <code>paddle pressed</code>, <code>volume +3.0 dB</code>. An <code>overflow</code> line means that preset is too heavy for the chip and the sound will glitch.</li>
         <li>If you see <code>Traceback</code>, the code stopped on an error and the mic goes quiet, with white LED 1 blinking twice every few seconds. Copy everything from <code>Traceback</code> down: the last line says what went wrong. <b>Restart code</b> gets it going again.</li>
       </ol>
-      <p><b>Stop code</b> halts the code and gives you a <code>&gt;&gt;&gt;</code> prompt, where you can type Python into the box below and click <b>Send</b>, for example when someone helping you asks you to run a line. That also leaves white LED 1 blinking twice every few seconds; <b>Restart code</b> starts it again. If you're used to a terminal, <kbd>control</kbd>-C and <kbd>control</kbd>-D do the same as the two buttons while the console is connected (on a Mac that's control, not ⌘).</p>
+      <p><b>Restart code</b> starts the mic's code again. Use it after an error, or whenever white LED 1 is blinking twice every few seconds. You won't normally need <b>Stop code</b>: it pauses the code (white LED 1 then blinks twice) and gives a <code>&gt;&gt;&gt;</code> prompt for typing Python into the box below, which is only useful if you write CircuitPython yourself. The keys <kbd>control</kbd>-C and <kbd>control</kbd>-D do the same as the two buttons while the console is connected (on a Mac that's control, not ⌘).</p>
       <div class="tool">
         <div class="row">
           <button class="go" id="serialConnect">Connect</button>
