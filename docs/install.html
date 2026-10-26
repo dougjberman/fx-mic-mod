@@ -436,10 +436,17 @@ picotool save -a ting-full-flash.bin</pre>
           <button class="ghost" id="serialBoot" disabled>Reboot to boot mode</button>
           <button class="ghost" id="serialDisconnect" disabled>Disconnect</button>
         </div>
+        <div class="row">
+          <label class="mark" style="color: var(--ink);"><input type="checkbox" id="serialTimes"> Timestamps</label>
+          <button class="ghost" id="serialMark">Mark (restart the clock)</button>
+          <button class="ghost" id="serialSave">Save log</button>
+          <span class="status" id="serialSaveStatus"></span>
+        </div>
         <pre class="console" id="serialOut" aria-live="polite">Not connected. Pick the port named CircuitPython or "USB Serial" when the browser asks.
 </pre>
         <form class="console-input" id="serialForm"><label for="serialLine" class="sr-only">Command to send to the mic</label><input id="serialLine" placeholder="Type a REPL line, e.g. print(board.board_id)" autocomplete="off" disabled><button id="serialSend" disabled>Send</button></form>
       </div>
+      <details><summary>Lining the log up with an audio recording</summary><p style="margin-top: 8px;">Tick <b>Timestamps</b> and each line gets the time since the clock started, like <code>[01:23.4]</code>. Start your audio recording, then click <b>Mark</b> and squeeze the handle right away: the <code>paddle pressed</code> line and the moment your voice starts in the recording are the same instant, so every later line can be found in the audio by its time. <b>Save log</b> downloads the console as a text file.</p></details>
       <details><summary>Without a browser serial port</summary><p style="margin-top: 8px;">Use the <a href="https://codewith.mu/" target="_blank" rel="noopener">Mu editor</a>'s Serial button, or <code>screen /dev/tty.usbmodem* 115200</code> on macOS, or PuTTY on Windows with the COM port from Device Manager.</p></details>
     </section>
 
@@ -951,7 +958,24 @@ while True:
   // ---------- 06 serial ----------
   let port = null, reader = null, writer = null;
   const out = $("serialOut");
-  function log(t) { out.textContent += t; if (out.textContent.length > 60000) out.textContent = out.textContent.slice(-40000); out.scrollTop = out.scrollHeight; }
+  // Optional timestamps, from Connect or the last Mark, at the start of each line.
+  let clock0 = performance.now(), lineStart = true;
+  function stamp() {
+    const t = (performance.now() - clock0) / 1000, m = Math.floor(t / 60);
+    return "[" + String(m).padStart(2, "0") + ":" + (t - m * 60).toFixed(1).padStart(4, "0") + "] ";
+  }
+  function stamped(t) {
+    if (!$("serialTimes").checked || !t) return t;
+    let r = "";
+    for (const part of t.split(/(?<=\n)/)) { if (lineStart && part !== "\n") r += stamp(); r += part; lineStart = part.endsWith("\n"); }
+    return r;
+  }
+  let markDue = false;
+  function log(t) {
+    t = stamped(t);
+    // A mark waits for the line in progress to finish, so it never splits one.
+    if (markDue && lineStart) { markDue = false; t += stamped("--- mark ---\n"); }
+    out.textContent += t; if (out.textContent.length > 60000) out.textContent = out.textContent.slice(-40000); out.scrollTop = out.scrollHeight; }
   function serialUi(on) {
     ["serialStop", "serialReload", "serialPins", "serialBoot", "serialDisconnect", "serialLine", "serialSend"].forEach(id => $(id).disabled = !on);
     $("serialConnect").disabled = on;
@@ -987,6 +1011,12 @@ while True:
     pending = cut >= 0 && t.length - cut < 200 ? t.slice(cut) : "";
     return cut >= 0 && pending ? t.slice(0, cut) : t;
   }
+  $("serialMark").addEventListener("click", () => {
+    clock0 = performance.now(); markDue = true; log("");
+  });
+  $("serialSave").addEventListener("click", () => offerFile("ting-console-" + today() + ".txt", out.textContent, "serialSaveStatus"));
+  try { $("serialTimes").checked = store.get("serialTimes") === true; } catch (e) {}
+  $("serialTimes").addEventListener("change", () => { try { store.set("serialTimes", $("serialTimes").checked); } catch (e) {} });
   async function reload() { await send("\x03"); await new Promise(r => setTimeout(r, 300)); await send("\x04"); }
   $("serialConnect").addEventListener("click", async () => {
     if (!hasSerial) { log("\nThis browser has no Web Serial. Use Chrome or Edge, or Mu / screen / PuTTY.\n"); return; }
@@ -997,7 +1027,7 @@ while True:
       if (e.name === "SecurityError" || framed) { setChip("chipSerial", "blocked here", false); showBlocked(); log("\nSerial access is blocked in this view. Save the standalone flasher and open it in Chrome or Edge.\n"); return; }
       log("\nCouldn't open the port: " + e.message + "\n"); return;
     }
-    out.textContent = ""; log("Connected.\n");
+    out.textContent = ""; clock0 = performance.now(); lineStart = true; log("Connected.\n");
     try { await openPort(p); } catch (e) { log("\nCouldn't open the port: " + e.message + "\n"); }
   });
   if (hasSerial) navigator.serial.addEventListener("connect", async (ev) => {
