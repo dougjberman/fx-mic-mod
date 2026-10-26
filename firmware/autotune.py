@@ -792,25 +792,31 @@ class Autotune:
         until then the harmony keeps singing the last chord's tones, so a
         passing or wavering note doesn't flip the whole chord.
 
-        Notes are compared by pitch class, and the held chord is voiced in
-        the octave of the note heard now. The detector sometimes reads a
-        voice an octave (or two) out for a moment; the chord is the same, and
-        the harmony must not jump an octave or two with it."""
+        Notes are compared by pitch class: the detector sometimes reads a
+        voice an octave (or two) out for a moment, and that is the same chord.
+        The held chord keeps the octave it was heard in, so a real move from
+        it stays the size it was; only an offset of an octave or more, which
+        can only be such a misreading, is folded back, so the harmony doesn't
+        jump an octave or two with it."""
         pc = note % 12
-        if self._chord_note is None or pc == self._chord_note:
-            self._chord_note = pc
+        held = self._chord_note
+        if held is None or pc == held % 12:
+            if held is None:
+                self._chord_note = note
             self._chord_next = None
         elif pc == self._chord_next:
             self._chord_count += 1
             if self._chord_count >= HARMONY_SETTLE:
-                self._chord_note = pc
+                self._chord_note = note
                 self._chord_next = None
         else:
             self._chord_next = pc
             self._chord_count = 1
-        offset = (self._chord_note - pc) % 12
-        if offset > 6:
+        offset = self._chord_note - note
+        while offset > 11:
             offset -= 12
+        while offset < -11:
+            offset += 12
         return [offset + i for i in self._key_intervals(note + offset)]
 
     def _key_intervals(self, note):

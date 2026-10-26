@@ -342,12 +342,13 @@ function dspFactory(){
               if(keyChord&&snap.target!==null){
                 // the chord moves to a new note only once it has held ~100 ms (firmware HARMONY_SETTLE)
                 const note=snap.target;
-                // by pitch class, voiced in the octave heard now, so a note read an octave out doesn't throw the harmony
+                // by pitch class, so a note read an octave out is the same chord; an offset of an octave or
+                // more can only be such a misreading and is folded back (firmware Autotune._chord_intervals)
                 const pc=((note%12)+12)%12;
-                if(chordNote===null||pc===chordNote){ chordNote=pc; chordNext=null; }
-                else if(pc===chordNext){ if(++chordCount>=settleN){ chordNote=pc; chordNext=null; } }
+                if(chordNote===null||pc===((chordNote%12)+12)%12){ if(chordNote===null) chordNote=note; chordNext=null; }
+                else if(pc===chordNext){ if(++chordCount>=settleN){ chordNote=note; chordNext=null; } }
                 else { chordNext=pc; chordCount=1; }
-                let off=((chordNote-pc)%12+12)%12; if(off>6) off-=12;
+                let off=chordNote-note; while(off>11) off-=12; while(off<-11) off+=12;
                 ivs=keyIntervals(note+off, snap, keyChord, inv, oct).map(iv=>off+iv);
               }
               vRatios=ivs.map(iv=>Math.pow(2,(corr+iv)/12));
