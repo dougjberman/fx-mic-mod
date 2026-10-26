@@ -285,7 +285,7 @@ picotool save -a ting-full-flash.bin</pre>
     <!-- 03 -->
     <section class="step" id="boot" data-step="boot">
       <div class="step-head"><span class="step-num">03</span><h2>Put the mic in boot mode</h2><label class="mark"><input type="checkbox" data-done="boot"> Done</label></div>
-      <p>Boot mode is how new firmware gets onto the mic. First plug the mic into your computer with a USB-C data cable, and leave it plugged in until you've finished step 04.</p>
+      <p>Boot mode is how new firmware gets onto the mic. First plug the mic into your computer with a USB-C data cable, and leave it plugged in until you've finished step 04. It doesn't matter whether the mic is on or off: the reset button restarts it either way, so there's no need to turn it off first.</p>
       <div class="gesture" data-reveal-list>
         <div>
           <b>1 · Squeeze</b>
@@ -449,7 +449,7 @@ picotool save -a ting-full-flash.bin</pre>
       <ol class="how">
         <li><b>Plug the mic into your computer</b> with a USB-C data cable. Leave it plugged in until the end.</li>
         <li><b>Unzip the TE firmware</b> from step 02, so you have its <code>.uf2</code> file.</li>
-        <li><b>Put the mic in boot mode.</b> Squeeze the handle all the way in and keep holding it until step 4 finishes. Under the lower lid, double-click the small dark button just above the USB-C port.<br><b>Worked:</b> all the lights go out, and a drive called <b>RP2350</b> appears on your computer (CIRCUITPY goes away). The lights going out is normal.<br><b>Didn't work:</b> the lights stay on and CIRCUITPY is still there. Double-click again, a bit faster. If it still won't go, keep squeezing and use <b>Reboot to boot mode</b> in the <a href="#console">step 06 console</a>.</li>
+        <li><b>Put the mic in boot mode.</b> The mic can be on or off. Squeeze the handle all the way in and keep holding it until step 4 finishes. Under the lower lid, double-click the small dark button just above the USB-C port.<br><b>Worked:</b> all the lights go out, and a drive called <b>RP2350</b> appears on your computer (CIRCUITPY goes away). The lights going out is normal.<br><b>Didn't work:</b> the lights stay on and CIRCUITPY is still there. Double-click again, a bit faster. If it still won't go, keep squeezing and use <b>Reboot to boot mode</b> in the <a href="#console">step 06 console</a>.</li>
         <li><b>Flash the stock firmware.</b> In <a href="#flash">step 04</a>, click <b>Choose the .uf2 file</b> and pick TE's file, then <b>Pick the boot drive and flash</b> and choose RP2350.<br><b>Worked:</b> RP2350 disappears within a few seconds, the mic restarts, a white LED lights, and a drive called <b>TING DISK</b> or <b>FX-MIC DISK</b> appears. Now you can let go of the handle. Your computer may warn that the drive wasn't ejected, and the page may say the drive went away during the write. Both are expected: what counts is the new drive appearing.</li>
         <li><b>Copy your samples back</b> with the tool below: choose your unzipped backup folder, then pick the TING DISK or FX-MIC DISK drive. Or copy the files across by hand.</li>
         <li><b>Check it:</b> squeeze and sing. You should hear the stock presets again.</li>
