@@ -440,7 +440,6 @@ picotool save -a ting-full-flash.bin</pre>
           <button class="go" id="serialConnect">Connect</button>
           <button class="ghost" id="serialStop" disabled>Stop code (Ctrl-C)</button>
           <button class="ghost" id="serialReload" disabled>Restart code (Ctrl-D)</button>
-          <button class="ghost" id="serialPins" disabled>List board pins</button>
           <button class="ghost" id="serialBoot" disabled>Reboot to boot mode</button>
           <button class="ghost" id="serialDisconnect" disabled>Disconnect</button>
         </div>
@@ -987,7 +986,7 @@ while True:
     if (markDue && lineStart) { markDue = false; t += stamped("--- mark ---\n"); }
     out.textContent += t; if (out.textContent.length > 60000) out.textContent = out.textContent.slice(-40000); out.scrollTop = out.scrollHeight; }
   function serialUi(on) {
-    ["serialStop", "serialReload", "serialPins", "serialBoot", "serialDisconnect", "serialLine", "serialSend"].forEach(id => $(id).disabled = !on);
+    ["serialStop", "serialReload", "serialBoot", "serialDisconnect", "serialLine", "serialSend"].forEach(id => $(id).disabled = !on);
     $("serialConnect").disabled = on;
   }
   async function send(t) { if (writer) await writer.write(new TextEncoder().encode(t)); }
@@ -1063,7 +1062,6 @@ while True:
   });
   $("serialStop").addEventListener("click", () => send("\x03"));
   $("serialReload").addEventListener("click", reload);
-  $("serialPins").addEventListener("click", () => send("\x03\r\nimport board; print(sorted(dir(board)))\r\n"));
   // Keep the handle squeezed: the reset releases POWER_HOLD until the boot ROM takes over.
   $("serialBoot").addEventListener("click", () => send("\x03\r\nimport microcontroller; microcontroller.on_next_reset(microcontroller.RunMode.BOOTLOADER); microcontroller.reset()\r\n"));
   $("serialForm").addEventListener("submit", (ev) => { ev.preventDefault(); const v = $("serialLine").value; $("serialLine").value = ""; send(v + "\r\n"); });
