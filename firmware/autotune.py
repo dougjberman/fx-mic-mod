@@ -65,14 +65,17 @@ GRAIN_DENSITY = 2       # native overlapping grains (1..8)
 # window instead, oldest block first; on a Ting that crackled on every load.
 FEED_PHASE = 1
 # On a Ting the right FEED_PHASE changed from one preset load to the next, and
-# flipping it cured a crackling load. The chain renders one block at a time
-# in a burst that reads the next half of the feed, half 0 first after play().
-# On a busy preset the burst comes just after our write, and if it reads the
-# half just written, any write that runs late makes it read a stale block:
-# crackle for the whole load. With FEED_SYNC, start() times the first burst
-# after play() (the gap it leaves in a tight Python loop) against a mic block
-# and writes each block to the half the next burst does NOT read, so every
-# burst reads the block written a whole block earlier.
+# flipping it cured a crackling load. The chain renders two blocks at a time
+# every two blocks, in a burst that reads half 0 and then half 1, so half 0
+# must hold the older block. On a busy preset (the harmonizer) the burst
+# starts about 1 ms after a block edge, half a millisecond after our write:
+# any delay puts the write on the other side of it and the order flips.
+# With FEED_SYNC, start() times the burst (the gap it leaves in a tight
+# Python loop) against a mic block. Writes only ever run late, so a block due
+# less than half a block before a burst waits for the burst instead (step()
+# spins until it has run); every write then has at least half a block to
+# spare on the side of the burst it was planned for, and the halves are
+# picked to match.
 FEED_SYNC = True
 BLOCK_NS = 16000000     # one BLOCK_SIZE of audio, at any rate
 
@@ -673,6 +676,8 @@ class Autotune:
         self._window = array.array("h", [0] * BUFFER_SIZE)
         self._block = array.array("h", [0] * BLOCK_SIZE)
         self._half = 0
+        self._burst_due = None   # next chain burst, once start() has timed it
+        self._guard = 0
         self._turn = 0
         self.busy_ms = 0.0
         # Mic level, 0 or 1, applied before pitch detection. Used when
@@ -792,45 +797,83 @@ class Autotune:
         self._started = True
 
     def _sync_feed(self):
-        """Set ``_half`` so each burst reads the block written one block
-        before it (see FEED_SYNC). Call right after play(). Takes about 50 ms,
-        once per load."""
+        """Time the chain's burst and set ``_half`` so the last write before
+        each burst is to the second half (see FEED_SYNC). Call right after
+        play(). Takes about 50 ms, once per load."""
         now = time.monotonic_ns
-        # Gaps in a tight loop over two block times are the bursts; the first
-        # one after play() read half 0.
+        # The longest gap in a tight loop over two block times is the burst.
         began = prev = now()
-        gaps = []
+        gap = burst = 0
+        bursts = 0
         while prev - began < 2 * BLOCK_NS + BLOCK_NS // 4:
             t = now()
-            if t - prev > 1000000 and len(gaps) < 8:
-                gaps.append((prev, t - prev))
+            if t - prev > 1000000:
+                bursts += 1
+            if t - prev > gap:
+                gap, burst = t - prev, prev
             prev = t
-        longest = max([g for _, g in gaps] or [0])
-        first = began
-        for b, g in gaps:  # (CircuitPython's next() takes no default)
-            if 2 * g >= longest:
-                first = b
-                break
-        # Then line up on a fresh mic block: a read that had to wait for its
-        # samples returns on a block boundary, where step()'s reads return.
+        # Then find the mic's block edges. A read returns when its block is
+        # in, except that a burst over the edge holds it until the burst ends
+        # (on the harmonizer that made a read look 1 ms before every burst).
+        # Reads only ever come late, so the earliest of three in a row, back
+        # in step, is the edge; a burst covers at most one of them.
         block = self._block
-        for _ in range(6):
+        for _ in range(6):  # catch up on what queued meanwhile
             t = now()
             self.mic.record(block, BLOCK_SIZE)
             edge = now()
-            if edge - t > BLOCK_NS // 2:
+            if edge - t > BLOCK_NS // 4:
                 break
+        for i in (1, 2):
+            self.mic.record(block, BLOCK_SIZE)
+            t = now() - i * BLOCK_NS
+            if t < edge:
+                edge = t
+        edge += 2 * BLOCK_NS
         # step() writes a block only after gating it, so time that too.
+        t = now()
         self._noise_gate(block)
-        wrote = now() - edge
-        # Block m is written at edge + wrote + m blocks; the next burst after
-        # it is number n = (time since the first burst) // block + 1, which
-        # reads half n % 2. Block m goes to the other half; m = 0 is written here.
-        half = ((edge + wrote - first) // BLOCK_NS) % 2
-        self._half = half ^ FEED_PHASE
+        wrote = now() - t + 100000
+        # Block m is due at edge + wrote + m blocks. If one is due less than
+        # half a block before the burst, it waits for it (a guard just over
+        # that gap); otherwise none wait. The last block written before a
+        # burst is the last one due before (burst - guard); it goes to half 1.
+        # (A burst up to 1 ms before the write counts as just after it: a
+        # write can come that much early too.)
+        ahead = (burst - edge - wrote + 1000000) % BLOCK_NS - 1000000
+        self._guard = max(ahead, 0) + 1000000 if ahead < BLOCK_NS // 2 else 0
+        due = burst - self._guard - edge - wrote
+        last = -((-due) // BLOCK_NS) - 1  # ceil(due / block) - 1
+        self._half = (1 ^ (last % 2)) ^ FEED_PHASE
+        self._burst_due = burst
+        self._wait_out_burst()
         self._feed_block(self._zeros)
-        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms; {} bursts".format(
-            ((first - edge) % BLOCK_NS) / 1e6, longest / 1e6, wrote / 1e6, len(gaps)))
+        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms; {} bursts; {}".format(
+            ((burst - edge) % BLOCK_NS) / 1e6, gap / 1e6, wrote / 1e6, bursts,
+            "waits for it" if self._guard else "writes ahead"))
+
+    def _wait_out_burst(self):
+        """If the chain's burst is due within the guard, spin until it has
+        run (or is that late), so the write lands after it. Returns the time
+        spent waiting, in ns."""
+        due, guard = self._burst_due, self._guard
+        if due is None or not guard:
+            return 0
+        now = time.monotonic_ns
+        t = began = now()
+        while due <= t:  # gone by: it held us up, or it would have
+            due += 2 * BLOCK_NS
+        if due - guard <= t:
+            prev = t
+            while prev < due + guard:
+                t = now()
+                if t - prev > 1000000:
+                    due = prev  # it ran: follow it, should the clocks drift
+                    break
+                prev = t
+            due += 2 * BLOCK_NS
+        self._burst_due = due
+        return now() - began
 
     def deinit(self):
         self.stop_sample()
@@ -950,6 +993,7 @@ class Autotune:
         # OLA fallback shifts the block itself, so it still writes at the end.)
         self._noise_gate(block)
         if self.ola is None:
+            began += self._wait_out_burst()  # waiting is not work
             self._feed_block(block)
         window = self._window
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]

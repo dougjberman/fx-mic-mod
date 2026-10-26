@@ -73,6 +73,9 @@ FEED_PHASE = 1
 
 
 
+
+
+
 FEED_SYNC = True
 BLOCK_NS = 16000000
 
@@ -673,6 +676,8 @@ class Autotune:
         self._window = array.array("h", [0] * BUFFER_SIZE)
         self._block = array.array("h", [0] * BLOCK_SIZE)
         self._half = 0
+        self._burst_due = None
+        self._guard = 0
         self._turn = 0
         self.busy_ms = 0.0
 
@@ -797,20 +802,19 @@ class Autotune:
 
         now = time.monotonic_ns
 
-
         began = prev = now()
-        gaps = []
+        gap = burst = 0
+        bursts = 0
         while prev - began < 2 * BLOCK_NS + BLOCK_NS // 4:
             t = now()
-            if t - prev > 1000000 and len(gaps) < 8:
-                gaps.append((prev, t - prev))
+            if t - prev > 1000000:
+                bursts += 1
+            if t - prev > gap:
+                gap, burst = t - prev, prev
             prev = t
-        longest = max([g for _, g in gaps] or [0])
-        first = began
-        for b, g in gaps:
-            if 2 * g >= longest:
-                first = b
-                break
+
+
+
 
 
         block = self._block
@@ -818,19 +822,58 @@ class Autotune:
             t = now()
             self.mic.record(block, BLOCK_SIZE)
             edge = now()
-            if edge - t > BLOCK_NS // 2:
+            if edge - t > BLOCK_NS // 4:
                 break
+        for i in (1, 2):
+            self.mic.record(block, BLOCK_SIZE)
+            t = now() - i * BLOCK_NS
+            if t < edge:
+                edge = t
+        edge += 2 * BLOCK_NS
 
+        t = now()
         self._noise_gate(block)
-        wrote = now() - edge
+        wrote = now() - t + 100000
 
 
 
-        half = ((edge + wrote - first) // BLOCK_NS) % 2
-        self._half = half ^ FEED_PHASE
+
+
+
+        ahead = (burst - edge - wrote + 1000000) % BLOCK_NS - 1000000
+        self._guard = max(ahead, 0) + 1000000 if ahead < BLOCK_NS // 2 else 0
+        due = burst - self._guard - edge - wrote
+        last = -((-due) // BLOCK_NS) - 1
+        self._half = (1 ^ (last % 2)) ^ FEED_PHASE
+        self._burst_due = burst
+        self._wait_out_burst()
         self._feed_block(self._zeros)
-        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms; {} bursts".format(
-            ((first - edge) % BLOCK_NS) / 1e6, longest / 1e6, wrote / 1e6, len(gaps)))
+        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms; {} bursts; {}".format(
+            ((burst - edge) % BLOCK_NS) / 1e6, gap / 1e6, wrote / 1e6, bursts,
+            "waits for it" if self._guard else "writes ahead"))
+
+    def _wait_out_burst(self):
+        0
+
+
+        due, guard = self._burst_due, self._guard
+        if due is None or not guard:
+            return 0
+        now = time.monotonic_ns
+        t = began = now()
+        while due <= t:
+            due += 2 * BLOCK_NS
+        if due - guard <= t:
+            prev = t
+            while prev < due + guard:
+                t = now()
+                if t - prev > 1000000:
+                    due = prev
+                    break
+                prev = t
+            due += 2 * BLOCK_NS
+        self._burst_due = due
+        return now() - began
 
     def deinit(self):
         self.stop_sample()
@@ -950,6 +993,7 @@ class Autotune:
 
         self._noise_gate(block)
         if self.ola is None:
+            began += self._wait_out_burst()
             self._feed_block(block)
         window = self._window
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]

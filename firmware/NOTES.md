@@ -35,11 +35,11 @@ chord needs the note).
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.
-- **FEED_PHASE / FEED_SYNC** in autotune.py: the chain reads one feed half per block, half 0
-  first after play(). `FEED_SYNC` times the first read after each load and writes every block to
-  the half the next read skips, so a late write can't leave a read stale. The console prints
-  `feed sync: burst X ms after a block … N bursts`. If a load still crackles, type `f` and Enter to
-  flip it, and keep that load's line.
+- **FEED_PHASE / FEED_SYNC** in autotune.py: the chain reads both feed halves in one burst every
+  two blocks (half 0 first). At each load the sync times the burst and the mic's block edges; a
+  write due less than half a block before a burst waits for it, so every write has half a block
+  of slack. The console prints `feed sync: … ; waits for it` or `writes ahead`. If a load still
+  crackles, type `f` and Enter to flip it, and keep that load's line.
 - **Recording after playback:** record mode stops the mic feeding the mixer, then calls
   `mic.record()`. Check that the first block of a take is not stale audio from before the squeeze
   (the 50 ms trim and 0.1 s settle should cover it).
