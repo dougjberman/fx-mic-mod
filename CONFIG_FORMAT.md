@@ -71,7 +71,7 @@ nearly twice as long as the same `roomsize` would be on a computer: small rooms 
 Any numeric param marked (B) accepts a number, a block object, or `"$name"`.
 `"$handle"` is supplied by the firmware: 0.0 from rest until the squeeze has opened the mic and
 gone a little further (the paddle click point plus a dead zone, so you can sing with a light squeeze), then up to
-1.0 fully squeezed. The firmware learns the click point as you play. The dead zone is 0.25 of
+1.0 fully squeezed. The firmware learns the click point as you play. The dead zone is 0.4 of
 the travel; a top-level `"handle_dead_zone": 0..0.5` in config.json changes it.
 
 A top-level `"sample_rate"` sets the rate the whole mic runs at: 16000, 24000 (the default), 32000

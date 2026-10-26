@@ -190,7 +190,7 @@ HANDLE_SMOOTHING = 0.25
 # from HANDLE_OPEN_GUESS; the serial console prints it.
 # A config.json can set its own dead zone with "handle_dead_zone".
 HANDLE_OPEN_GUESS = 0.15
-HANDLE_DEAD_ZONE = 0.25
+HANDLE_DEAD_ZONE = 0.4
 
 # --- Record mode ---
 
