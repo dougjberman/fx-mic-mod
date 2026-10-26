@@ -9,7 +9,7 @@
       "list": [
         {"effect": "autotune", "key": "C", "scale": "chromatic", "speed": 1, "humanize": 0, "mix": 1},
         {"effect": "distortion", "drive": 0.6, "mode": "overdrive", "pre_gain": 43, "post_gain": -19, "soft_clip": true, "mix": 0.4},
-        {"effect": "echo", "delay_ms": 250, "decay": 0.38, "mix": {"block": "math", "operation": "constrained_lerp", "a": 0, "b": 0.33, "c": "$handle"}, "freq_shift": false, "max_delay_ms": 400}
+        {"effect": "echo", "delay_ms": 250, "decay": 0.25, "mix": {"block": "math", "operation": "constrained_lerp", "a": 0, "b": 0.2, "c": "$handle"}, "freq_shift": false, "max_delay_ms": 400}
       ]
     },
     {
