@@ -65,11 +65,14 @@ GRAIN_DENSITY = 2       # native overlapping grains (1..8)
 # window instead, oldest block first; on a Ting that crackled on every load.
 FEED_PHASE = 1
 # On a Ting the right FEED_PHASE changed from one preset load to the next, and
-# flipping it cured a crackling load. The chain renders in bursts, two halves
-# at once, and the halves must hold the older block first; which half that is
-# depends on where the burst falls between our writes, which is set afresh at
-# each load. With FEED_SYNC, start() times the burst (the gap it leaves in a
-# tight Python loop) against a mic block and picks the half to match.
+# flipping it cured a crackling load. The chain renders one block at a time
+# in a burst that reads the next half of the feed, half 0 first after play().
+# On a busy preset the burst comes just after our write, and if it reads the
+# half just written, any write that runs late makes it read a stale block:
+# crackle for the whole load. With FEED_SYNC, start() times the first burst
+# after play() (the gap it leaves in a tight Python loop) against a mic block
+# and writes each block to the half the next burst does NOT read, so every
+# burst reads the block written a whole block earlier.
 FEED_SYNC = True
 BLOCK_NS = 16000000     # one BLOCK_SIZE of audio, at any rate
 
@@ -786,19 +789,23 @@ class Autotune:
         self._started = True
 
     def _sync_feed(self):
-        """Set ``_half`` so a burst always follows a write to the second half
-        (see FEED_SYNC). Takes about 50 ms, once per load."""
+        """Set ``_half`` so each burst reads the block written one block
+        before it (see FEED_SYNC). Call right after play(). Takes about 50 ms,
+        once per load."""
         now = time.monotonic_ns
-        # The longest gap in a tight loop over two burst periods is the burst.
+        # Gaps in a tight loop over two block times are the bursts; the first
+        # one after play() read half 0.
         began = prev = now()
-        gap = burst = 0
+        gaps = []
         while prev - began < 2 * BLOCK_NS + BLOCK_NS // 4:
             t = now()
-            if t - prev > gap:
-                gap, burst = t - prev, prev
+            if t - prev > 1000000 and len(gaps) < 8:
+                gaps.append((prev, t - prev))
             prev = t
+        longest = max([g for _, g in gaps] or [0])
+        first = next((b for b, g in gaps if 2 * g >= longest), began)
         # Then line up on a fresh mic block: a read that had to wait for its
-        # samples returns on a block boundary, where step()'s writes land.
+        # samples returns on a block boundary, where step()'s reads return.
         block = self._block
         for _ in range(6):
             t = now()
@@ -806,19 +813,17 @@ class Autotune:
             edge = now()
             if edge - t > BLOCK_NS // 2:
                 break
-        # step() writes a block only after gating it, so time that too: a
-        # burst that starts between the block edge and the write holds the
-        # write back until it ends (on a Ting one started 1.1 ms after it).
+        # step() writes a block only after gating it, so time that too.
         self._noise_gate(block)
         wrote = now() - edge
-        # Writes land at edge + wrote + k blocks. The burst repeats every two
-        # blocks, so the write just before it is block k, with k of this parity.
-        k = ((burst - edge - wrote) // BLOCK_NS) % 2
-        # Block k must land in the second half; block 0 is the one written here.
-        self._half = (1 ^ k) ^ FEED_PHASE
+        # Block m is written at edge + wrote + m blocks; the next burst after
+        # it is number n = (time since the first burst) // block + 1, which
+        # reads half n % 2. Block m goes to the other half; m = 0 is written here.
+        half = ((edge + wrote - first) // BLOCK_NS) % 2
+        self._half = half ^ FEED_PHASE
         self._feed_block(self._zeros)
-        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms".format(
-            ((burst - edge) % (2 * BLOCK_NS)) / 1e6, gap / 1e6, wrote / 1e6))
+        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms; {} bursts".format(
+            ((first - edge) % BLOCK_NS) / 1e6, longest / 1e6, wrote / 1e6, len(gaps)))
 
     def deinit(self):
         self.stop_sample()

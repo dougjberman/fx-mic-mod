@@ -70,6 +70,9 @@ FEED_PHASE = 1
 
 
 
+
+
+
 FEED_SYNC = True
 BLOCK_NS = 16000000
 
@@ -788,15 +791,19 @@ class Autotune:
     def _sync_feed(self):
         0
 
+
         now = time.monotonic_ns
 
+
         began = prev = now()
-        gap = burst = 0
+        gaps = []
         while prev - began < 2 * BLOCK_NS + BLOCK_NS // 4:
             t = now()
-            if t - prev > gap:
-                gap, burst = t - prev, prev
+            if t - prev > 1000000 and len(gaps) < 8:
+                gaps.append((prev, t - prev))
             prev = t
+        longest = max([g for _, g in gaps] or [0])
+        first = next((b for b, g in gaps if 2 * g >= longest), began)
 
 
         block = self._block
@@ -807,18 +814,16 @@ class Autotune:
             if edge - t > BLOCK_NS // 2:
                 break
 
-
-
         self._noise_gate(block)
         wrote = now() - edge
 
 
-        k = ((burst - edge - wrote) // BLOCK_NS) % 2
 
-        self._half = (1 ^ k) ^ FEED_PHASE
+        half = ((edge + wrote - first) // BLOCK_NS) % 2
+        self._half = half ^ FEED_PHASE
         self._feed_block(self._zeros)
-        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms".format(
-            ((burst - edge) % (2 * BLOCK_NS)) / 1e6, gap / 1e6, wrote / 1e6))
+        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms; {} bursts".format(
+            ((first - edge) % BLOCK_NS) / 1e6, longest / 1e6, wrote / 1e6, len(gaps)))
 
     def deinit(self):
         self.stop_sample()
