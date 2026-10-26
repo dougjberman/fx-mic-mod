@@ -44,6 +44,15 @@ HARMONY_SETTLE = 3      # detections a new note must hold before a key chord mov
 DETECT_EVERY = 2        # find the pitch every N blocks (16 ms each); the chip can't do every one
 MIN_RMS = 250           # below this input level (int16 units) treat as silence
 
+# Noise gate on the voice, before it is shifted and before any effect after
+# this stage. Distortion with tens of dB of pre-gain otherwise turns the
+# mic's background hiss between phrases into loud noise. The gate opens when
+# a block's RMS (int16 units) passes GATE_OPEN, and closes once it has stayed
+# under GATE_CLOSE for GATE_HOLD_MS. 0 turns the gate off.
+GATE_OPEN = 120         # about -49 dBFS
+GATE_CLOSE = 80         # about -52 dBFS
+GATE_HOLD_MS = 200
+
 # "native": audiodelays.GranularPitchShift (or PitchShift on older firmware)
 # "python": pure-Python OLA shifter below (reference, likely too slow)
 SHIFT_ENGINE = "native"
@@ -213,6 +222,16 @@ def _set_detector():
 
 
 _set_detector()
+
+
+def _rms(block):
+    """RMS of an int16 block, in int16 units."""
+    if np is not None:
+        return float(np.std(np.frombuffer(block, dtype=np.int16)))
+    total = 0
+    for i in range(0, len(block), 4):
+        total += block[i] * block[i]
+    return math.sqrt(total * 4 / len(block))
 
 
 def set_rate(rate):
@@ -644,6 +663,9 @@ class Autotune:
         self.sample = None
         self.sample_gain = 256
         self._zeros = array.array("h", [0] * BLOCK_SIZE)
+        self.gate_open = False
+        self._gate_hold = 0
+        self._gate_blocks = max(1, GATE_HOLD_MS * SAMPLE_RATE // (1000 * BLOCK_SIZE))
 
         # Python writes each processed block into the half of this buffer
         # that is not playing; the audio pipeline loops over it.
@@ -800,6 +822,22 @@ class Autotune:
         self._out[start:start + BLOCK_SIZE] = block
         self._half ^= 1
 
+    def _noise_gate(self, block):
+        """Silence ``block`` in place between phrases (see GATE_OPEN). It
+        costs the same every pass, so the feed write stays on time."""
+        if not GATE_OPEN:
+            return
+        level = _rms(block)
+        if level >= GATE_OPEN:
+            self.gate_open = True
+            self._gate_hold = self._gate_blocks
+        elif level < GATE_CLOSE and self.gate_open:
+            self._gate_hold -= 1
+            if self._gate_hold <= 0:
+                self.gate_open = False
+        if not self.gate_open:
+            block[0:BLOCK_SIZE] = self._zeros
+
     def step(self, speed_override=None):
         """Process one block. Blocks for BLOCK_SIZE samples of audio."""
         block = self._block
@@ -823,6 +861,7 @@ class Autotune:
         # non-detect passes, sometimes in the half being played: crackle.
         # The shift amount set below applies from the next grain. (The Python
         # OLA fallback shifts the block itself, so it still writes at the end.)
+        self._noise_gate(block)
         if self.ola is None:
             self._feed_block(block)
         window = self._window

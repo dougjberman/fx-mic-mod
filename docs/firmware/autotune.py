@@ -46,6 +46,15 @@ MIN_RMS = 250
 
 
 
+
+
+
+GATE_OPEN = 120
+GATE_CLOSE = 80
+GATE_HOLD_MS = 200
+
+
+
 SHIFT_ENGINE = "native"
 GRAIN_SIZE = 512
 GRAIN_DENSITY = 2
@@ -213,6 +222,16 @@ def _set_detector():
 
 
 _set_detector()
+
+
+def _rms(block):
+    0
+    if np is not None:
+        return float(np.std(np.frombuffer(block, dtype=np.int16)))
+    total = 0
+    for i in range(0, len(block), 4):
+        total += block[i] * block[i]
+    return math.sqrt(total * 4 / len(block))
 
 
 def set_rate(rate):
@@ -644,6 +663,9 @@ class Autotune:
         self.sample = None
         self.sample_gain = 256
         self._zeros = array.array("h", [0] * BLOCK_SIZE)
+        self.gate_open = False
+        self._gate_hold = 0
+        self._gate_blocks = max(1, GATE_HOLD_MS * SAMPLE_RATE // (1000 * BLOCK_SIZE))
 
 
 
@@ -800,6 +822,22 @@ class Autotune:
         self._out[start:start + BLOCK_SIZE] = block
         self._half ^= 1
 
+    def _noise_gate(self, block):
+        0
+
+        if not GATE_OPEN:
+            return
+        level = _rms(block)
+        if level >= GATE_OPEN:
+            self.gate_open = True
+            self._gate_hold = self._gate_blocks
+        elif level < GATE_CLOSE and self.gate_open:
+            self._gate_hold -= 1
+            if self._gate_hold <= 0:
+                self.gate_open = False
+        if not self.gate_open:
+            block[0:BLOCK_SIZE] = self._zeros
+
     def step(self, speed_override=None):
         0
         block = self._block
@@ -823,6 +861,7 @@ class Autotune:
 
 
 
+        self._noise_gate(block)
         if self.ola is None:
             self._feed_block(block)
         window = self._window
