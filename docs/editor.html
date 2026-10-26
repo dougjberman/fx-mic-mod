@@ -172,10 +172,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
   .preset-tools label{grid-column:1/-1}
   .preset-tools .btn{grid-column:1/-1;justify-self:start}
 }
-.match{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 16px;align-items:start;border-top:1px solid var(--line);padding-top:12px}
-.match p{margin:0;max-width:78ch}
 .try-note{margin:4px 0 0}
-@media (max-width:560px){.match{grid-template-columns:1fr}}
 .levelrow{border-top:1px solid var(--line);padding-top:10px}
 .slot-player{gap:8px;margin-top:8px}
 .grey-key{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px 4px 6px;font-weight:600;font-size:13px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--ink)}
@@ -237,6 +234,15 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;z-index:20;max-width:calc(100vw - 32px)}
 /* try-it bar */
 .tryit{position:sticky;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:5;display:grid;gap:12px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.tryit .meter{grid-column:1/-1;display:grid;grid-template-columns:112px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px;color:var(--muted)}
+.tryit .meter-bar{position:relative;height:8px;border-radius:4px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden}
+.tryit .meter-fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--ok)}
+.tryit .meter-fill.hot{background:var(--warn)}
+.tryit .meter-peak{position:absolute;top:0;bottom:0;left:0;width:2px;margin-left:-1px;background:var(--ink);opacity:0}
+.tryit .meter-label{font-size:14px;font-weight:600;color:var(--ink)}
+.tryit .meter-val{min-width:9ch;text-align:right}
+.tryit .meter-val b{color:var(--ink);font-family:var(--f-mono);font-weight:500;font-variant-numeric:tabular-nums}
+@media (max-width:560px){.tryit .meter{grid-template-columns:auto minmax(0,1fr) auto}}
 .tryit .readout{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
 .tryit .readout b{color:var(--ink);font-family:var(--f-mono);font-weight:500}
 .talk{border:1px solid var(--accent-btn);background:transparent;color:var(--accent-text);border-radius:999px;padding:7px 14px;font-size:14px;font-weight:600;min-width:112px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
@@ -378,6 +384,11 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       </div>
       <div id="try-squeeze-slot"></div>
       <div id="try-level-slot"></div>
+      <div class="meter" id="try-meter">
+        <span class="meter-label">Output</span>
+        <div class="meter-bar" role="meter" aria-label="Output level" aria-valuemin="-48" aria-valuemax="0" aria-valuenow="-48"><span class="meter-fill"></span><span class="meter-peak"></span></div>
+        <span class="meter-val">peak <b id="try-peak">–</b> dB</span>
+      </div>
       <div class="readout" id="try-readout"></div>
     </div>
   </section>
@@ -389,10 +400,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     </div>
     <div class="slots" id="slots"></div>
     <p class="small muted">The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic.</p>
-    <div class="match">
-      <button class="btn" id="btn-match">Balance preset volume outputs</button>
-      <p class="small muted" id="match-help"><b>Optional.</b> Some chains come out much louder than others. Distortion is the usual culprit, and the volume jumps when you switch presets. This button tests what a sample audio signal sounds like through each effects preset, measures the relative output volumes, and turns the louder ones down to match Clean, so your voice and your samples stay at the same volume on every preset. The mic can only turn a preset down, never up, so one that comes out quieter than Clean stays at 100%. It sets each preset's Output level, which you can still adjust by hand. Leave it alone if you like the jumps.</p>
-    </div>
+    <p class="small muted" id="level-help"><b>Volume between presets.</b> Distortion and reverb can make one preset much louder than another. Sing the same phrase through each preset and watch the meter in Try it, then set each preset's <b>Output level</b> so the peak line lands in about the same place. The preview only estimates the mic, so check by ear on the mic too: switch between Clean and each preset while you sing, and turn down any that jump out.</p>
   </section>
 
   <section id="editor" style="display:grid;gap:14px"></section>
@@ -531,7 +539,7 @@ STARTERS.push(
   {name:"Slap-back", list:[{effect:"filter",filter:{mode:"high_pass",frequency:120,Q:.7071},mix:1},{effect:"echo",delay_ms:120,decay:{block:"math",operation:"constrained_lerp",a:.1,b:.5,c:"$handle"},mix:.35,freq_shift:false,max_delay_ms:200},{effect:"freeverb",roomsize:.2,damp:.6,mix:.12}]},
   {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"lfo",waveform:"sine",rate:{block:"math",operation:"constrained_lerp",a:0.25,b:0.8,c:"$handle"},scale:{block:"math",operation:"constrained_lerp",a:300,b:1150,c:"$handle"},offset:{block:"math",operation:"constrained_lerp",a:900,b:1850,c:"$handle"}},feedback:{block:"math",operation:"constrained_lerp",a:0.4,b:0.85,c:"$handle"},mix:{block:"math",operation:"constrained_lerp",a:0.25,b:0.5,c:"$handle"},stages:8},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.2}]},
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]});
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.4],[STARTERS[1],1],[STARTERS[9],.9],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Balance preset volume outputs
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.4],[STARTERS[1],1],[STARTERS[9],.4],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"oneshot"},{file:"4.wav",playmode:"oneshot"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -1268,6 +1276,8 @@ async function tryEnsure(){
   tryState.engine = await makeTingEngine(ctx);
   tryState.engine.onInfo = tryInfo;
   tryState.engine.node.connect(ctx.destination);
+  tryState.analyser = ctx.createAnalyser(); tryState.analyser.fftSize = 1024;
+  tryState.engine.node.connect(tryState.analyser);
   tryState.character = tryCharacter(ctx);
   tryState.character.output.connect(tryState.engine.node);
   trySend({g:tryG()});
@@ -1299,53 +1309,6 @@ async function tryStart(kind){
   tryState.kind = kind === "mic" ? "mic" : "singer";
   tryState.running = true; tryRender();
 }
-/* Balance preset volume outputs: run each preset offline on the sample singer, measure its
- * loudness, and set "level" so every preset comes out as loud as the clean spot (preset 0), so
- * switching presets, or firing a sample through one, doesn't change the volume. Only ever turns
- * presets down: the firmware's mixer level tops out at 1.0, so a preset quieter than clean stays at 100%. */
-async function singerData(rate){
-  const ctx = new OfflineAudioContext(1, 1, rate);
-  try {
-    const res = await fetch("audio/sample-singer.mp3"); if (!res.ok) throw new Error(res.status);
-    return (await ctx.decodeAudioData(await res.arrayBuffer())).getChannelData(0);
-  } catch(e){ return makeSampleSinger(rate).getChannelData(0); }
-}
-async function loudness(preset, data, rate){
-  const d = new (dspFactory().TingDSP)(rate);
-  d.set({g:{power:true, gate:true, handle:0.5, level:1}, preset, sampleFx:"own"});
-  const N = 256, out = new Float32Array(N), skip = Math.round(rate*0.5);
-  let sum = 0, count = 0;
-  for (let i = 0; i + N <= data.length; i += N){
-    d.process(data.subarray(i, i+N), out);
-    if (i >= skip){ let e = 0; for (let k = 0; k < N; k++) e += out[k]*out[k]; e /= N; if (e > 1e-5){ sum += e; count++; } }
-    if (i % (N*400) === 0) await new Promise(r=>setTimeout(r));
-  }
-  return count ? Math.sqrt(sum/count) : 0;
-}
-async function matchVolume(){
-  const btn = $("#btn-match"); btn.disabled = true; const label = btn.textContent;
-  try {
-    const rate = deviceRate(), data = (await singerData(rate)).slice(0, rate*10);
-    const presets = serialize().presets, louds = [];
-    btn.textContent = "Measuring clean…";
-    const clean = await loudness({list:[]}, data, rate);
-    for (let i = 0; i < presets.length; i++){
-      btn.textContent = "Measuring " + (i+1) + " of " + presets.length + "…";
-      const q = Object.assign({}, presets[i]); delete q.level;
-      louds.push(await loudness(q, data, rate));
-    }
-    // clean sets the target: a mixer voice can't go above 1.0
-    const target = clean, report = [];
-    louds.forEach((loud, i) => {
-      const lv = loud > target ? Math.max(0.05, Math.round(target/loud*20)/20) : 1;
-      if (lv >= 1) delete config.presets[i].level; else config.presets[i].level = lv;
-      report.push((presets[i].name || "Preset "+(i+1)) + " " + Math.round(lv*100) + "%");
-    });
-    changed(); toast("Balanced: " + report.join(", "));
-  } catch(e){ toast("Couldn't balance volumes: " + e.message); }
-  btn.disabled = false; btn.textContent = label;
-}
-$("#btn-match").addEventListener("click", matchVolume);
 $("#btn-reset").addEventListener("click", ()=>{
   if (!confirm("Replace all your presets and sample settings with the editor's defaults? Save or download your config.json first if you want to keep it.")) return;
   config = clone(DEFAULT_CONFIG); selected = 0; addOpen = false; changed(); toast("Back to the default presets.");
@@ -1367,8 +1330,34 @@ async function trySingerBuffer(){
 }
 function tryStop(){ tryStopSource(); tryState.running = false; tryRender(); tryStatus("Stopped."); }
 function tryStatus(t, bad){ const el=$("#try-status"); el.textContent=t; el.style.color = bad ? "var(--bad)" : ""; }
+/* Output meter with a peak-hold line. It reads the preset's output before
+ * the Preview volume, so turning that down doesn't move it: the bar is the
+ * recent peak, the line the loudest peak of the last 2 seconds, then falls. */
+const METER_FLOOR = -48, METER_HOLD = 2, METER_FALL = 15;  // dB, seconds, dB per second
+const meter = {bar:-Infinity, hold:-Infinity, heldAt:0, last:0, raf:0, buf:null};
+function meterPct(db){ return Math.max(0, Math.min(1, (db - METER_FLOOR) / -METER_FLOOR)) * 100; }
+function meterTick(t){
+  meter.raf = 0;
+  if (!tryState.running || !tryState.analyser) return;
+  const a = tryState.analyser, dt = meter.last ? (t - meter.last) / 1000 : 0; meter.last = t;
+  if (!meter.buf) meter.buf = new Float32Array(a.fftSize);
+  a.getFloatTimeDomainData(meter.buf);
+  let peak = 0; for (let i = 0; i < meter.buf.length; i++){ const v = Math.abs(meter.buf[i]); if (v > peak) peak = v; }
+  const db = tryState.level > 0.01 ? 20 * Math.log10(peak / tryState.level + 1e-9) : -Infinity;
+  meter.bar = db >= meter.bar ? db : Math.max(db, meter.bar - METER_FALL * 2 * dt);
+  if (db >= meter.hold){ meter.hold = db; meter.heldAt = t; }
+  else if (t - meter.heldAt > METER_HOLD * 1000) meter.hold -= METER_FALL * dt;
+  const fill = $("#try-meter .meter-fill"), line = $("#try-meter .meter-peak");
+  fill.style.width = meterPct(meter.bar) + "%"; fill.classList.toggle("hot", meter.bar > -3);
+  line.style.left = meterPct(meter.hold) + "%"; line.style.opacity = meter.hold > METER_FLOOR ? 1 : 0;
+  $("#try-meter .meter-bar").setAttribute("aria-valuenow", String(Math.round(Math.max(METER_FLOOR, meter.bar))));
+  $("#try-peak").textContent = meter.hold > METER_FLOOR ? Math.round(meter.hold) : "–";
+  meter.raf = requestAnimationFrame(meterTick);
+}
+function meterStart(){ if (!meter.raf){ meter.last = 0; meter.bar = meter.hold = -Infinity; meter.raf = requestAnimationFrame(meterTick); } }
 function tryRender(){
   $("#try-controls").hidden = !tryState.running;
+  if (tryState.running) meterStart();
   $("#try-stop").hidden = !tryState.running;
   const kind = tryState.running ? tryState.kind : null;
   $("#try-stop-label").textContent = kind === "mic" ? "Stop mic" : "Stop this terrible singer";
@@ -1477,7 +1466,7 @@ const OLD_DRIVE = [[0, 25, -16, [1, .6]], [3, 12, -8, [.2, .55]]];
 const canon = v => Array.isArray(v) ? "["+v.map(canon).join(",")+"]"
   : v && typeof v==="object" ? "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+canon(v[k])).join(",")+"}" : JSON.stringify(v);
 // Levels the current defaults had before the last volume balancing pass; same presets, old level -> new level.
-const PREV_LEVELS = [[.8, .6, 1, .25], [.6, .45, 1, .2], [1, 1, .7, .55], [1, 1, .6, .5], [.4, 1, .6, .12], [.4, 1, 1, .25], [.4, 1, .5, .25]];
+const PREV_LEVELS = [[.8, .6, 1, .25], [.6, .45, 1, .2], [1, 1, .7, .55], [1, 1, .6, .5], [.4, 1, .6, .12], [.4, 1, 1, .25], [.4, 1, .5, .25], [.4, 1, .9, .25]];
 const withoutLevel = p => { const q = Object.assign({}, p); delete q.level; return canon(q); };
 for (const [i, pre, post, levels] of OLD_DRIVE){
   const d = clone(DEFAULT_CONFIG.presets[i]), ds = d.list.find(f=>f.effect==="distortion"), p = config.presets[i];
