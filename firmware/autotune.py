@@ -806,14 +806,19 @@ class Autotune:
             edge = now()
             if edge - t > BLOCK_NS // 2:
                 break
-        # Writes go out at edge + k blocks. The burst repeats every two blocks,
-        # so the write just before it is block k, with k of this parity.
-        k = ((burst - edge) // BLOCK_NS) % 2
+        # step() writes a block only after gating it, so time that too: a
+        # burst that starts between the block edge and the write holds the
+        # write back until it ends (on a Ting one started 1.1 ms after it).
+        self._noise_gate(block)
+        wrote = now() - edge
+        # Writes land at edge + wrote + k blocks. The burst repeats every two
+        # blocks, so the write just before it is block k, with k of this parity.
+        k = ((burst - edge - wrote) // BLOCK_NS) % 2
         # Block k must land in the second half; block 0 is the one written here.
         self._half = (1 ^ k) ^ FEED_PHASE
         self._feed_block(self._zeros)
-        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long".format(
-            ((burst - edge) % (2 * BLOCK_NS)) / 1e6, gap / 1e6))
+        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms".format(
+            ((burst - edge) % (2 * BLOCK_NS)) / 1e6, gap / 1e6, wrote / 1e6))
 
     def deinit(self):
         self.stop_sample()

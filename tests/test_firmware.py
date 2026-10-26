@@ -237,47 +237,56 @@ class LoaderTests(unittest.TestCase):
 
     def test_feed_sync_puts_the_older_block_first_for_the_burst(self):
         # The chain reads both halves in one burst every two blocks; the write
-        # just before the burst must go to the second half, wherever it falls.
+        # just before the burst must go to the second half, wherever it falls,
+        # including a burst that starts between a block edge and its write.
         import array
         import autotune
         A, n, B = autotune.Autotune, autotune.BLOCK_SIZE, autotune.BLOCK_NS
-        for burst_at in (3, 10, 19, 26, 35):  # ms after the spin starts
-            for phase in (0, 1):
-                clock = {"t": 0}
+        for burst_at in (3, 6.5, 10, 19, 22.5, 26, 35):  # ms after the spin starts
+            for gate_ms in (0.2, 2.0):  # time from block edge to the write
+                for phase in (0, 1):
+                    clock = {"t": 0}
+                    burst_ns = int(burst_at * 1000000)
 
-                def now():
-                    t = clock["t"]
-                    clock["t"] += 100000  # 0.1 ms per loop pass
-                    if t < burst_at * 1000000 <= clock["t"]:
-                        clock["t"] += 4000000  # the burst takes 4 ms
-                    return t
+                    def now():
+                        t = clock["t"]
+                        clock["t"] += 100000  # 0.1 ms per loop pass
+                        if t < burst_ns <= clock["t"]:
+                            clock["t"] += 4000000  # the burst takes 4 ms
+                        return t
 
-                class Mic:
-                    def record(self, block, count):
-                        # wait for the next block edge, 5 ms into the clock
-                        clock["t"] += B - (clock["t"] - 5000000) % B
-                        return count
+                    class Mic:
+                        def record(self, block, count):
+                            # wait for the next block edge, 5 ms into the clock
+                            clock["t"] += B - (clock["t"] - 5000000) % B
+                            return count
 
-                h = A.__new__(A)
-                h.mic, h._block, h._zeros = Mic(), array.array("h", [0] * n), array.array("h", [0] * n)
-                h._out, h._half = array.array("h", [0] * (2 * n)), 0
-                saved = autotune.time.monotonic_ns, autotune.FEED_PHASE
-                autotune.time.monotonic_ns, autotune.FEED_PHASE = now, phase
-                try:
-                    h._sync_feed()
-                    edge = clock["t"] - 100000
-                    # blocks then land at edge + m blocks; find the last before a burst
+                    h = A.__new__(A)
+                    h.mic, h._block, h._zeros = Mic(), array.array("h", [0] * n), array.array("h", [0] * n)
+                    h._out, h._half = array.array("h", [0] * (2 * n)), 0
+                    h._noise_gate = lambda block: clock.__setitem__("t", clock["t"] + int(gate_ms * 1000000))
+                    saved = autotune.time.monotonic_ns, autotune.FEED_PHASE
+                    autotune.time.monotonic_ns, autotune.FEED_PHASE = now, phase
+                    try:
+                        h._sync_feed()
+                    finally:
+                        autotune.time.monotonic_ns = saved[0]
+                    # the edge the sync lined up on, and when each later write lands
+                    edge = 5000000 + ((clock["t"] - 5000000) // B) * B
+                    bursts = [burst_ns + j * 2 * B for j in range(8)]
                     halves = []
-                    for m in range(1, 6):
+                    for m in range(1, 7):
+                        write = edge + m * B + int(gate_ms * 1000000)
+                        for b in bursts:  # a write due during a burst waits for its end
+                            if b <= write < b + 4000000:
+                                write = b + 4000000
                         h._feed_block(array.array("h", [m] * n))
-                        halves.append((edge + m * B, 0 if h._out[0] == m else 1))
-                finally:
-                    autotune.time.monotonic_ns, autotune.FEED_PHASE = saved
-                bursts = [burst_at * 1000000 + j * 2 * B for j in range(8)]
-                for b in bursts:
-                    before = [half for t, half in halves if t < b]
-                    if before and b < halves[-1][0]:
-                        self.assertEqual(before[-1], 1, (burst_at, phase, b))
+                        halves.append((write, 0 if h._out[0] == m else 1))
+                    autotune.FEED_PHASE = saved[1]
+                    for b in bursts:
+                        before = [half for t, half in halves if t < b]
+                        if before and b < halves[-1][0]:
+                            self.assertEqual(before[-1], 1, (burst_at, gate_ms, phase, b))
 
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):

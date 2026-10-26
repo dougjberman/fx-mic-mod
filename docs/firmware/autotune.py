@@ -808,12 +808,17 @@ class Autotune:
                 break
 
 
-        k = ((burst - edge) // BLOCK_NS) % 2
+
+        self._noise_gate(block)
+        wrote = now() - edge
+
+
+        k = ((burst - edge - wrote) // BLOCK_NS) % 2
 
         self._half = (1 ^ k) ^ FEED_PHASE
         self._feed_block(self._zeros)
-        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long".format(
-            ((burst - edge) % (2 * BLOCK_NS)) / 1e6, gap / 1e6))
+        print("feed sync: burst {:.1f} ms after a block, {:.1f} ms long; write at {:.1f} ms".format(
+            ((burst - edge) % (2 * BLOCK_NS)) / 1e6, gap / 1e6, wrote / 1e6))
 
     def deinit(self):
         self.stop_sample()

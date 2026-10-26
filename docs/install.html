@@ -446,6 +446,7 @@ picotool save -a ting-full-flash.bin</pre>
         <div class="row">
           <label class="mark" style="color: var(--ink);"><input type="checkbox" id="serialTimes"> Timestamps</label>
           <button class="ghost" id="serialMark">Mark (restart the clock)</button>
+          <button class="ghost" id="serialCopy">Copy log</button>
           <button class="ghost" id="serialSave">Save log</button>
           <span class="status" id="serialSaveStatus"></span>
         </div>
@@ -1022,6 +1023,17 @@ while True:
   }
   $("serialMark").addEventListener("click", () => {
     clock0 = performance.now(); markDue = true; log("");
+  });
+  $("serialCopy").addEventListener("click", async () => {
+    const text = out.textContent;
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      // Fallback for pages without clipboard permission (e.g. a saved file).
+      const area = document.createElement("textarea"); area.value = text; document.body.append(area); area.select();
+      const ok = document.execCommand("copy"); area.remove();
+      if (!ok) { status("serialSaveStatus", "Couldn't copy. Use Save log instead.", "bad"); return; }
+    }
+    status("serialSaveStatus", "Copied " + text.split("\n").length + " lines.", "ok");
   });
   $("serialSave").addEventListener("click", () => offerFile("ting-console-" + today() + ".txt", out.textContent, "serialSaveStatus"));
   try { $("serialTimes").checked = store.get("serialTimes") === true; } catch (e) {}
