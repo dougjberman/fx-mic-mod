@@ -785,7 +785,10 @@ class Autotune:
                     voice.play(feed, loop=True)
             self.shifter.play(self.feed, loop=True)
             if FEED_SYNC and FEED_PHASE is not None:
-                self._sync_feed()
+                try:
+                    self._sync_feed()
+                except Exception as error:  # never worth losing the preset over
+                    print("feed sync failed: {}".format(error))
         self._started = True
 
     def _sync_feed(self):
@@ -803,7 +806,11 @@ class Autotune:
                 gaps.append((prev, t - prev))
             prev = t
         longest = max([g for _, g in gaps] or [0])
-        first = next((b for b, g in gaps if 2 * g >= longest), began)
+        first = began
+        for b, g in gaps:  # (CircuitPython's next() takes no default)
+            if 2 * g >= longest:
+                first = b
+                break
         # Then line up on a fresh mic block: a read that had to wait for its
         # samples returns on a block boundary, where step()'s reads return.
         block = self._block
