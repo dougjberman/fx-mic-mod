@@ -324,7 +324,7 @@ function dspFactory(){
         fx.process=(buf,env)=>{
           // speed s -> per-block rate 0.08 + 0.92 s^2; humanize h -> dead zone of h*30 cents (firmware autotune.py)
           const mix=clamp(mixF(env),0,1), s=clamp(speed(env),0,1), rate=0.08+0.92*s*s, dz=clamp(hum(env),0,1)*0.3;
-          const hl=levelF?clamp(levelF(env),0,1):0, hg=1/Math.sqrt(1+voices.length*hl*hl);   // keeps the sum about as loud as the voice alone
+          const hl=levelF?clamp(levelF(env),0,1):0, hg=1/(1+voices.length*hl);   // keeps the sum about as loud as the voice alone (firmware _set_levels)
           const py=host.g.engine==="python";
           if(alt){
             const h=env.handle||0;

@@ -778,7 +778,10 @@ class Autotune:
             return
         self._level = level
 
-        gain = 1.0 / math.sqrt(1.0 + len(self.voices) * level * level)
+
+
+
+        gain = 1.0 / (1.0 + len(self.voices) * level)
         self.mixer.voice[0].level = gain
         for index in range(len(self.voices)):
             self.mixer.voice[index + 1].level = gain * level

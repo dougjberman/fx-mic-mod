@@ -777,8 +777,11 @@ class Autotune:
         if level == self._level:
             return
         self._level = level
-        # Keep the sum about as loud as the voice alone.
-        gain = 1.0 / math.sqrt(1.0 + len(self.voices) * level * level)
+        # Keep the sum about as loud as the voice alone. The harmony voices
+        # are copies of the voice, so they add up nearly in phase, not like
+        # unrelated sounds: on the mic, a 1/sqrt gain here still came out
+        # about 7 dB louder with the harmony fully in.
+        gain = 1.0 / (1.0 + len(self.voices) * level)
         self.mixer.voice[0].level = gain
         for index in range(len(self.voices)):
             self.mixer.voice[index + 1].level = gain * level
