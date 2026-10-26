@@ -243,7 +243,7 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
       <p>Flashing CircuitPython erases everything on the device's own drive: your samples <code>1.wav</code> to <code>4.wav</code>, <code>config.json</code>, and any other files. Copy them off first.</p>
       <ol class="how">
         <li>Plug in the mic and squeeze the handle to power it on.</li>
-        <li>A drive called <b>TING DISK</b> appears. Some firmware versions and the official manual call it <b>FX-MIC DISK</b>.</li>
+        <li>A drive called <b>TINGDISK</b> appears. Some firmware versions and the official manual call it <b>FX-MIC DISK</b>.</li>
         <li>Pick that drive below. The page reads every file and saves them as one zip.</li>
       </ol>
       <div class="tool">
@@ -451,8 +451,8 @@ picotool save -a ting-full-flash.bin</pre>
         <li><b>Plug the mic into your computer</b> with a USB-C data cable. Leave it plugged in until the end.</li>
         <li><b>Have the stock <code>.uf2</code> ready</b> before you start: the one you unzipped in <a href="#stock">step 02</a>. If you don't have it, download and unzip it now.</li>
         <li><b>Put the mic in boot mode.</b> The mic can be on or off. Squeeze the handle all the way in and keep holding it until step 4 finishes. Under the lower lid, double-click the small dark button just above the USB-C port.<br><b>Worked:</b> all the lights go out, and a drive called <b>RP2350</b> appears on your computer (CIRCUITPY goes away). The lights going out is normal.<br><b>Didn't work:</b> the lights stay on and CIRCUITPY is still there. Double-click again, a bit faster. If it still won't go, keep squeezing and use <b>Reboot to boot mode</b> in the <a href="#console">step 06 console</a>.</li>
-        <li><b>Flash the stock firmware.</b> In <a href="#flash">step 04</a>, click <b>Choose the .uf2 file</b> and pick TE's file, then <b>Pick the boot drive and flash</b> and choose RP2350.<br><b>Worked:</b> RP2350 disappears within a few seconds, the mic restarts, a white LED lights, and a drive called <b>TING DISK</b> or <b>FX-MIC DISK</b> appears. Now you can let go of the handle. Your computer may warn that the drive wasn't ejected, and the page may say the drive went away during the write. Both are expected: what counts is the new drive appearing.</li>
-        <li><b>Copy your samples back</b> with the tool below: choose your unzipped backup folder, then pick the TING DISK or FX-MIC DISK drive. Or copy the files across by hand.</li>
+        <li><b>Flash the stock firmware.</b> In <a href="#flash">step 04</a>, click <b>Choose the .uf2 file</b> and pick TE's file, then <b>Pick the boot drive and flash</b> and choose RP2350.<br><b>Worked:</b> RP2350 disappears within a few seconds, the mic restarts, a white LED lights, and a drive called <b>TINGDISK</b> or <b>FX-MIC DISK</b> appears. Now you can let go of the handle. Your computer may warn that the drive wasn't ejected, and the page may say the drive went away during the write. Both are expected: what counts is the new drive appearing.</li>
+        <li><b>Copy your samples back</b> with the tool below: choose your unzipped backup folder, then pick the TINGDISK or FX-MIC DISK drive. Or copy the files across by hand.</li>
         <li><b>Check it:</b> squeeze and sing. You should hear the stock presets again.</li>
       </ol>
       <div class="tool">
@@ -469,10 +469,8 @@ picotool save -a ting-full-flash.bin</pre>
     <section class="step" id="unknowns" data-step="unknowns">
       <div class="step-head"><span class="step-num">!!</span><h2>Details we couldn't verify</h2></div>
       <ul class="how uncertain">
-        <li><span class="tag">Drive names</span>With CircuitPython installed, the boot drive is called RP2350 (checked on a Ting). With the stock firmware, Adafruit's guide says TING BOOT and TING DISK, while TE's manual says FX-MIC BOOT and fx-mic disk. TE changed the boot-mode name in 1.0.5, so expect either.</li>
+        <li><span class="tag">Drive names</span>Checked on a Ting: with stock firmware the boot drive is TING BOOT (TE's own bootloader) and the mic's drive is TINGDISK; once CircuitPython is installed the boot drive is RP2350, the chip's built-in one. On an FX Mic, TE's manual says FX-MIC BOOT and fx-mic disk.</li>
         <li><span class="tag">Factory samples</span>We don't know whether reflashing stock firmware brings back the factory sounds by itself. TE's 1.0.7 notes say factory samples are no longer loaded after sleep, which suggests they live in firmware, but keep your backup either way.</li>
-        <li><span class="tag">Writing the .uf2</span>Chrome writes files through a temporary <code>.crswap</code> copy and then renames it. UF2 boot drives usually accept this because they read the data blocks and ignore the name, but this hasn't been tested on an EP-2350. If the device doesn't restart within a minute, drag the file instead.</li>
-        <li><span class="tag">Boot mode after flashing</span>TE's double-click gesture is likely handled by the RP2350's built-in boot ROM, so it should survive the switch to CircuitPython, but we haven't confirmed it. The console's Reboot to boot mode button is the backup route, and needs the handle squeezed so the mic stays powered through the reset.</li>
         <li><span class="tag">Full dump</span>The picotool flash dump in step 02 is untested on this device.</li>
         <li><span class="tag">Standalone file</span>The saved .html copy should get drive and serial access when opened from disk in Chrome or Edge, since browsers treat local files as a secure context. If a button still reports it's blocked, serve the folder with <code>python3 -m http.server</code> and open <code>http://localhost:8000</code>.</li>
       </ul>
@@ -751,11 +749,11 @@ while True:
     status("uf2Status", "Writing " + uf2.name + "… keep squeezing the handle.");
     try {
       await writeFile(dir, uf2.name, uf2);
-      status("uf2Status", "Copied. The mic should restart and mount CIRCUITPY (or its TING DISK / FX-MIC DISK drive for stock firmware) within a few seconds.", "ok");
+      status("uf2Status", "Copied. The mic should restart and mount CIRCUITPY (or its TINGDISK / FX-MIC DISK drive for stock firmware) within a few seconds.", "ok");
       markDone("flash");
     } catch (e) {
       // The bootloader often reboots before the browser finishes closing the file.
-      status("uf2Status", "The boot drive went away as the write finished (" + e.name + "). That usually means it worked: the mic restarts with the new firmware. If within a minute the lights come back on and CIRCUITPY (for CircuitPython) or TING DISK / FX-MIC DISK (for stock) appears, you're done. If not, enter boot mode again and drag the file onto the boot drive.");
+      status("uf2Status", "The boot drive went away as the write finished (" + e.name + "). That usually means it worked: the mic restarts with the new firmware. If within a minute the lights come back on and CIRCUITPY (for CircuitPython) or TINGDISK / FX-MIC DISK (for stock) appears, you're done. If not, enter boot mode again and drag the file onto the boot drive.");
     }
   });
 
