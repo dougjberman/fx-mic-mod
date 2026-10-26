@@ -388,7 +388,7 @@ picotool save -a ting-full-flash.bin</pre>
         <pre id="bootOut" hidden></pre>
         <div class="status" id="spareStatus" hidden></div>
       </div>
-      <div class="note"><b>After installing, turn the mic off and on again.</b> To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together until the lights go out (about a second), then let go. If it stays on, unplug the USB cable and take out the batteries. Once it's dark, squeeze the handle to turn it back on. <b>Working looks like:</b> white LED 1 stays lit, the red LEDs are off (the clean spot), and CIRCUITPY shows up on your computer again. If white LED 1 instead blinks twice every few seconds, the code stopped on an error: connect the serial console below and click Reload to see it. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
+      <div class="note"><b>After installing, turn the mic off and on again.</b> To turn it off, hold the orange and <span data-dw="mid">white</span> buttons together until the lights go out (about a second), then let go. If it stays on, unplug the USB cable and take out the batteries. Once it's dark, squeeze the handle to turn it back on. <b>Working looks like:</b> white LED 1 stays lit, the red LEDs are off (the clean spot), and CIRCUITPY shows up on your computer again. If white LED 1 instead blinks twice every few seconds, the code stopped on an error: connect the serial console below and click Restart code to see it. From then on, a normal power-on (just squeeze the handle) lets the mic save recordings, and your computer sees the drive as read-only. To save presets from the <a href="editor.html">preset editor</a> or copy files, <b>hold the orange button while you squeeze the handle to power on</b>. That's edit mode. You also need edit mode to run this install again later.</div>
       <details><summary>Optional: copy samples from your backup</summary>
         <div style="display: grid; gap: 10px; margin-top: 10px;">
           <p>If your step 01 backup has WAV files you want on the mic, this copies them to CIRCUITPY. fx-mic-mod plays 16-bit mono WAVs at 24 kHz, so each file is converted to that on the way. Bought or downloaded samples are usually much louder than a voice through the mic, so by default they're also turned down to about the level the mic records at. Choose the backup zip or the WAV files, then pick CIRCUITPY with the mic in edit mode. A file whose name starts with 1 to 4 goes in that slot; any others fill the empty slots in order.</p>
@@ -430,16 +430,16 @@ picotool save -a ting-full-flash.bin</pre>
       <p>The mic reports what it's doing over the USB cable: which preset is on, how far the handle is squeezed, and any error that stops it. This is where you look when something doesn't work, and where to copy text from if you're asking for help.</p>
       <ol class="how">
         <li>With the mic on and plugged in, click <b>Connect</b>. Chrome or Edge asks which device to use: pick the one named <b>CircuitPython</b> or <b>USB Serial</b>, then <b>Connect</b>.</li>
-        <li>Click <b>Reload</b>. The mic restarts its code, and you should see <code>code.py output:</code> followed by lines like <code>TOP button = next preset (5 spots, 0 = clean)</code>. That means it's running.</li>
+        <li>Click <b>Restart code</b>. The mic restarts its code, and you should see <code>code.py output:</code> followed by lines like <code>TOP button = next preset (5 spots, 0 = clean)</code>. That means it's running.</li>
         <li>Use the mic. Each press and squeeze prints a line: <code>preset 2 of 4</code>, <code>paddle pressed</code>, <code>volume +3.0 dB</code>. An <code>overflow</code> line means that preset is too heavy for the chip and the sound will glitch.</li>
-        <li>If you see <code>Traceback</code>, the code stopped on an error and the mic goes quiet, with white LED 1 blinking twice every few seconds. Copy everything from <code>Traceback</code> down: the last line says what went wrong.</li>
+        <li>If you see <code>Traceback</code>, the code stopped on an error and the mic goes quiet, with white LED 1 blinking twice every few seconds. Copy everything from <code>Traceback</code> down: the last line says what went wrong. <b>Restart code</b> gets it going again.</li>
       </ol>
-      <p><b>Stop</b> halts the code and gives you a <code>&gt;&gt;&gt;</code> prompt, where you can type Python into the box below and click <b>Send</b>, for example when someone helping you asks you to run a line. <b>Reload</b> starts the code again. With the cursor in the box, <kbd>control</kbd>-C and <kbd>control</kbd>-D do the same as the two buttons (on a Mac that's control, not ⌘).</p>
+      <p><b>Stop code</b> halts the code and gives you a <code>&gt;&gt;&gt;</code> prompt, where you can type Python into the box below and click <b>Send</b>, for example when someone helping you asks you to run a line. That also leaves white LED 1 blinking twice every few seconds; <b>Restart code</b> starts it again. If you're used to a terminal, <kbd>control</kbd>-C and <kbd>control</kbd>-D do the same as the two buttons while the console is connected (on a Mac that's control, not ⌘).</p>
       <div class="tool">
         <div class="row">
           <button class="go" id="serialConnect">Connect</button>
-          <button class="ghost" id="serialStop" disabled>Stop (Ctrl-C)</button>
-          <button class="ghost" id="serialReload" disabled>Reload (Ctrl-D)</button>
+          <button class="ghost" id="serialStop" disabled>Stop code</button>
+          <button class="ghost" id="serialReload" disabled>Restart code</button>
           <button class="ghost" id="serialPins" disabled>List board pins</button>
           <button class="ghost" id="serialBoot" disabled>Reboot to boot mode</button>
           <button class="ghost" id="serialDisconnect" disabled>Disconnect</button>
@@ -1051,10 +1051,15 @@ while True:
   });
   // control-C and control-D in the command box go to the mic, as in a terminal.
   // ⌘-C stays copy on a Mac.
-  $("serialLine").addEventListener("keydown", (ev) => {
-    if (!ev.ctrlKey || ev.metaKey || ev.altKey) return;
-    const k = ev.key.toLowerCase();
-    if (k === "c" || k === "d") { ev.preventDefault(); send(k === "c" ? "\x03" : "\x04"); }
+  // Anywhere on the page while connected, not only in the box, unless another
+  // field has the cursor; control-C with text selected stays copy.
+  document.addEventListener("keydown", (ev) => {
+    if (!ev.ctrlKey || ev.metaKey || ev.altKey || $("serialReload").disabled) return;
+    const k = (ev.key || "").toLowerCase(), el = document.activeElement;
+    if (k !== "c" && k !== "d") return;
+    if (el && el !== $("serialLine") && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    if (k === "c" && String(getSelection())) return;
+    ev.preventDefault(); send(k === "c" ? "\x03" : "\x04");
   });
   $("serialStop").addEventListener("click", () => send("\x03"));
   $("serialReload").addEventListener("click", reload);
