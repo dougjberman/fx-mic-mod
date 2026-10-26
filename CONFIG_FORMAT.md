@@ -148,8 +148,9 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   voice stays in the chord and n notes move below it: C major sung on C is E G above (0),
   E G below (1), G below and E above (2). Up to the number of harmony voices; chords with an
   octave in them (`octave`, `power`) only allow 0.
-- `level` l: the voice plays at `1 / sqrt(1 + n * l * l)` and each of the n harmony voices at
-  l times that, so the sum stays about as loud as the voice alone. `"$handle"` brings the
+- `level` l: the voice plays at `1 / (1 + n * l)` and each of the n harmony voices at
+  l times that, so the sum stays about as loud as the voice alone (the voices are copies of one
+  voice, so they add up nearly in phase). `"$handle"` brings the
   harmony in with the squeeze, which can't be combined with `squeeze_key` / `squeeze_scale`.
   Source of truth: `firmware/autotune.py` (`CHORDS`, `voicing`, `Autotune`).
 
