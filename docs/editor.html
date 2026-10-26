@@ -531,7 +531,7 @@ STARTERS.push(
   {name:"Slap-back", list:[{effect:"filter",filter:{mode:"high_pass",frequency:120,Q:.7071},mix:1},{effect:"echo",delay_ms:120,decay:{block:"math",operation:"constrained_lerp",a:.1,b:.5,c:"$handle"},mix:.35,freq_shift:false,max_delay_ms:200},{effect:"freeverb",roomsize:.2,damp:.6,mix:.12}]},
   {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"lfo",waveform:"sine",rate:{block:"math",operation:"constrained_lerp",a:0.25,b:0.8,c:"$handle"},scale:{block:"math",operation:"constrained_lerp",a:300,b:1400,c:"$handle"},offset:{block:"math",operation:"constrained_lerp",a:800,b:1600,c:"$handle"}},feedback:{block:"math",operation:"constrained_lerp",a:0.4,b:0.85,c:"$handle"},mix:{block:"math",operation:"constrained_lerp",a:0.25,b:0.5,c:"$handle"},stages:8},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.35}]},
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]});
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.4],[STARTERS[1],1],[STARTERS[9],1],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Balance preset volume outputs
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.4],[STARTERS[1],1],[STARTERS[9],.5],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels from Balance preset volume outputs
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"oneshot"},{file:"4.wav",playmode:"oneshot"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -1477,7 +1477,7 @@ const OLD_DRIVE = [[0, 25, -16, [1, .6]], [3, 12, -8, [.2, .55]]];
 const canon = v => Array.isArray(v) ? "["+v.map(canon).join(",")+"]"
   : v && typeof v==="object" ? "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+canon(v[k])).join(",")+"}" : JSON.stringify(v);
 // Levels the current defaults had before the last volume balancing pass; same presets, old level -> new level.
-const PREV_LEVELS = [[.8, .6, 1, .25], [.6, .45, 1, .2], [1, 1, .7, .55], [1, 1, .6, .5], [.4, 1, .6, .12]];
+const PREV_LEVELS = [[.8, .6, 1, .25], [.6, .45, 1, .2], [1, 1, .7, .55], [1, 1, .6, .5], [.4, 1, .6, .12], [.4, 1, 1, .25]];
 const withoutLevel = p => { const q = Object.assign({}, p); delete q.level; return canon(q); };
 for (const [i, pre, post, levels] of OLD_DRIVE){
   const d = clone(DEFAULT_CONFIG.presets[i]), ds = d.list.find(f=>f.effect==="distortion"), p = config.presets[i];
