@@ -1528,6 +1528,12 @@ $("#btn-save").addEventListener("click", async ()=>{
     notice(effectsOnly() ? "Saved config.json to the mic. It restarts by itself and the new presets are on now. The "+siteDevice.word("mid")+" button turns the page of presets."
       : "Saved config.json to the mic. It restarts by itself and the new presets are on now. It's still in edit mode, where it can't record: turn it off and on normally when you want to record samples.", "ok");
     track("save-to-mic-done");
+    // Say so when this site has newer firmware than the mic. Best effort: no note if it can't tell.
+    try {
+      const latest = firmwareVersion(await (await fetch("firmware/code.py", {cache:"no-store"})).text());
+      if (latest && (version === null || versionBelow(version, latest)))
+        $("#notice").append(" The mic has firmware " + (version || "from before 1.0") + " and " + latest + " is out. ", h("a",{href:"install.html#update"}, "Update it"), " in one step; your presets stay.");
+    } catch(e){}
   } catch(e){
     notice("The mic didn't accept the file. It's probably in play mode, where your computer can only read it. Turn the mic off, hold the orange button while you turn it on, then save again.", "bad");
   } finally { btn.disabled = false; }

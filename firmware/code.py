@@ -111,8 +111,9 @@ from recorder import Recorder, drive_free
 # The firmware's release number. The editor reads this line from the mic's
 # code.py before Save to mic, to check the presets only use settings this
 # firmware knows, so keep it on one line in this form. Raise it with every
-# release that adds a config setting, and add that setting to the editor's
-# FIRMWARE_NEEDS table with the new number.
+# release that adds a config setting, add that setting to the editor's
+# FIRMWARE_NEEDS table with the new number, and add a row for the release to
+# the "What's new" table on the install page, which its update check lists.
 FIRMWARE_VERSION = "1.4"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 

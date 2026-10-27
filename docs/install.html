@@ -205,7 +205,8 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
     </g>
   </svg>
   <h1>Install <span>fx-mic-mod</span></h1>
-  <p class="lede">Back up the samples and settings on your mic (the EP-2350, sold as the Ting and as the FX Mic), swap Teenage Engineering's firmware for CircuitPython, install fx-mic-mod in one click, and get back to stock whenever you want. Each step runs in the browser while the mic is plugged in, with a drag-and-drop route if the browser won't allow it. You only do this once. After that, you change presets and samples in the <a href="editor.html">editor</a>.</p>
+  <p class="lede">Back up the samples and settings on your mic (the EP-2350, sold as the Ting and as the FX Mic), swap Teenage Engineering's firmware for CircuitPython, install fx-mic-mod in one click, and get back to stock whenever you want. Each step runs in the browser while the mic is plugged in, with a drag-and-drop route if the browser won't allow it. You only do this once. After that, you change presets and samples in the <a href="editor.html">editor</a>, and when a newer fx-mic-mod comes out, <a href="#update">updating</a> is a single step with no reflashing.</p>
+  <div class="note calm" id="updateNote" hidden><b>fx-mic-mod <span id="updateNoteLatest"></span> is out.</b> The last version this browser put on your mic was <span id="updateNoteMine"></span>. <a href="#update">Check your mic and update</a> in one step: your presets and samples stay.</div>
   <div class="note" id="frameNote" hidden>
     <b>Drive and serial access are blocked in this view.</b> Chrome and Edge only let a page touch USB drives and serial ports when it runs as its own tab, and this page is running inside a frame. Every step still works by drag and drop. For one-click flashing, save the standalone copy and open it in Chrome or Edge on your computer.
     <div class="row" style="margin-top: 10px;"><button class="go" id="saveStandalone">Save standalone flasher (.html)</button><span class="status" id="standaloneStatus"></span></div>
@@ -215,6 +216,7 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
 <div class="wrap">
   <nav class="rail" aria-label="Steps">
     <ol id="railList">
+      <li><a href="#update"><span class="n">↻</span>Update firmware<span class="dot"></span></a></li>
       <li><a href="#prep"><span class="n">00</span>Before you start<span class="dot"></span></a></li>
       <li><a href="#backup"><span class="n">01</span>Back up the disk<span class="dot"></span></a></li>
       <li><a href="#stock"><span class="n">02</span>Download the files<span class="dot"></span></a></li>
@@ -229,10 +231,45 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
       <div><span>Drive access</span><span class="chip" id="chipFs">checking</span></div>
       <div><span>Serial port</span><span class="chip" id="chipSerial">checking</span></div>
       <div><span>Backup saved</span><span class="chip" id="chipBackup">not yet</span></div>
+      <div><span>Newest fx-mic-mod</span><span class="chip" id="chipLatest">checking</span></div>
     </div>
   </nav>
 
   <main>
+    <!-- update -->
+    <section class="step" id="update" data-step="update">
+      <div class="step-head"><span class="step-num">↻</span><h2>Already installed? Update the firmware</h2></div>
+      <p>If fx-mic-mod is already on your mic, a newer version is just new files copied onto CIRCUITPY. There's no boot mode, no reflashing CircuitPython and no backup to make, and your presets and samples stay as they are. The check below reads which version your mic has and tells you what's changed since.</p>
+      <ol class="how">
+        <li><b>Turn the mic on in edit mode</b>: hold the orange button while you squeeze the handle, with the mic plugged in. CIRCUITPY appears on your computer. (A normal power-on is fine for checking, but then your computer can't write to the drive, so it can't update.)</li>
+        <li><b>Click Check my mic</b> and pick CIRCUITPY. The page reads the version from the mic's <code>code.py</code> and compares it with the newest one on this site.</li>
+        <li><b>If there's a newer version, click Update.</b> It copies the new firmware files and leaves your <code>config.json</code> and samples alone. Then turn the mic off and on once, as after the first install.</li>
+      </ol>
+      <div class="tool">
+        <div class="row">
+          <button class="go" id="checkBtn">Check my mic</button>
+          <button id="updateBtn" hidden>Update</button>
+        </div>
+        <div class="status" id="checkStatus">Pick CIRCUITPY to see which version your mic has.</div>
+        <ul class="how" id="whatsNew" hidden></ul>
+        <div class="status" id="updateSpare" hidden></div>
+      </div>
+      <details><summary>Checking by hand</summary><p style="margin-top: 8px;">Open <code>code.py</code> on CIRCUITPY in any text editor and look for the line <code>FIRMWARE_VERSION = "…"</code> near the top. No such line means it's from before 1.0. The <a href="#console">serial console</a> also prints <code>fx-mic-mod firmware 1.4</code> (or whichever version) each time the code starts. To update without Chrome or Edge, copy the files listed under <b>Installing by hand</b> in <a href="#install">step 05</a> onto CIRCUITPY in edit mode, skipping <code>config.json</code> so your presets stay.</p></details>
+      <details><summary>What's new in each version</summary>
+        <div class="tablebox" style="max-height: none; margin-top: 10px;"><table>
+          <thead><tr><th>Version</th><th>Date</th><th>What changed</th></tr></thead>
+          <tbody id="fwLog">
+            <!-- One row per FIRMWARE_VERSION in firmware/code.py, newest first. The update check lists the rows newer than the mic's. -->
+            <tr data-version="1.4"><td>1.4</td><td>2026-10-27</td><td>Effects-only mode: trade the samples and record mode for up to 16 effect presets, in pages of four.</td></tr>
+            <tr data-version="1.3"><td>1.3</td><td>2026-10-27</td><td>Every sample slot plays the 1.2 way, so there's no playback setting to pick. Older configs with one-shot, hold or start/stop slots still load.</td></tr>
+            <tr data-version="1.2"><td>1.2</td><td>2026-10-27</td><td>One sample button does three things: tap to play the sample through, hold to play it only while you hold, double-tap to play it backwards.</td></tr>
+            <tr data-version="1.1"><td>1.1</td><td>2026-10-27</td><td>The vocoder effect, with a full squeeze to switch chord.</td></tr>
+            <tr data-version="1.0"><td>1.0</td><td>2026-10-27</td><td>Double your voice on the harmonizer, optional level normalizing for recorded takes, and a version number the editor checks before Save to mic.</td></tr>
+          </tbody>
+        </table></div>
+      </details>
+    </section>
+
     <!-- 00 -->
     <section class="step" id="prep" data-step="prep">
       <div class="step-head"><span class="step-num">00</span><h2>Before you start</h2><label class="mark"><input type="checkbox" data-done="prep"> Done</label></div>
@@ -798,46 +835,61 @@ while True:
       await d.getFileHandle(parts[parts.length - 1]); return true;
     } catch (e) { return false; }
   }
-  $("installBtn").addEventListener("click", async () => {
-    let files;
-    status("codeStatus", "Getting the fx-mic-mod files…");
+  async function fetchFirmware(statusId) {
+    status(statusId, "Getting the fx-mic-mod files…");
     try {
-      files = await Promise.all(FIRMWARE.map(async (name) => {
+      return await Promise.all(FIRMWARE.map(async (name) => {
         const r = await fetch("firmware/" + name, { cache: "no-store" });
         if (!r.ok) throw new Error(name + " (" + r.status + ")");
         return { name, data: await r.blob() };
       }));
     } catch (e) {
-      status("codeStatus", "Couldn't load the firmware files from this site: " + e.message + ". Use the hand install below.", "bad"); return;
+      status(statusId, "Couldn't load the firmware files from this site: " + e.message + ". Use the hand install in step 05.", "bad"); return null;
     }
-    const dir = await pickDir("readwrite", "codeStatus"); if (!dir) return;
+  }
+  // Copies the fx-mic-mod files to CIRCUITPY. Step 05 and the update both use it; an update keeps
+  // config.json and needs the driver already on the drive. Returns true once everything is copied.
+  async function installTo(dir, files, opt) {
+    const sid = opt.statusId;
     const bootOut = await tryRead(dir, "boot_out.txt");
-    if (bootOut === null) { status("codeStatus", `"${dir.name}" has no boot_out.txt, so it doesn't look like CIRCUITPY. Pick the drive that appeared after flashing.`, "bad"); return; }
-    $("bootOut").hidden = false; $("bootOut").textContent = "boot_out.txt\n" + bootOut.trim();
+    if (bootOut === null) { status(sid, `"${dir.name}" has no boot_out.txt, so it doesn't look like CIRCUITPY. Pick the drive that appeared after flashing.`, "bad"); return false; }
+    if (opt.bootOutId) { $(opt.bootOutId).hidden = false; $(opt.bootOutId).textContent = "boot_out.txt\n" + bootOut.trim(); }
     const m = /CircuitPython (\d+)\./.exec(bootOut);
-    if (m && m[1] !== "10") { status("codeStatus", `This mic runs CircuitPython ${m[1]}. fx-mic-mod and the driver bundle need 10.x. Flash 10.x in step 04 first.`, "bad"); return; }
+    if (m && m[1] !== "10") { status(sid, `This mic runs CircuitPython ${m[1]}. fx-mic-mod and the driver bundle need 10.x. Flash 10.x in step 04 first.`, "bad"); return false; }
+    const lib = opt.libFiles || [];
     const haveDriver = await hasFile(dir, "lib/" + DRIVER) && await hasFile(dir, "lib/" + REGISTER + "/register_bit.mpy");
-    if (!libFiles.length && !haveDriver) { status("codeStatus", `CIRCUITPY is missing lib/${DRIVER} or lib/${REGISTER}. Choose the bundle's lib folder first (step 1 above).`, "bad"); return; }
-    const keepConfig = $("keepConfig").checked && await hasFile(dir, "config.json");
+    if (!lib.length && !haveDriver) { status(sid, `CIRCUITPY is missing lib/${DRIVER} or lib/${REGISTER}. ` + (opt.update ? "Use step 05 instead, which copies them from Adafruit's library bundle." : "Choose the bundle's lib folder first (step 1 above)."), "bad"); return false; }
+    const keepConfig = opt.keepConfig && await hasFile(dir, "config.json");
     try {
-      await tidyDrive(dir);
-      let n = 0; const total = files.length + libFiles.length;
-      for (const f of libFiles) { await writeFile(dir, f.path, f.file); status("codeStatus", `Copying… ${++n}/${total}`); }
+      await tidyDrive(dir, opt.keepOld, opt.spareId);
+      let n = 0; const total = files.length + lib.length;
+      for (const f of lib) { await writeFile(dir, f.path, f.file); status(sid, `Copying… ${++n}/${total}`); }
       for (const f of files) {
         if (f.name === "config.json" && keepConfig) { n++; continue; }
-        if (f.name === "code.py" && $("keepOld").checked) {
+        if (f.name === "code.py" && opt.keepOld) {
           const old = await tryRead(dir, "code.py");
           if (old !== null) await writeFile(dir, "code_prev.py", old);
         }
         await writeFile(dir, f.name, f.data);
-        status("codeStatus", `Copying… ${++n}/${total}`);
+        status(sid, `Copying… ${++n}/${total}`);
       }
       const code = files.find(f => f.name === "code.py");
-      const ver = /^FIRMWARE_VERSION\s*=\s*["']([\d.]+)["']/m.exec(code ? await code.data.text() : "");
-      status("codeStatus", "Installed" + (ver ? " firmware " + ver[1] : "") + (keepConfig ? " (your config.json was kept)" : "") + ". The mic restarts its code by itself, but turn it off and on again once to finish, so the edit and record mode setup runs: hold the orange and " + (window.siteDevice ? siteDevice.word("mid") : "white") + " buttons together until the lights go out, let go, then squeeze the handle to turn it back on. White LED 1 staying lit means it worked; two blinks every few seconds means an error, which the serial console below will show. Open the serial console below to watch it start.", "ok");
-      markDone("install");
+      const ver = versionOf(code ? await code.data.text() : "");
+      if (ver) store.set("installed", ver);
+      status(sid, (opt.update ? "Updated to" : "Installed") + (ver ? " firmware " + ver : "") + (keepConfig ? " (your config.json was kept)" : "") + ". The mic restarts its code by itself, but turn it off and on again once to finish, so the edit and record mode setup runs: hold the orange and " + (window.siteDevice ? siteDevice.word("mid") : "white") + " buttons together until the lights go out, let go, then squeeze the handle to turn it back on. White LED 1 staying lit means it worked; two blinks every few seconds means an error, which the serial console " + (opt.update ? "in step 06 will show." : "below will show. Open the serial console below to watch it start."), "ok");
+      return true;
     } catch (e) {
-      status("codeStatus", "The mic didn't accept the files (" + e.message + "). If fx-mic-mod is already installed, the drive is read-only: turn the mic off, hold the orange button while you squeeze the handle to power it on, and try again. If CIRCUITPY is full, delete old files from lib/ first.", "bad");
+      status(sid, "The mic didn't accept the files (" + e.message + "). " + (opt.update
+        ? "It's probably powered on normally, where your computer can only read the drive. Turn the mic off, hold the orange button while you squeeze the handle to power it on, then click Check my mic again."
+        : "If fx-mic-mod is already installed, the drive is read-only: turn the mic off, hold the orange button while you squeeze the handle to power it on, and try again.") + " If CIRCUITPY is full, delete old files from lib/ first.", "bad");
+      return false;
+    }
+  }
+  $("installBtn").addEventListener("click", async () => {
+    const files = await fetchFirmware("codeStatus"); if (!files) return;
+    const dir = await pickDir("readwrite", "codeStatus"); if (!dir) return;
+    if (await installTo(dir, files, { statusId: "codeStatus", bootOutId: "bootOut", spareId: "spareStatus", libFiles, keepConfig: $("keepConfig").checked, keepOld: $("keepOld").checked })) {
+      markDone("install"); showLatest();
     }
   });
 
@@ -851,7 +903,7 @@ while True:
     if (h.kind === "file") return (await h.getFile()).size;
     let n = 0; for await (const [, c] of h.entries()) n += await sizeOf(c); return n;
   }
-  async function tidyDrive(dir) {
+  async function tidyDrive(dir, keepOld, spareId) {
     let samples = [];
     try { samples = (JSON.parse(await tryRead(dir, "config.json") || "{}").samples || []).map(x => x && x.file).filter(Boolean); } catch (e) {}
     for (let i = 1; i <= 4; i++) samples.push(i + ".wav");
@@ -859,7 +911,7 @@ while True:
     const look = async (d, prefix) => {
       for await (const [name, h] of d.entries()) {
         const path = prefix + name;
-        if (JUNK.test(name) || (path === "code_prev.py" && !$("keepOld").checked)) {
+        if (JUNK.test(name) || (path === "code_prev.py" && !keepOld)) {
           try { const n = await sizeOf(h); await d.removeEntry(name, { recursive: true }); freed += n; } catch (e) {}
         } else if (h.kind === "directory" && (path === "lib" || path === "lib/" + REGISTER)) await look(h, path + "/");
         else if (path.startsWith("lib/" + REGISTER + "/")) continue;
@@ -873,9 +925,76 @@ while True:
     const lines = [];
     if (freed) lines.push("Cleared " + Math.ceil(freed / 1024) + " KB of leftover files to make room for recordings.");
     if (other.length) lines.push("Also on the drive but not used by fx-mic-mod: " + other.join(", ") + ". Delete them if you don't need them, to make room for recordings.");
-    $("spareStatus").hidden = !lines.length;
-    status("spareStatus", lines.join(" "));
+    $(spareId).hidden = !lines.length;
+    status(spareId, lines.join(" "));
   }
+
+  // ---------- update check ----------
+  // The version is the FIRMWARE_VERSION line in code.py: the mic's copy against this site's.
+  // Firmware from before 1.0 has no such line. The rows of the "What's new" table say what
+  // each version added, so the check can list everything newer than the mic's.
+  function versionOf(codePy) { const m = /^FIRMWARE_VERSION\s*=\s*["']([\d.]+)["']/m.exec(codePy || ""); return m ? m[1] : null; }
+  function versionBelow(a, b) {
+    const x = String(a).split(".").map(n => parseInt(n, 10) || 0), y = String(b).split(".").map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0);
+    return false;
+  }
+  const CHANGES = [...document.querySelectorAll("#fwLog tr[data-version]")].map(tr => ({ version: tr.dataset.version, what: tr.cells[2].textContent }));
+  let latest = null, checkedDir = null;
+  // The note under the title: shown when this browser last installed an older version than the site has.
+  function showLatest() {
+    const mine = store.get("installed");
+    const stale = !!(latest && mine && versionBelow(mine, latest));
+    $("updateNote").hidden = !stale;
+    if (stale) { $("updateNoteLatest").textContent = latest; $("updateNoteMine").textContent = mine; }
+  }
+  fetch("firmware/code.py", { cache: "no-store" })
+    .then(r => r.ok ? r.text() : Promise.reject(new Error(r.status)))
+    .then(t => { latest = versionOf(t); $("chipLatest").textContent = latest || "unknown"; showLatest(); })
+    .catch(() => { $("chipLatest").textContent = "offline"; });
+
+  $("checkBtn").addEventListener("click", async () => {
+    $("updateBtn").hidden = true; $("whatsNew").hidden = true; $("updateSpare").hidden = true; checkedDir = null;
+    const dir = await pickDir("read", "checkStatus"); if (!dir) return;
+    if (await tryRead(dir, "boot_out.txt") === null) {
+      status("checkStatus", await tryRead(dir, "INFO_UF2.TXT") !== null
+        ? `"${dir.name}" is the boot drive. Turn the mic off, then hold orange while you squeeze the handle so CIRCUITPY appears, and check again.`
+        : `"${dir.name}" isn't CIRCUITPY. If it's TINGDISK or FX-MIC DISK, the mic still has Teenage Engineering's firmware, so start at step 00 to install fx-mic-mod.`, "bad");
+      return;
+    }
+    const code = await tryRead(dir, "code.py");
+    const mine = versionOf(code);
+    if (mine) store.set("installed", mine);
+    let what;
+    if (mine) what = "Your mic has fx-mic-mod " + mine + ".";
+    else if (code && /autotune/.test(code)) what = "Your mic has fx-mic-mod from before 1.0, which has no version number.";
+    else what = "Your mic runs CircuitPython but not fx-mic-mod" + (code ? " (its code.py is something else, such as Adafruit's demo)" : "") + ".";
+    if (!latest) { status("checkStatus", what + " This page couldn't load the newest version to compare with. Check your connection and try again.", "bad"); return; }
+    if (mine && !versionBelow(mine, latest)) {
+      status("checkStatus", what + (mine === latest ? " That's the newest. Nothing to update." : " That's newer than this site's " + latest + ", so there's nothing to update."), "ok");
+      showLatest(); return;
+    }
+    const news = CHANGES.filter(c => (!mine || versionBelow(mine, c.version)) && !versionBelow(latest, c.version));
+    $("whatsNew").textContent = "";
+    for (const c of news) { const li = document.createElement("li"), b = document.createElement("b"); b.textContent = c.version + ": "; li.append(b, c.what); $("whatsNew").append(li); }
+    $("whatsNew").hidden = !news.length;
+    status("checkStatus", what + " Version " + latest + " is out." + (news.length ? " What's new:" : ""), "ok");
+    $("updateBtn").textContent = "Update to " + latest; $("updateBtn").hidden = false;
+    checkedDir = dir; showLatest();
+  });
+
+  $("updateBtn").addEventListener("click", async () => {
+    if (!checkedDir) return;
+    // The check only asked to read the drive; writing needs a second yes.
+    let perm = "denied";
+    try { perm = await checkedDir.requestPermission({ mode: "readwrite" }); } catch (e) {}
+    if (perm !== "granted") { status("checkStatus", "The browser needs your OK to change files on CIRCUITPY. Click Update again and allow editing.", "bad"); return; }
+    const files = await fetchFirmware("checkStatus"); if (!files) return;
+    $("whatsNew").hidden = true;
+    if (await installTo(checkedDir, files, { statusId: "checkStatus", spareId: "updateSpare", keepConfig: true, keepOld: false, update: true })) {
+      $("updateBtn").hidden = true; checkedDir = null; showLatest();
+    }
+  });
 
   // ---------- 05 samples ----------
   // The firmware plays only 16-bit mono WAVs at its own rate (24 kHz unless config.json sets
