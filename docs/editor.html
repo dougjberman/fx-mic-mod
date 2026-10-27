@@ -603,7 +603,7 @@ STARTERS.push(
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]},
   {name:"Squeeze for minor", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"major",squeeze_chord:"minor",bands:10,octave:-1,breath:.3},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.5,damp:.5,mix:.25}]},
   {name:"Night drive", list:[{effect:"autotune",key:"A",scale:"minor",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"key_triad",bands:10,octave:-1,breath:.35},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.35},{effect:"freeverb",roomsize:.55,damp:.5,mix:.3}]},
-  {name:"Night call", list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:11,octave:0,breath:.7,mix:.9,gate:-60,squeeze_chord:"key_triad"}]},
+  {name:"Night call", list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:8,octave:0,breath:.7,mix:.9,gate:-60,squeeze_chord:"key_triad"}]},
   // a hard-tuned one-note robot, after Daft Punk's "Harder, Better, Faster, Stronger"
   {name:"Harder better faster stronger", level:.45, list:[{effect:"autotune",key:"F#",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:11,octave:0,breath:.4,mix:1,gate:-55}]});
 const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[["Squeeze for backups",1],["Night call",.7],["Dream swirl",.4],["Squeeze monster",.25]].map(([n,lv])=>[STARTERS.find(s=>s.name===n),lv]).map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
@@ -1027,7 +1027,12 @@ function vocoderCard(p, fx){
   body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
     h("div",{class:"seg", role:"group", "aria-label":"Carrier octave"},
       [[-2,"−2"],[-1,"−1"],[0,"As sung"],[1,"+1"],[2,"+2"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
-  body.append(sliderEl({label:"Bands",min:4,max:11,step:1,ends:["Smooth, lo-fi","Clear words"]}, typeof fx.bands==="number"?fx.bands:8, v=>{ fx.bands=v; changed(); }));
+  // with your voice in the mix its pitch shifter runs too, and the mic can only run 8 bands beside it
+  const voiced = !(typeof (fx.mix ?? 1)==="number" && (fx.mix ?? 1) >= 1);
+  const maxBands = voiced ? 8 : 11;
+  if (typeof fx.bands==="number" && fx.bands > maxBands) fx.bands = maxBands;
+  body.append(sliderEl({label:"Bands",min:4,max:maxBands,step:1,ends:["Smooth, lo-fi","Clear words"]}, typeof fx.bands==="number"?fx.bands:8, v=>{ fx.bands=v; changed(); }));
+  if (voiced) body.append(h("p",{class:"small muted"}, "Up to 8 bands while your voice is in the mix. Set Amount to 100% for up to 11."));
   body.append(sliderEl({label:"Breath",min:0,max:1,step:.01,ends:["Off","Hissy s and t"]}, typeof fx.breath==="number"?fx.breath:0, v=>{ fx.breath=v; changedQuiet(); }));
   // noise gate: room noise (a fan, an air conditioner) shouldn't play the synth
   body.append(sliderEl({label:"Noise gate",min:-80,max:-20,step:1,unit:"dB",offAt:-80,ends:["Off","Only loud singing"]}, typeof fx.gate==="number"?fx.gate:-50, v=>{ if (v===-50) delete fx.gate; else fx.gate=v; changedQuiet(); }));
@@ -1038,7 +1043,7 @@ function vocoderCard(p, fx){
       h("button",{class:"btn small ghost", onclick:()=>{ fx.mix=1; changed(); }}, "Use a fixed amount")),
     h("p",{class:"small muted"}, "A light squeeze is your own voice, a full squeeze is all vocoder.")));
   else {
-    body.append(sliderEl({label:"Amount",min:0,max:1,step:.01,ends:["Your voice","All vocoder"]}, typeof fx.mix==="number" ? fx.mix : 1, v=>{ if (v>=1) delete fx.mix; else fx.mix=v; changedQuiet(); }));
+    body.append(sliderEl({label:"Amount",min:0,max:1,step:.01,ends:["Your voice","All vocoder"]}, typeof fx.mix==="number" ? fx.mix : 1, v=>{ if (v>=1) delete fx.mix; else fx.mix=v; if ((v<1) !== voiced) changed(); else changedQuiet(); }));
     const id = nid("vsq");
     body.append(h("label",{class:"switch small", for:id, style:"margin-left:2px"},
       h("input",{type:"checkbox", id, disabled:(keyJob||sq)||null, onchange:()=>{ fx.mix="$handle"; changed(); }}), h("span",{class:"track"}),
@@ -1764,6 +1769,9 @@ for (const [i, json] of OLD_DEFAULTS)
     config.presets[0] = clone(DEFAULT_CONFIG.presets[0]); config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
 // Night call's first settings, for a day: key triads with 7ths on a squeeze, level 0.45.
 { const p = config.presets[1], old = {name:"Night call", level:.45, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:10,octave:0,breath:.7,mix:1,chord:"key_triad",gate:-60,squeeze_chord:"key_seventh"}]};
+  if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
+// Then 11 bands, which with the voice in overflowed on a Ting; untouched copies take 8.
+{ const p = config.presets[1], old = {name:"Night call", level:.7, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:11,octave:0,breath:.7,mix:.9,gate:-60,squeeze_chord:"key_triad"}]};
   if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
 // Slots 3 and 4 used to default to hold and start/stop. Untouched ones move to tap to play.
 [[2,"hold"],[3,"startstop"]].forEach(([i, mode]) => { const s = config.samples[i];

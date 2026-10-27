@@ -718,6 +718,10 @@ def key_by_name(name):
 
 VOCODER_WAVEFORMS = ("saw", "square", "pulse", "saw_square")
 VOCODER_MAX_BANDS = 11
+
+
+
+VOCODER_VOICE_MAX_BANDS = 8
 VOCODER_LOW_HZ = 180.0
 VOCODER_HIGH_HZ = 5000.0
 VOCODER_BREATH_HZ = 4000.0
@@ -1272,6 +1276,10 @@ class Autotune:
         self.vocoder_mix = vocoder_mix
         self._vocoder_level = None
         if vocoder is not None:
+            if not voiceless and vocoder_bands > VOCODER_VOICE_MAX_BANDS:
+                print("vocoder: {} bands with the voice in is more than the mic can run; "
+                      "using {}".format(vocoder_bands, VOCODER_VOICE_MAX_BANDS))
+                vocoder_bands = VOCODER_VOICE_MAX_BANDS
             self.vocoder = Vocoder(fmt["sample_rate"], vocoder, vocoder_bands,
                                    vocoder_octave, vocoder_breath, vocoder_chord, vocoder_gate,
                                    vocoder_squeeze_chord)

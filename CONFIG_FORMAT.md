@@ -99,7 +99,7 @@ is written while the other plays. If an autotune preset crackles steadily and cl
 |---|---|
 | `autotune` **(new)** | `key` "C".."B" (sharps, e.g. "F#"), `scale` "chromatic" / "major" / "minor", `speed` (B) 0 = natural .. 1 = hard snap, `humanize` 0..1, `mix` (B), `grain_size` int (default 512), `density` int (default 2), `squeeze_key` / `squeeze_scale` (same values as key/scale: the key used while the handle is fully squeezed) |
 | `harmonizer` **(new)** | `chord` (see below, default "major"), `inversion` int (default 0), `octave` int (default 0, moves the harmony by octaves), `level` (B) harmony volume against the voice, 0..1 (default 0.7), `double` "above" or "below" (optional: one more voice on your note an octave up or down; chords of three notes or fewer) |
-| `vocoder` **(new)** | `waveform` "saw" / "square" / "pulse" / "saw_square" (default "saw"), `bands` int 4..11 (default 8), `octave` int -2..2 (default 0), `breath` 0..1 (default 0), `chord` (optional: "key_triad", "key_seventh", "major", "minor", "7", "maj7", "m7", "power", "dim", "m7b5"), `gate` dB, -80..-20 (default -50; -80 = off), `squeeze_chord` (optional: a `chord` value, or "none" for one note), `mix` (B) vocoder against the voice, 0..1 (default 1 = vocoder only) |
+| `vocoder` **(new)** | `waveform` "saw" / "square" / "pulse" / "saw_square" (default "saw"), `bands` int 4..11 (default 8; at most 8 when `mix` isn't a plain 1), `octave` int -2..2 (default 0), `breath` 0..1 (default 0), `chord` (optional: "key_triad", "key_seventh", "major", "minor", "7", "maj7", "m7", "power", "dim", "m7b5"), `gate` dB, -80..-20 (default -50; -80 = off), `squeeze_chord` (optional: a `chord` value, or "none" for one note), `mix` (B) vocoder against the voice, 0..1 (default 1 = vocoder only) |
 | `pitch_shift` | `semitones` (B), `window` int and `overlap` int, both in **bytes** of 16-bit audio (so samples = bytes / 2, at 16 kHz before the rate scaling), `mix` (B) |
 | `granular_pitch_shift` | `semitones` (B), `grain_size` int samples, `density` int 1..8, `spread` float 0..1 (fixed at load, not a block), `mix` (B) |
 | `distortion` | `drive` (B), `pre_gain` (B, dB), `post_gain` (B, dB), `mode` = an `audiofilters.DistortionMode` name, case-insensitive ("clip", "lofi", "overdrive", "waveshape"; "overdrive" ignores `drive`, `pre_gain` sets how hard it is pushed), `soft_clip` bool, `mix` (B) |
@@ -206,6 +206,8 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
 - `mix` m: the voice plays at `1 - m` and the vocoder at `m`. A plain `1` (the default) leaves the
   voice out altogether, and then the mic doesn't run the voice's pitch shifter at all. `"$handle"`
   brings the vocoder in with the squeeze, which can't be combined with `squeeze_key` / `squeeze_scale`.
+  With the voice in (any `mix` but a plain `1`), its shifter runs beside the synth and `bands` stops
+  at 8: on a Ting, 11 bands plus the voice overflowed, while 8 plus the voice, or 11 alone, ran clean.
   Source of truth: `firmware/autotune.py` (`Vocoder`, `VOCODER_*`).
 
 ## Firmware behaviour the preview mirrors

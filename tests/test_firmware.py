@@ -804,6 +804,14 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertIn("vocoder chord now minor", out)
         self.assertLess(out.index("vocoder chord now minor"), out.index("vocoder chord now major"))
 
+    def test_vocoder_bands_cap_with_the_voice(self):
+        config = {"name": "V", "presets": [{"list": [
+            {"effect": "vocoder", "bands": 11, "mix": 0.9}]}], "samples": []}
+        root, out, s = run("level", config)
+        self.assertIn("using 8", out)
+        voc, = s["vocoders"]
+        self.assertEqual(len(voc["hz"]), 8)
+
     def test_vocoder_with_the_voice(self):
         config = {"name": "V", "presets": [{"list": [
             {"effect": "vocoder", "waveform": "pulse", "mix": "$handle"}]}], "samples": []}
