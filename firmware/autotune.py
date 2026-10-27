@@ -98,6 +98,9 @@ RENDER_HYST_NS = 2000000
 # picked to match.
 FEED_SYNC = True
 BLOCK_NS = 16000000     # one BLOCK_SIZE of audio, at any rate
+# The pitch work runs in a wait for the chain only if the wait is this much
+# longer than it has lately taken (see step()).
+ANALYSE_SPARE_NS = 1000000
 
 # Retune speed. `speed` 0..1 (0 = natural, 1 = hard snap) is mapped to the
 # fraction of the remaining correction applied per 16 ms block, from
@@ -752,6 +755,8 @@ class Autotune:
         self._waiting = False   # the last write near a render waited for it
         self._turn = 0
         self.busy_ms = 0.0
+        self.wait_ms = 0.0      # of that pass, spent waiting for the chain
+        self._analyse_ns = 0    # what the pitch work costs, a slowly falling max
         # Mic level, 0 or 1, applied before pitch detection. Used when
         # samples are mixed into this stage, so the paddle can mute the mic
         # without muting the sample.
@@ -954,6 +959,18 @@ class Autotune:
         print("feed sync: counting renders, {} in {:.0f} ms, {} since the feed started; every {} ms".format(
             renders, (last[0] - first[0]) / 1e6, self._renders, self._period // 1000000))
         return True
+
+    def _render_ahead(self):
+        """How long until the render that _wait_for_render would wait for,
+        in ns, or 0 when the write needn't wait. Changes nothing."""
+        due, period = self._burst_due, self._period
+        if not self._step or due is None or not period:
+            return 0
+        t = time.monotonic_ns()
+        while due + RENDER_GUARD_NS <= t:
+            due += period
+        near = BLOCK_NS // 2 + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
+        return due - t if 0 < due - t < near else 0
 
     def _wait_for_render(self):
         """With the counter: if a render is due less than half a block
@@ -1206,11 +1223,33 @@ class Autotune:
         # The shift amount set below applies from the next grain. (The Python
         # OLA fallback shifts the block itself, so it still writes at the end.)
         self._noise_gate(block)
+        waited = 0
         if self.ola is None:
-            began += self._wait_out_burst()  # waiting is not work
+            # A write due just before a render waits for it, up to half a
+            # block. On a busy preset with a sample in, that wait plus the
+            # pitch work after the write ran past the next mic block (an
+            # overflow, and the sample played slow). So when the wait is
+            # longer than the pitch work, do the pitch work in it.
+            early = self._render_ahead() > self._analyse_ns + ANALYSE_SPARE_NS
+            if early:
+                self._analyse(block, speed_override)
+            waited = self._wait_out_burst()  # waiting is not work
             self._feed_block(block)
+            if not early:
+                self._analyse(block, speed_override)
+        else:
+            self._analyse(block, speed_override)
         if self.sample is not None:
             self._sample_ready = self.sample.read(self.sample_gain)
+        # Python time this block took, in ms. Over ~16 ms (one block of audio)
+        # and the mic overflows; code.py prints it with each overflow.
+        self.wait_ms = waited / 1e6
+        self.busy_ms = (time.monotonic_ns() - began - waited) / 1e6
+        return got
+
+    def _analyse(self, block, speed_override=None):
+        """Find the pitch in the latest window and set the shift amounts."""
+        began = time.monotonic_ns()
         window = self._window
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]
         window[BLOCK_SIZE:BUFFER_SIZE] = block
@@ -1262,10 +1301,8 @@ class Autotune:
             for voice, interval in zip(self.voices, self._intervals):
                 voice.semitones = self.correction + interval
             self._set_levels()
-        # Python time this block took, in ms. Over ~16 ms (one block of audio)
-        # and the mic overflows; code.py prints it with each overflow.
-        self.busy_ms = (time.monotonic_ns() - began) / 1e6
-        return got
+        cost = time.monotonic_ns() - began
+        self._analyse_ns = max(cost, self._analyse_ns - self._analyse_ns // 16)
 
 
 

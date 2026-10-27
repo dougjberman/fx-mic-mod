@@ -100,6 +100,9 @@ FEED_SYNC = True
 BLOCK_NS = 16000000
 
 
+ANALYSE_SPARE_NS = 1000000
+
+
 
 
 NATURAL_RATE = 0.08
@@ -752,6 +755,8 @@ class Autotune:
         self._waiting = False
         self._turn = 0
         self.busy_ms = 0.0
+        self.wait_ms = 0.0
+        self._analyse_ns = 0
 
 
 
@@ -954,6 +959,18 @@ class Autotune:
         print("feed sync: counting renders, {} in {:.0f} ms, {} since the feed started; every {} ms".format(
             renders, (last[0] - first[0]) / 1e6, self._renders, self._period // 1000000))
         return True
+
+    def _render_ahead(self):
+        0
+
+        due, period = self._burst_due, self._period
+        if not self._step or due is None or not period:
+            return 0
+        t = time.monotonic_ns()
+        while due + RENDER_GUARD_NS <= t:
+            due += period
+        near = BLOCK_NS // 2 + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
+        return due - t if 0 < due - t < near else 0
 
     def _wait_for_render(self):
         0
@@ -1206,11 +1223,33 @@ class Autotune:
 
 
         self._noise_gate(block)
+        waited = 0
         if self.ola is None:
-            began += self._wait_out_burst()
+
+
+
+
+
+            early = self._render_ahead() > self._analyse_ns + ANALYSE_SPARE_NS
+            if early:
+                self._analyse(block, speed_override)
+            waited = self._wait_out_burst()
             self._feed_block(block)
+            if not early:
+                self._analyse(block, speed_override)
+        else:
+            self._analyse(block, speed_override)
         if self.sample is not None:
             self._sample_ready = self.sample.read(self.sample_gain)
+
+
+        self.wait_ms = waited / 1e6
+        self.busy_ms = (time.monotonic_ns() - began - waited) / 1e6
+        return got
+
+    def _analyse(self, block, speed_override=None):
+        0
+        began = time.monotonic_ns()
         window = self._window
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]
         window[BLOCK_SIZE:BUFFER_SIZE] = block
@@ -1262,10 +1301,8 @@ class Autotune:
             for voice, interval in zip(self.voices, self._intervals):
                 voice.semitones = self.correction + interval
             self._set_levels()
-
-
-        self.busy_ms = (time.monotonic_ns() - began) / 1e6
-        return got
+        cost = time.monotonic_ns() - began
+        self._analyse_ns = max(cost, self._analyse_ns - self._analyse_ns // 16)
 
 
 

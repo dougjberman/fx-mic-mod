@@ -352,14 +352,15 @@ class LoaderTests(unittest.TestCase):
         # On the harmonizer the chain renders about 1 ms after a mic block
         # lands, while the block is being written. Writes that fall either
         # side of it at random repeat and skip blocks; the guard makes them
-        # all land after it, so every block is read once, in order.
+        # all land after it, so every block is read once, in order. That
+        # holds with the pitch work done in the wait, even when it overruns.
         import array
         import random
         import autotune
         A, n, B = autotune.Autotune, autotune.BLOCK_SIZE, autotune.BLOCK_NS
         rng = random.Random(3)
         for render_after in (0.2, 0.6, 1.0, 1.5, 2.5, 5.0, 8.0, 11.0, 15.5, 20.0, 30.0):
-            for length_ms in (3, 12, 14.5):
+            for length_ms, work_ms in ((3, 0), (12, 0), (14.5, 0), (3, 4), (3, 7), (12, 4)):
                 h = A.__new__(A)
                 h._out = array.array("h", [-1] * (2 * n))
                 view = memoryview(h._out)
@@ -395,13 +396,16 @@ class LoaderTests(unittest.TestCase):
                 try:
                     for m in range(1, 60):
                         run_to(max(state["t"], m * B + int(rng.uniform(0.3, 1.1) * 1000000)))
+                        if work_ms and h._render_ahead() > work_ms * 1000000:
+                            # the pitch work, done in the wait (it can overrun)
+                            run_to(state["t"] + int(work_ms * rng.uniform(0.5, 1.6) * 1000000))
                         h._wait_out_burst()
                         h._feed_block(array.array("h", [m] * n))
                 finally:
                     autotune.time.monotonic_ns = saved
                 got = [blk for pair in reads[2:-1] for blk in pair]
                 self.assertEqual(got, list(range(got[0], got[0] + len(got))),
-                                 (render_after, length_ms))
+                                 (render_after, length_ms, work_ms))
 
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
