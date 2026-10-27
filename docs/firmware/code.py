@@ -99,7 +99,7 @@ from recorder import Recorder, drive_free
 
 
 
-FIRMWARE_VERSION = "1.2"
+FIRMWARE_VERSION = "1.3"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 
@@ -214,6 +214,7 @@ HANDLE_DEAD_ZONE = 0.4
 
 
 
+
 TAP_HOLD_SECONDS = 0.25
 DOUBLE_TAP_SECONDS = 0.3
 
@@ -293,9 +294,6 @@ class DataContext:
         self.current_wave = None
 
 
-        self.current_playmode = "oneshot"
-
-
         self.current_effects = []
 
 
@@ -304,8 +302,6 @@ class DataContext:
         self.current_source = None
 
         self.current_path = None
-
-
 
 
         self.wave_playing = False
@@ -383,7 +379,6 @@ def at_rate(effects):
 
 
 PRESETS = [dict(p, list=at_rate(p.get("list"))) if isinstance(p, dict) else p for p in PRESETS]
-
 
 
 SAMPLES = load_samples(CONFIG, max_samples=MAX_SAMPLES)
@@ -852,11 +847,8 @@ def update_white_leds(ctx):
         _led.value = index < ctx.white_active
 
 
-def build_sample_chain(wave, sample, loop):
+def build_sample_chain(wave, sample):
     0
-
-
-
 
 
 
@@ -879,8 +871,8 @@ def build_sample_chain(wave, sample, loop):
 
         return [], wave
     for index in range(len(chain) - 1, 0, -1):
-        chain[index].play(chain[index - 1], loop=loop)
-    chain[0].play(wave, loop=loop)
+        chain[index].play(chain[index - 1])
+    chain[0].play(wave)
     return chain, chain[-1]
 
 
@@ -898,11 +890,9 @@ def load_selected_wave_sample(ctx):
 
 
 
-
     unload_wave_sample(ctx)
 
     sample = sample_for_slot(ctx.white_active)
-    ctx.current_playmode = sample["playmode"]
     path = "/{}".format(sample["file"])
     ctx.current_path = path
     try:
@@ -927,19 +917,18 @@ def load_selected_wave_sample(ctx):
         sample = dict(sample, effects=[])
     try:
         ctx.current_effects, ctx.current_source = build_sample_chain(
-            ctx.current_wave, sample, loop=ctx.current_playmode != "oneshot"
+            ctx.current_wave, sample
         )
     except (ValueError, MemoryError) as error:
         print("{} effects failed: {}".format(path, error))
         ctx.current_effects, ctx.current_source = [], ctx.current_wave
 
     print(
-        "loaded {} ({} Hz, {} ch, {} bit, {} mode, {} effect(s))".format(
+        "loaded {} ({} Hz, {} ch, {} bit, {} effect(s))".format(
             path,
             ctx.current_wave.sample_rate,
             ctx.current_wave.channel_count,
             ctx.current_wave.bits_per_sample,
-            ctx.current_playmode,
             len(ctx.current_effects),
         )
     )
@@ -954,7 +943,6 @@ def unload_wave_sample(ctx):
     if ctx.current_wave is not None:
         ctx.current_wave.deinit()
         ctx.current_wave = None
-    ctx.current_playmode = "oneshot"
     ctx.current_source = None
     if ctx.reversed_wave is not None:
         ctx.reversed_wave.deinit()
@@ -969,7 +957,6 @@ def sample_for_slot(slot):
         return SAMPLES[slot - 1]
     return {
         "file": "{}.wav".format(slot),
-        "playmode": "oneshot",
         "effects": [],
         "blocks": {},
     }
@@ -1019,12 +1006,12 @@ def reversed_wave(ctx):
     return ctx.reversed_wave
 
 
-def start_sample(ctx, loop=False, reverse=False):
+def start_sample(ctx, reverse=False):
     0
 
     if THROUGH_PRESET and ctx.tune is not None:
         try:
-            ctx.tune.play_sample(ctx.current_path, loop, reverse)
+            ctx.tune.play_sample(ctx.current_path, reverse=reverse)
         except (OSError, ValueError) as error:
             print("{} can't go through autotune: {}".format(ctx.current_path, error))
         return
@@ -1034,12 +1021,12 @@ def start_sample(ctx, loop=False, reverse=False):
     source = wave
     if ctx.current_effects:
 
-        ctx.current_effects[0].play(wave, loop=loop)
+        ctx.current_effects[0].play(wave)
         source = ctx.current_source
     try:
         voice = sample_voice(ctx)
         voice.level = SAMPLE_LEVEL
-        voice.play(source, loop=loop)
+        voice.play(source)
     except (ValueError, RuntimeError) as error:
         print("{} can't play: {}".format(ctx.current_path, error))
 
@@ -1080,37 +1067,15 @@ def play_current_wave_sample(ctx, at=0):
 
 
 
-
-
-
-
-
-
     if ctx.current_source is None:
         print("no wave loaded for LED {}".format(ctx.white_active))
         return
 
-    if ctx.current_playmode == "auto":
-        double = ctx.tap_at is not None and ms_between(ctx.tap_at, at) <= DOUBLE_TAP_SECONDS * 1000
-        ctx.press_at, ctx.press_double, ctx.tap_at = at, double, None
-        start_sample(ctx, reverse=double)
-        ctx.wave_playing = True
-        print("playing {} ({})".format(ctx.white_active, "double tap: backwards" if double else "auto"))
-    elif ctx.current_playmode == "oneshot":
-        start_sample(ctx)
-        print("playing {} (oneshot)".format(ctx.white_active))
-    elif ctx.current_playmode == "hold":
-        start_sample(ctx, loop=True)
-        ctx.wave_playing = True
-        print("playing {} (hold)".format(ctx.white_active))
-    elif ctx.current_playmode == "startstop":
-        if ctx.wave_playing:
-            stop_current_wave(ctx)
-            print("stopped {} (startstop)".format(ctx.white_active))
-        else:
-            start_sample(ctx, loop=True)
-            ctx.wave_playing = True
-            print("playing {} (startstop)".format(ctx.white_active))
+    double = ctx.tap_at is not None and ms_between(ctx.tap_at, at) <= DOUBLE_TAP_SECONDS * 1000
+    ctx.press_at, ctx.press_double, ctx.tap_at = at, double, None
+    start_sample(ctx, reverse=double)
+    ctx.wave_playing = True
+    print("playing {}{}".format(ctx.white_active, " (double tap: backwards)" if double else ""))
 
 
 def release_current_wave(ctx, at=0):
@@ -1119,17 +1084,16 @@ def release_current_wave(ctx, at=0):
 
 
 
-    if ctx.current_playmode == "auto" and ctx.wave_playing:
-        held = ms_between(ctx.press_at, at)
-        if held >= TAP_HOLD_SECONDS * 1000:
-            stop_current_wave(ctx)
-            print("stopped {} (held {} ms)".format(ctx.white_active, held))
-        elif not ctx.press_double:
 
-            ctx.tap_at = ctx.press_at
-    elif ctx.current_playmode == "hold":
+    if not ctx.wave_playing:
+        return
+    held = ms_between(ctx.press_at, at)
+    if held >= TAP_HOLD_SECONDS * 1000:
         stop_current_wave(ctx)
-        print("stopped {} (hold released)".format(ctx.white_active))
+        print("stopped {} (held {} ms)".format(ctx.white_active, held))
+    elif not ctx.press_double:
+
+        ctx.tap_at = ctx.press_at
 
 
 
@@ -1267,7 +1231,7 @@ print(
     )
 )
 print('handle travel = "$handle" block, 0.0 (out) to 1.0 (in)')
-print("BOTTOM on auto: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
+print("BOTTOM: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
     TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
 
 

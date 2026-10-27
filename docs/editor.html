@@ -58,6 +58,12 @@ h3{font-family:var(--f-display);font-size:17px;margin:0;font-weight:700}
 p{margin:0}
 .muted{color:var(--muted)}
 .small{font-size:13px}
+.btn-guide{display:grid;gap:8px}
+.btn-guide h3{margin:0;font-size:15px}
+.btn-guide table{border-collapse:collapse;width:100%;font-size:14px}
+.btn-guide th,.btn-guide td{text-align:left;vertical-align:top;padding:8px 12px 8px 0;border-bottom:1px solid var(--line)}
+.btn-guide thead th{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.btn-guide tbody th{white-space:nowrap;font-weight:700}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 button,select,input,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -461,6 +467,18 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
         <li>The audio you record takes a second to process and save to the mic, and a light runs down the mic from top to bottom while it does. Silence before and after your audio is trimmed, unless you turn that off below. Takes keep the volume you recorded them at, unless you choose Normalize below.</li>
       </ul>
     </div>
+    <div class="btn-guide">
+      <h3>The <span data-dw="bot">grey</span> button</h3>
+      <table>
+        <thead><tr><th scope="col">Do this</th><th scope="col">The sample</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Tap</th><td>Plays all the way through, once. Tap again while it plays to start it over.</td></tr>
+          <tr><th scope="row">Press and hold</th><td>Plays while you hold, and stops when you let go.</td></tr>
+          <tr><th scope="row">Double-tap</th><td>Plays backwards from the end. Hold the second tap to stop it when you let go.</td></tr>
+        </tbody>
+      </table>
+      <p class="small muted">Every press starts the sample straight away. A press counts as a hold once it lasts a quarter of a second, and a second tap within about a third of a second makes a double-tap. Use the <span data-dw="bot">grey</span> button on each slot below to try it here.</p>
+    </div>
     <div id="sample-fx"></div>
     <div class="samples" id="samples"></div>
   </section>
@@ -585,7 +603,6 @@ const STAGE_FX = ["autotune", "harmonizer", "vocoder"];
 const VOCODER_COST = 12, VOCODER_BAND_COST = 2.5;
 const VOCODER_WAVES = [["saw","Saw (buzzy)"],["square","Square (hollow)"],["saw_square","Saw + square (full)"],["pulse","Pulse (nasal)"]];
 const FILTER_MODES = [["high_pass","Thin (cut lows)"],["low_pass","Muffle (cut highs)"],["band_pass","Telephone (band)"],["notch","Notch"]];
-const PLAYMODES = [["auto","Auto"],["oneshot","Tap to play"],["hold","Hold to play"],["startstop","Tap start / stop"]];
 
 const STARTERS = [
   {name:"Hard tune", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"freeverb",roomsize:0,damp:.6,mix:.19}]},
@@ -632,8 +649,9 @@ function normalizeConfig(c){
     const rest = list.filter(fx => !STAGE_FX.includes(fx.effect));
     out.presets.push(Object.assign({}, p, {list: tunes.slice(0,1).concat(harms.slice(0,1), rest)}));
   });
-  (Array.isArray(c.samples) ? c.samples : []).slice(0,4).forEach(s => out.samples.push(Object.assign({playmode:"oneshot"}, s)));
-  while (out.samples.length < 4) out.samples.push({file:(out.samples.length+1)+".wav", playmode:"oneshot"});
+  // Every slot plays tap / hold / double-tap now (firmware 1.2 "auto"); older playmodes are dropped.
+  (Array.isArray(c.samples) ? c.samples : []).slice(0,4).forEach(s => out.samples.push(Object.assign({}, s, {playmode:"auto"})));
+  while (out.samples.length < 4) out.samples.push({file:(out.samples.length+1)+".wav", playmode:"auto"});
   return out;
 }
 
@@ -647,7 +665,7 @@ function serialize(){
     q.list = p.list; out.presets.push(q);
   });
   config.samples.forEach(s => {
-    const q = {file: s.file, playmode: s.playmode || "oneshot"};
+    const q = {file: s.file, playmode: "auto"};
     if (s.blocks && Object.keys(s.blocks).length) q.blocks = s.blocks;
     if (s.effects && s.effects.length) q.effects = s.effects;
     for (const k of Object.keys(s)) if (!(k in q) && !["blocks","effects"].includes(k)) q[k] = s[k];
@@ -1223,10 +1241,8 @@ function renderSamples(){
     const body = h("div",{class:"body"},
       h("div",{class:"row spread"},
         h("div",{class:"row"}, h("b",{}, "Slot "+(i+1)), h("input",{class:"text mono", id:"sample-file-"+i, value:s.file, "aria-label":"Slot "+(i+1)+" file name", size:"10",
-          oninput:(e)=>{ s.file=e.target.value.trim()||((i+1)+".wav"); changedQuiet(); }})),
-        h("div",{class:"seg", role:"group", "aria-label":"Slot "+(i+1)+" playback"}, PLAYMODES.map(([v,l])=>h("button",{"aria-pressed":String((s.playmode||"oneshot")===v), onclick:()=>{ s.playmode=v; changed(); }}, l)))),
+          oninput:(e)=>{ s.file=e.target.value.trim()||((i+1)+".wav"); changedQuiet(); }}))),
       slotPlayer(i));
-    if (s.playmode === "auto") body.append(h("p",{class:"small muted"}, "Tap to play it through, hold to play it until you let go, double-tap to play it backwards."));
     if (through){
       if (s.effects.length) body.append(h("p",{class:"small muted"}, s.effects.length+" effect"+(s.effects.length>1?"s":"")+" kept for \u201cHardcode effects below\u201d, unused now."));
     } else {
@@ -1259,32 +1275,21 @@ async function playSlot(i, loop, reverse){
   trySend({samples: slotPayload(), sampleFx: config.sample_fx || "own"});
   trySend({play: {idx: i, loop, reverse: !!reverse}});
 }
-// The bottom (grey or white) button, per the slot's playmode, as the firmware does it:
-// tap to play = once from the top; hold to play = loops while held; tap start / stop = toggles a loop.
-// Auto = plays at once; held TAP_HOLD_MS or more, letting go stops it; a press within DOUBLE_TAP_MS
-// of a tap's press plays it backwards (firmware TAP_HOLD_SECONDS / DOUBLE_TAP_SECONDS).
+// The bottom (grey or white) button, as the firmware does it: plays at once; held TAP_HOLD_MS or
+// more, letting go stops it; a press within DOUBLE_TAP_MS of a tap's press plays it backwards
+// (firmware TAP_HOLD_SECONDS / DOUBLE_TAP_SECONDS).
 const TAP_HOLD_MS = 250, DOUBLE_TAP_MS = 300;
-let slotLooping = null, autoPress = null, autoTap = null;
+let autoPress = null, autoTap = null;
 function greyDown(i){
-  const mode = config.samples[i].playmode || "oneshot";
-  if (mode === "auto"){
-    const now = performance.now(), double = !!autoTap && autoTap.i === i && now - autoTap.at <= DOUBLE_TAP_MS;
-    autoTap = null; autoPress = {i, at: now, double}; slotLooping = null;
-    playSlot(i, false, double);
-    return;
-  }
-  if (mode === "startstop" && slotLooping === i){ trySend({stopSample:true}); slotLooping = null; return; }
-  slotLooping = mode === "oneshot" ? null : i;
-  playSlot(i, mode !== "oneshot");
+  const now = performance.now(), double = !!autoTap && autoTap.i === i && now - autoTap.at <= DOUBLE_TAP_MS;
+  autoTap = null; autoPress = {i, at: now, double};
+  playSlot(i, false, double);
 }
 function greyUp(i){
-  if (autoPress && autoPress.i === i){
-    const p = autoPress; autoPress = null;
-    if (performance.now() - p.at >= TAP_HOLD_MS) trySend({stopSample:true});
-    else if (!p.double) autoTap = {i, at: p.at};
-    return;
-  }
-  if ((config.samples[i].playmode || "oneshot") === "hold" && slotLooping === i){ trySend({stopSample:true}); slotLooping = null; }
+  if (!autoPress || autoPress.i !== i) return;
+  const p = autoPress; autoPress = null;
+  if (performance.now() - p.at >= TAP_HOLD_MS) trySend({stopSample:true});
+  else if (!p.double) autoTap = {i, at: p.at};
 }
 function slotPlayer(i){
   const a = slotAudio[i], id = "slot-wav-"+i;
@@ -1294,12 +1299,12 @@ function slotPlayer(i){
     catch(err){ toast("Couldn't read "+f.name+": "+err.message); }
   }});
   return h("div",{class:"row slot-player"},
-    h("button",{class:"grey-key", disabled: a ? null : true, title:"Works like the "+siteDevice.word("bot")+" button on the mic, using this slot's playback setting",
+    h("button",{class:"grey-key", disabled: a ? null : true, title:"Works like the "+siteDevice.word("bot")+" button on the mic: tap, hold or double-tap",
       "aria-label":siteDevice.word("Bot")+" button: play slot "+(i+1),
       onpointerdown:(e)=>{ e.preventDefault(); greyDown(i); }, onpointerup:()=>greyUp(i), onpointerleave:()=>greyUp(i), onpointercancel:()=>greyUp(i),
       onkeydown:(e)=>{ if ((e.key===" "||e.key==="Enter") && !e.repeat){ e.preventDefault(); greyDown(i); } },
       onkeyup:(e)=>{ if (e.key===" "||e.key==="Enter") greyUp(i); }}, h("span",{class:"dot","aria-hidden":"true"}), h("span",{"data-dw":"Bot"}, siteDevice.word("Bot"))),
-    h("button",{class:"btn small ghost", disabled: a ? null : true, onclick:()=>{ trySend({stopSample:true}); slotLooping = null; }, "aria-label":"Stop slot "+(i+1)}, "Stop"),
+    h("button",{class:"btn small ghost", disabled: a ? null : true, onclick:()=>{ trySend({stopSample:true}); }, "aria-label":"Stop slot "+(i+1)}, "Stop"),
     h("label",{class:"btn small ghost", for:id}, a ? "Choose another WAV" : "Choose a WAV"), input,
     h("span",{class:"small muted mono"}, a ? a.name+" \u00b7 "+a.sec.toFixed(1)+" s" : "No WAV to hear yet"));
 }
@@ -1373,7 +1378,7 @@ const FIRMWARE_NEEDS = [
   {version:"1.0", what:"Normalize recording levels", uses: c => c.normalize_takes === true},
   {version:"1.1", what:"The vocoder",
    uses: c => (c.presets||[]).some(p => (p.list||[]).some(fx => fx.effect==="vocoder" && fx.enabled!==false))},
-  {version:"1.2", what:"Auto sample playback (tap, hold or double-tap)",
+  {version:"1.2", what:"tap, hold and double-tap sample playback",
    uses: c => (c.samples||[]).some(s => s && String(s.playmode||"").toLowerCase()==="auto")},
 ];
 const versionParts = v => String(v).split(".").map(n => parseInt(n,10)||0);
@@ -1793,9 +1798,6 @@ for (const [i, json] of OLD_DEFAULTS)
 // Then 8 bands at 90%, before the voice came down to 85%.
 { const p = config.presets[1], old = {name:"Night call", level:.7, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:8,octave:0,breath:.7,mix:.9,gate:-60,squeeze_chord:"key_triad"}]};
   if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
-// Slots 3 and 4 used to default to hold and start/stop. Untouched ones move to tap to play.
-[[2,"hold"],[3,"startstop"]].forEach(([i, mode]) => { const s = config.samples[i];
-  if (s && s.playmode===mode && canon(Object.keys(s).filter(k=>k!=="playmode").reduce((o,k)=>(o[k]=s[k],o),{}))===canon({file:(i+1)+".wav"})){ s.playmode = "oneshot"; save(); } });
 try { setMode(localStorage.getItem(KEY+"-mode")==="adv"); } catch(e){ setMode(false); }
 render();
 renderSqueezeHint();

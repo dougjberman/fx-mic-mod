@@ -105,7 +105,7 @@ band notes' `waveform` to the chord the scale gives the snapped note.
   `audiomixer.Mixer` at the chain input. Autotune presets stream the WAV from flash 512 bytes per
   block and mix it in Python before pitch detection. Check for crackle or `overflow` while a
   sample plays on an autotune preset, and that a 1024-byte effect chain accepts the mixer.
-- **Auto playmode timing:** `TAP_HOLD_SECONDS` (0.25) and `DOUBLE_TAP_SECONDS` (0.3) in code.py
+- **Sample button timing:** `TAP_HOLD_SECONDS` (0.25) and `DOUBLE_TAP_SECONDS` (0.3) in code.py
   are first guesses. The console prints `stopped 1 (held N ms)` on a hold, so try quick taps (they
   must keep playing), short deliberate holds (they must stop), and relaxed double taps (they must
   play backwards); move the numbers to whatever feels natural and the editor's `TAP_HOLD_MS` /

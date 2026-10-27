@@ -54,22 +54,22 @@ mixer voice can't go above 1.0. The defaults were set from recordings of a Ting 
 ## Sample
 
 ```json
-{"file": "1.wav", "playmode": "auto|oneshot|hold|startstop", "blocks": {...}, "effects": [EFFECT, ...]}
+{"file": "1.wav", "playmode": "auto", "blocks": {...}, "effects": [EFFECT, ...]}
 ```
 
-`playmode` says what the BOTTOM button does. Left out, it is `"oneshot"`, as in Adafruit's firmware.
-- `"oneshot"`: a press plays the sample through once (a press while it plays starts it again).
-- `"hold"`: plays it on a loop while the button is held.
-- `"startstop"`: a press starts a loop, the next press stops it.
-- `"auto"` **(new, firmware 1.2)**: the press decides, so one slot does all three. Every press starts
-  the sample at once, so a tap never waits. Let go within 250 ms (`TAP_HOLD_SECONDS`) and it plays
-  through once; hold longer and letting go stops it (it plays once, it doesn't loop). A second press
-  within 300 ms of a tap's press (`DOUBLE_TAP_SECONDS`) is a double tap: it cuts the first tap off and
-  plays the sample backwards from the end, until it ends, or, if held, until you let go. Firmware
-  before 1.2 stops on an unknown playmode, so Save to mic won't write `"auto"` to it. Backwards
-  through autotune (`"sample_fx": "preset"` on an autotune preset) streams from flash; everywhere else
-  the first double tap loads the sample backwards into RAM (48 KB a second at 24 kHz), kept until
-  another slot is picked, and a sample too big for RAM plays forwards instead.
+The BOTTOM button plays every sample the same way (firmware 1.3; 1.2 did it for `"auto"` only):
+every press starts the sample at once, so a tap never waits.
+- **Tap** (let go within 250 ms, `TAP_HOLD_SECONDS`): it plays through once.
+- **Hold** (250 ms or longer): letting go stops it. It plays once, it doesn't loop.
+- **Double tap** (a second press within 300 ms of a tap's press, `DOUBLE_TAP_SECONDS`): it cuts the
+  first tap off and plays the sample backwards from the end; held, letting go stops it.
+
+`playmode` is what chose this before. The editor writes `"auto"`, so Save to mic stops before writing
+to firmware older than 1.2, which doesn't know it and stops. Firmware 1.3 still reads `"oneshot"`,
+`"hold"` and `"startstop"` (Adafruit's packs use them) but plays those slots the same way.
+Backwards through autotune (`"sample_fx": "preset"` on an autotune preset) streams from flash;
+everywhere else the first double tap loads the sample backwards into RAM (48 KB a second at 24 kHz),
+kept until another slot is picked, and a sample too big for RAM plays forwards instead.
 
 Samples must be 16-bit mono WAVs at the mic's `sample_rate` (24 kHz unless set). The install guide's step 05 converts other WAVs to 24 kHz.
 

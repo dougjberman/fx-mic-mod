@@ -388,11 +388,11 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(h._chord_intervals(57), h._key_intervals(57))
         self.assertEqual(h._chord_intervals(45), h._key_intervals(57))
 
-    def test_auto_playmode(self):
+    def test_old_playmodes_still_load(self):
         samples = self.cl.load_samples({"samples": [
             {"file": "1.wav", "playmode": "auto"}, {"file": "2.wav", "playmode": "Hold"},
             {"file": "3.wav"}]})
-        # explicit modes and the oneshot default are as they were
+        # older playmodes still load (code.py reads them and plays every slot the same way)
         self.assertEqual([s["playmode"] for s in samples], ["auto", "hold", "oneshot"])
 
     def test_wave_reader_plays_backwards(self):
@@ -713,19 +713,20 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertEqual(s["heads"][-1], {"mic_level": 0.0, "sample": "WaveFile", "sample_level": 1.0})
         self.assertEqual(s["out_level"], 1.0)
 
-    def test_auto_playmode_taps_holds_and_double_taps(self):
+    def test_sample_button_taps_holds_and_double_taps(self):
         config = json.loads(json.dumps(TEST_CONFIG))
-        config["samples"] = [{"file": "1.wav", "playmode": "auto"}]
+        # an old playmode is read and ignored: every slot plays tap / hold / double tap
+        config["samples"] = [{"file": "1.wav", "playmode": "startstop"}]
         root, out, s = run("auto", config, tone=(340.0, 1.0))
         lines = [l for l in out.splitlines() if l.startswith(("playing 1", "stopped 1"))]
         self.assertEqual(lines, [
-            "playing 1 (auto)",                   # tap: plays on to the end
-            "playing 1 (auto)",
+            "playing 1",                          # tap: plays on to the end
+            "playing 1",
             "playing 1 (double tap: backwards)",  # second press 200 ms after the first
-            "playing 1 (auto)",
+            "playing 1",
             "stopped 1 (held 600 ms)",            # held: let go stops it
-            "playing 1 (auto)",
-            "playing 1 (auto)",                   # 500 ms apart: two taps
+            "playing 1",
+            "playing 1",                          # 500 ms apart: two taps
         ])
         self.assertEqual(out.count("turned round"), 1)  # built once, then kept
         # with the sample's own effects, the backwards copy feeds their chain
@@ -734,9 +735,9 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])
         self.assertIn("playing 1 (double tap: backwards)", out)
 
-    def test_auto_playmode_backwards_through_autotune(self):
+    def test_double_tap_backwards_through_autotune(self):
         config = json.loads(json.dumps(THROUGH_CONFIG))
-        config["samples"] = [{"file": "1.wav", "playmode": "auto"}]
+        config["samples"] = [{"file": "1.wav"}]
         root, out, s = run("auto_through", config, tone=(340.0, 1.0))
         self.assertIn("playing 1 (double tap: backwards)", out)
         self.assertNotIn("can't", out)

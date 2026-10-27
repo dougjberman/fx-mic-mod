@@ -908,6 +908,9 @@ def create_preset(preset, blocks=None, **format_args):
 # * "auto"      -- (firmware 1.2) the press decides: a tap plays it through
 #                  once, a hold plays it until let go, a double tap plays it
 #                  backwards.
+#
+# From firmware 1.3 code.py plays every sample the "auto" way. The others are
+# still accepted so older configs and Adafruit's packs load.
 PLAYMODES = ("oneshot", "hold", "startstop", "auto")
 
 
