@@ -71,6 +71,8 @@
 
 
 
+
+
 import gc
 import json
 import os
@@ -463,8 +465,12 @@ def page_presets(ctx):
 def next_spot(ctx):
     0
 
-    spots = len(page_presets(ctx)) + (1 if RECORD_SPOT is None else 2)
-    return (ctx.active + 1) % spots
+
+    if EFFECTS_ONLY:
+        if not ctx.active:
+            ctx.page = 0
+        return ctx.active % len(page_presets(ctx)) + 1 if PRESETS else 0
+    return (ctx.active + 1) % (len(page_presets(ctx)) + 2)
 
 
 CAN_RECORD = not storage.getmount("/").readonly
@@ -885,7 +891,10 @@ def update_red_leds(ctx):
 def update_white_leds(ctx):
     0
 
-    lit = ctx.page + 1 if EFFECTS_ONLY else ctx.white_active
+    if EFFECTS_ONLY:
+        lit = ctx.page + 1 if ctx.active else 0
+    else:
+        lit = ctx.white_active
     for index, _led in enumerate(white_leds):
         _led.value = index < lit
 
@@ -1104,6 +1113,10 @@ def ms_between(earlier, later):
 def next_page(ctx):
     0
 
+
+    if not ctx.active:
+        select_preset(ctx, next_spot(ctx))
+        return
     if PAGES == 1:
         print("one page of presets: add a fifth to get a second page")
         return
@@ -1328,7 +1341,11 @@ try:
                 update_white_leds(data_context)
                 load_selected_wave_sample(data_context)
                 print("white LED {}".format(data_context.white_active))
-            if event.pressed and event.key_number == BOTTOM and not EFFECTS_ONLY:
+            if event.pressed and event.key_number == BOTTOM and EFFECTS_ONLY:
+
+                if data_context.active:
+                    select_preset(data_context, 0)
+            elif event.pressed and event.key_number == BOTTOM:
                 play_current_wave_sample(data_context, event_ms(event))
             if event.released and event.key_number == BOTTOM and not EFFECTS_ONLY:
                 release_current_wave(data_context, event_ms(event))

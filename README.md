@@ -32,7 +32,7 @@ instructions to match your mic.
 | TOP | Next effects preset: clean → preset 1..4 → **record mode** → clean. The red LEDs count up as on the stock firmware: one lit for preset 1, two for preset 2, all four for preset 4, none on clean. In record mode all four flash. |
 | MIDDLE | Next sample slot 1..4, counted on the white LEDs the same way (one lit for slot 1, all four for slot 4). |
 | BOTTOM | Play the selected sample: a tap plays it through, a hold plays it until you let go, and a double tap plays it backwards. In config, you can decide if you want samples to play through the currently selected effect preset, (`"sample_fx": "preset"`) or hardcode the sample's own effects. |
-| Effects only | With **Give me more effects instead of samples** on in the editor (`"effects_only": true`), there are no samples or record mode: TOP steps clean → preset 1..4 of the page, MIDDLE turns the page (up to four pages, sixteen presets, counted on the white LEDs), and BOTTOM does nothing. |
+| Effects only | With **Give me more effects instead of samples** on in the editor (`"effects_only": true`), there are no samples or record mode: TOP steps preset 1..4 of the page and round, MIDDLE turns the page (up to four pages, sixteen presets, counted on the white LEDs), and BOTTOM goes to clean with every LED off. From clean, TOP or MIDDLE goes to page 1, preset 1. |
 | Squeeze handle | Turns the mic on. Its travel is also `"$handle"` in presets (0 = just squeezed enough to open the mic, 1 = fully in). Effects parameters can be mapped to the squeeze, such as an autotune preset that switches key on a full squeeze (`squeeze_key` / `squeeze_scale`). |
 | Volume knob | Output level. |
 | TOP + MIDDLE 0.8 s | Power off. |
