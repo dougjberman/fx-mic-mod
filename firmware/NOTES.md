@@ -40,8 +40,10 @@ chord needs the note).
   Python counts renders and knows which feed half the next one reads first (a RawSample flips
   halves on every pull and never resets to half 0). Each write puts the new block where the next
   render reads it second and the block before it where it reads first. The console prints
-  `feed sync: counting renders, …` on each load; `render counter off: …` means it fell back to
-  the timed sync below. `f` still flips the halves.
+  `feed sync: counting renders, …; every N ms` on each load; `render counter off: …` means it
+  fell back to the timed sync below. `f` still flips the halves. The counter also times the
+  renders: a write less than half a block before one waits for it (with 2 ms of hysteresis),
+  since on the harmonizer the render lands about 1 ms after each mic block, right on the write.
 - **FEED_PHASE / FEED_SYNC** in autotune.py (fallback): the chain reads both feed halves in one burst every
   two blocks (half 0 first). At each load the sync times the burst and the mic's block edges; a
   write due less than half a block before a burst waits for it, so every write has half a block

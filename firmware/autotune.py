@@ -74,6 +74,16 @@ FEED_PHASE = 0
 # only repeats or skips a block, once.
 # Without a working LFO, FEED_SYNC below is the fallback.
 PROBE_RATE = 62.5 / 64  # LFO cycles a second: one cycle per 64 renders
+# Order alone isn't enough: on the harmonizer the chain renders about 1 ms
+# after a mic block lands, just when the block is written, so writes fell
+# before or after it at random and blocks were repeated and skipped. So the
+# counter also times the renders, and a write less than half a block before
+# one waits for it to run: every write then has half a block to spare on its
+# side. The edge moves by RENDER_HYST_NS to stay where it last was, so a
+# write that jitters near it doesn't flip sides either. RENDER_GUARD_NS is
+# how late a render can run and still be waited for.
+RENDER_GUARD_NS = 2000000
+RENDER_HYST_NS = 2000000
 # On a Ting the right FEED_PHASE changed from one preset load to the next, and
 # flipping it cured a crackling load. The chain renders two blocks at a time
 # every two blocks, in a burst that reads half 0 and then half 1, so half 0
@@ -693,6 +703,8 @@ class Autotune:
         self._renders = 0
         self._probe_phase = 0.0
         self._newest = 0        # the half holding the last block written
+        self._period = 0        # time between renders, as the counter saw it
+        self._waiting = False   # the last write near a render waited for it
         self._turn = 0
         self.busy_ms = 0.0
         # Mic level, 0 or 1, applied before pitch detection. Used when
@@ -861,14 +873,19 @@ class Autotune:
         began = now()
         total = 0.0
         first = last = None
-        while now() - began < 5 * BLOCK_NS:
+        starts = []  # when each render began: just before Python was held
+        prev = began
+        while prev - began < 5 * BLOCK_NS:
+            t = now()
             p = probe.phase
             if p != phase:
                 total += (p - phase) % 1.0
                 phase = p
-                last = (now(), total)
+                last = (t, total)
+                starts.append(prev)
                 if first is None:
                     first = last
+            prev = t
         renders = 0 if first is None else (last[0] - first[0] + BLOCK_NS // 2) // BLOCK_NS
         if not renders:
             print("render counter off: too few renders seen")
@@ -881,10 +898,46 @@ class Autotune:
         self._step = per if abs(measured - per) < abs(measured - per / 2) else per / 2
         self._renders = int(total / self._step + 0.5)
         self._probe_phase = phase
+        self._burst_due = None
+        if len(starts) > 1:
+            gap = min(b - a for a, b in zip(starts, starts[1:]))
+            self._period = max(1, (gap + BLOCK_NS // 2) // BLOCK_NS) * BLOCK_NS
+            self._burst_due = starts[-1] + self._period
         self._feed_block(self._zeros)
-        print("feed sync: counting renders, {} in {:.0f} ms, {} since the feed started".format(
-            renders, (last[0] - first[0]) / 1e6, self._renders))
+        print("feed sync: counting renders, {} in {:.0f} ms, {} since the feed started; every {} ms".format(
+            renders, (last[0] - first[0]) / 1e6, self._renders, self._period // 1000000))
         return True
+
+    def _wait_for_render(self):
+        """With the counter: if a render is due less than half a block
+        ahead (see RENDER_GUARD_NS), spin until it has run (the counter moves)
+        or is that late. Returns the time spent waiting, in ns."""
+        due, period = self._burst_due, self._period
+        if due is None:
+            return 0
+        now = time.monotonic_ns
+        t = began = now()
+        while due + RENDER_GUARD_NS <= t:
+            due += period
+        near = BLOCK_NS // 2 + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
+        if due - t >= near:
+            if due - t < BLOCK_NS:
+                self._waiting = False
+        else:
+            self._waiting = True
+            probe = self._probe
+            seen = probe.phase
+            if t < due or seen == self._probe_phase:  # else it has just run
+                prev = t
+                while t < due + RENDER_GUARD_NS:
+                    if probe.phase != seen:
+                        due = prev  # it ran: follow it, should the clocks drift
+                        break
+                    prev = t
+                    t = now()
+            due += period
+        self._burst_due = due
+        return now() - began
 
     def _sync_feed(self):
         """Time the chain's burst and set ``_half`` so the last write before
@@ -946,6 +999,8 @@ class Autotune:
         """If the chain's burst is due within the guard, spin until it has
         run (or is that late), so the write lands after it. Returns the time
         spent waiting, in ns."""
+        if self._step:
+            return self._wait_for_render()
         due, guard = self._burst_due, self._guard
         if due is None or not guard:
             return 0

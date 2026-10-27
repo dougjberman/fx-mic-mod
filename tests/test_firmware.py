@@ -348,6 +348,61 @@ class LoaderTests(unittest.TestCase):
                 got = [blk for pair in reads for blk in pair]
                 self.assertEqual(got, list(range(got[0], got[0] + len(got))), trial)
 
+    def test_counted_renders_wait_for_a_render_due_at_the_write(self):
+        # On the harmonizer the chain renders about 1 ms after a mic block
+        # lands, while the block is being written. Writes that fall either
+        # side of it at random repeat and skip blocks; the guard makes them
+        # all land after it, so every block is read once, in order.
+        import array
+        import random
+        import autotune
+        A, n, B = autotune.Autotune, autotune.BLOCK_SIZE, autotune.BLOCK_NS
+        rng = random.Random(3)
+        for render_after in (0.2, 0.6, 1.0, 1.5, 2.5, 5.0, 8.0, 11.0, 15.5, 20.0, 30.0):
+            for length_ms in (3, 12, 14.5):
+                h = A.__new__(A)
+                h._out = array.array("h", [-1] * (2 * n))
+                view = memoryview(h._out)
+                h._front, h._back = view[:n], view[n:]
+                h._step, h._period, h._newest, h._waiting = 1 / 64, 2 * B, 0, False
+                h._probe = type("Probe", (), {"phase": 0.0})()
+                h._probe_phase, h._renders = 0.0, 0
+                first = B + int(render_after * 1000000)
+                length = int(length_ms * 1000000)
+                h._burst_due = first + int(rng.uniform(-0.3, 0.3) * 1000000)  # as timed
+                state = {"t": 0, "next": first, "renders": 0}
+                reads = []
+
+                def run_to(t):
+                    while state["next"] <= t:  # a render holds Python up
+                        pair = []
+                        for _ in (0, 1):
+                            pair.append(h._out[(state["renders"] % 2) * n])
+                            state["renders"] += 1
+                            h._probe.phase = (h._probe.phase + h._step) % 1.0
+                        reads.append(pair)
+                        t = max(t, state["next"] + length)
+                        state["next"] += 2 * B
+                    state["t"] = t
+
+                def now():
+                    t = state["t"]
+                    run_to(t + 100000)
+                    return t
+
+                saved = autotune.time.monotonic_ns
+                autotune.time.monotonic_ns = now
+                try:
+                    for m in range(1, 60):
+                        run_to(max(state["t"], m * B + int(rng.uniform(0.3, 1.1) * 1000000)))
+                        h._wait_out_burst()
+                        h._feed_block(array.array("h", [m] * n))
+                finally:
+                    autotune.time.monotonic_ns = saved
+                got = [blk for pair in reads[2:-1] for blk in pair]
+                self.assertEqual(got, list(range(got[0], got[0] + len(got))),
+                                 (render_after, length_ms))
+
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
             self.cl.create_effects({"list": [{"effect": "autotune"}]})
