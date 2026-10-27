@@ -69,7 +69,9 @@ One static site, deployed by Cloudflare from `docs/` (see `wrangler.jsonc`):
   `?device=ting` or `?device=fxmic` in a link picks one.
 - `install.html`: back up the mic (Ting or FX Mic), flash CircuitPython, then install fx-mic-mod in one click
   (it copies the files in `docs/firmware/` to CIRCUITPY), plus a serial console and restore steps.
-  Adapted from this project's Ting Flash Bench.
+  Its update check reads `FIRMWARE_VERSION` from the mic's `code.py`, lists what's new from the page's
+  "What's new" table (one row per version; a test checks the current one is there) and copies only the
+  firmware files, keeping `config.json`. Adapted from this project's Ting Flash Bench.
 - `editor.html`: the Effects & Samples Editor. Simple mode uses sliders and switches, Advanced mode shows every
   raw parameter. **Try it on your computer** plays the selected preset live through your computer's
   mic (or a sample singer) using `ting-dsp.js`, a Web Audio approximation of the firmware. Saves

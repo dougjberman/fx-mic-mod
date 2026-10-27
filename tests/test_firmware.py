@@ -632,6 +632,17 @@ class SiteCopyTests(unittest.TestCase):
                 # line for line, so a traceback from the mic matches firmware/
                 self.assertEqual(slim_firmware.site_copy(name).count(b"\n"), lines, name)
 
+    def test_install_page_lists_this_version(self):
+        # The install page's update check names what changed since the mic's
+        # version from its "What's new" rows, so each release needs one.
+        import re
+        with open(os.path.join(FIRMWARE, "code.py")) as file:
+            version = re.search(r'^FIRMWARE_VERSION = "([\d.]+)"', file.read(), re.M).group(1)
+        with open(os.path.join(os.path.dirname(HERE), "docs", "install.html")) as file:
+            page = file.read()
+        self.assertIn('<tr data-version="%s">' % version, page,
+                      "add a row for firmware %s to the What's new table in docs/install.html" % version)
+
     def test_site_copy_runs(self):
         os.environ.update(FX_FIRMWARE=self.SITE, PYTHONDONTWRITEBYTECODE="1")
         try:
