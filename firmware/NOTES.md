@@ -35,7 +35,14 @@ chord needs the note).
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.
-- **FEED_PHASE / FEED_SYNC** in autotune.py: the chain reads both feed halves in one burst every
+- **Render counter** (PROBE_RATE in autotune.py): the shifters always go through a mixer whose
+  voice level is a synthio LFO with scale 0. Its phase only moves when the mixer renders, so
+  Python counts renders and knows which feed half the next one reads first (a RawSample flips
+  halves on every pull and never resets to half 0). Each write puts the new block where the next
+  render reads it second and the block before it where it reads first. The console prints
+  `feed sync: counting renders, …` on each load; `render counter off: …` means it fell back to
+  the timed sync below. `f` still flips the halves.
+- **FEED_PHASE / FEED_SYNC** in autotune.py (fallback): the chain reads both feed halves in one burst every
   two blocks (half 0 first). At each load the sync times the burst and the mic's block edges; a
   write due less than half a block before a burst waits for it, so every write has half a block
   of slack. The console prints `feed sync: … ; waits for it` or `writes ahead`. If a load still
