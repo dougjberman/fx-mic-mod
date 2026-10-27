@@ -56,9 +56,9 @@ code{font-family:var(--f-mono);font-size:.92em}
 .btn.primary{background:var(--accent-btn);border-color:var(--accent-btn);color:var(--accent-ink)}
 .btn:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-/* the two headline features, as a pair of cards under the headline */
-.pair{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-@media (max-width:980px){.pair{grid-template-columns:1fr}}
+/* the four headline features, as cards under the headline */
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:640px){.pair{grid-template-columns:1fr}}
 .pick{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px;text-decoration:none;color:inherit;transition:border-color .15s}
 .pick:hover{border-color:var(--accent)}
 .pick .ico{grid-row:span 2;width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:grid;place-items:center;color:var(--accent)}
@@ -94,6 +94,10 @@ code{font-family:var(--f-mono);font-size:.92em}
 .chordfig .seg{flex-wrap:wrap}
 #chordVoices path{transition:d .45s cubic-bezier(.16,1,.3,1)}
 .snap .note-lab{font:500 11px var(--f-mono);fill:var(--muted)}
+/* vocoder drawing: the voice's shape, the bands the mic measures, the synth notes they shape */
+.vocfig .vctl{display:flex;flex-wrap:wrap;gap:8px}
+#vocBands rect,#vocSpikes rect{transform-box:fill-box;transform-origin:50% 100%;transition:transform .45s cubic-bezier(.16,1,.3,1),opacity .3s}
+#vocEnv{transition:d .45s cubic-bezier(.16,1,.3,1)}
 
 /* record mode: animated mic + step list */
 .rec{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:36px;align-items:center}
@@ -235,7 +239,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
       </g>
     </svg>
     <h1>Autotune your voice. <span>Record your own samples.</span> All on the mic.</h1>
-    <p class="lede">fx-mic-mod gives Teenage Engineering's little fx mic three big new tricks. Autotune now stacks with distortion, reverb, echo and the rest. A harmonizer adds backing singers in any chord. Record mode captures new samples straight into the mic, with no computer involved. There's a vocoder in the editor too.</p>
+    <p class="lede">fx-mic-mod gives Teenage Engineering's little fx mic four big new tricks. Autotune now stacks with distortion, reverb, echo and the rest. A harmonizer adds backing singers in any chord. A vocoder turns your voice into a synth that sings your words, from one robot note to a full chord in key. Record mode captures new samples straight into the mic, with no computer involved.</p>
     <div class="pair">
       <a class="pick" href="#autotune">
         <span class="ico" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16h4v-5h5v-4h4v6h5"/></svg></span>
@@ -246,6 +250,11 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
         <span class="ico" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h5v-3h5v-3h5"/><path d="M3 13h5v-3h5V7h5" opacity=".55"/><path d="M3 8h5V5h5V2h5" opacity=".3"/></svg></span>
         <b>Backing singers on tap</b>
         <span>Pick a chord, from plain major to maj7, 9ths and 13ths, and up to three voices sing it with you on every note.</span>
+      </a>
+      <a class="pick" href="#vocoder">
+        <span class="ico" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 14v4M8 9v9M12 5v13M16 10v8M20 13v5"/></svg></span>
+        <b>Your voice, as a synth</b>
+        <span>A robot synth sings your words on the note you sing. One buzzy note, or a whole chord that follows the key.</span>
       </a>
       <a class="pick" href="#record">
         <span class="ico" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span>
@@ -327,16 +336,58 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
         <div class="point"><span class="tag">Chords</span><h3>38 chords, any voicing</h3><p>Major and minor, sus2 and sus4, 6ths, every kind of 7th, add9, 9ths, 11ths, 13ths and the Hendrix 7♯9. The editor shows the exact notes before you pick.</p></div>
         <div class="point"><span class="tag">In the key</span><h3>Harmony that knows the key</h3><p>Set autotune to a key and the chord follows the scale, like a real vocal harmonizer: sing E in C major and you get E minor, sing F and you get F major.</p></div>
         <div class="point"><span class="tag">Voicing</span><h3>Above you or under you</h3><p>Inversions tuck chord notes below your voice so you sing the top line. An octave switch moves the whole choir up or down.</p></div>
-        <div class="point"><span class="tag">Squeeze</span><h3>Squeeze for backups</h3><p>Sing alone with a light squeeze, clamp down and the choir comes in. Preset 2 in the editor is set up this way.</p></div>
+        <div class="point"><span class="tag">Squeeze</span><h3>Squeeze for backups</h3><p>Sing alone with a light squeeze, clamp down and the choir comes in. Preset 1 in the editor is set up this way.</p></div>
       </div>
     </div>
     <div class="cta"><a class="btn" href="editor.html">Build a harmony in the editor</a></div>
   </section>
 
+  <!-- ===================== VOCODER ===================== -->
+  <section class="band" id="vocoder">
+    <div class="band-head" data-reveal>
+      <span class="eyebrow accent">Feature 3 · Vocoder</span>
+      <h2>Talk like a robot. Sing like a synth.</h2>
+      <p class="lede">The vocoder listens to the shape of your voice, the ahs, ees and esses that make your words, and puts that shape on a synth playing the note you sing. It follows autotune, so the robot is always in tune, and it can play one note or a whole chord.</p>
+    </div>
+    <div class="split">
+      <div class="snap vocfig">
+        <div class="row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+          <b style="font-family:var(--f-display)">One sung note, through the vocoder</b>
+          <div class="vctl">
+            <div class="seg" role="group" aria-label="Vowel">
+              <button type="button" aria-pressed="true" data-vowel="ah">ah</button>
+              <button type="button" aria-pressed="false" data-vowel="ee">ee</button>
+              <button type="button" aria-pressed="false" data-vowel="oo">oo</button>
+            </div>
+            <div class="seg" role="group" aria-label="Synth">
+              <button type="button" aria-pressed="true" data-carrier="note">One note</button>
+              <button type="button" aria-pressed="false" data-carrier="chord">Chord</button>
+            </div>
+          </div>
+        </div>
+        <svg viewBox="0 0 520 220" role="img" aria-labelledby="vocTitle">
+          <title id="vocTitle">Your voice's shape across low to high pitches, the bands the mic measures it in, and the synth's notes shaped to match</title>
+          <g id="vocGrid"></g>
+          <g id="vocBands"></g>
+          <g id="vocSpikes"></g>
+          <path id="vocEnv" fill="none" stroke="var(--voice)" stroke-width="2.5" stroke-dasharray="5 5" stroke-linecap="round"/>
+        </svg>
+        <div class="legend"><span><i style="background:var(--voice)"></i>Your voice's shape</span><span><i style="background:var(--accent);opacity:.25"></i>Bands the mic measures</span><span><i style="background:var(--accent)"></i>The synth, shaped to match</span></div>
+      </div>
+      <div class="points" data-reveal-list>
+        <div class="point"><span class="tag">Pitch</span><h3>It plays the note you sing</h3><p>Autotune finds your note first, so the synth lands right on it. Sing a melody and the robot sings it back, word for word.</p></div>
+        <div class="point"><span class="tag">Chords</span><h3>One note or a whole chord</h3><p>Play a single note, a power chord, or a pure-tuned major, minor, 7th and more. Pick In key and every note gets its chord from the autotune key.</p></div>
+        <div class="point"><span class="tag">Squeeze</span><h3>Squeeze for a different chord</h3><p>Sing one robot note, clamp down for the full chord. Or go from major to minor while autotune keeps snapping to every note.</p></div>
+        <div class="point"><span class="tag">Sound</span><h3>Buzz, breath and a gate</h3><p>Saw, square and pulse carriers for different kinds of buzz. Breath lets your esses and tees through, and a noise gate keeps a humming room quiet.</p></div>
+      </div>
+    </div>
+    <div class="cta"><a class="btn" href="editor.html">Try the vocoder with your computer mic</a></div>
+  </section>
+
   <!-- ===================== RECORD MODE ===================== -->
   <section class="band" id="record">
     <div class="band-head" data-reveal>
-      <span class="eyebrow accent">Feature 3 · Record mode</span>
+      <span class="eyebrow accent">Feature 4 · Record mode</span>
       <h2>Sample anything, right on the mic.</h2>
       <p class="lede">The stock mic only plays samples you copy over from a computer. With fx-mic-mod you can fill its four sample slots out in the world: a friend's laugh, a beatbox loop, a door slam. The mic's own lights walk you through it.</p>
     </div>
@@ -552,12 +603,12 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
   if(!matchMedia("(prefers-reduced-motion: reduce)").matches && "IntersectionObserver" in window){
     tuned.setAttribute("d", document.getElementById("voice").getAttribute("d"));
     const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ io.disconnect();
-      setTimeout(()=>{ tuned.style.transition="d .8s cubic-bezier(.16,1,.3,1)"; const on=document.querySelector('.snap:not(.chordfig) .seg [aria-pressed="true"]'); draw(on?+on.dataset.speed:1);
+      setTimeout(()=>{ tuned.style.transition="d .8s cubic-bezier(.16,1,.3,1)"; const on=document.querySelector('.snap:not(.chordfig):not(.vocfig) .seg [aria-pressed="true"]'); draw(on?+on.dataset.speed:1);
         setTimeout(()=>tuned.style.transition="",900); },350); } },{threshold:.6});
     io.observe(svg);
   }
-  document.querySelectorAll(".snap:not(.chordfig) .seg button").forEach(b=>b.addEventListener("click",()=>{
-    document.querySelectorAll(".snap:not(.chordfig) .seg button").forEach(o=>o.setAttribute("aria-pressed",String(o===b)));
+  document.querySelectorAll(".snap:not(.chordfig):not(.vocfig) .seg button").forEach(b=>b.addEventListener("click",()=>{
+    document.querySelectorAll(".snap:not(.chordfig):not(.vocfig) .seg button").forEach(o=>o.setAttribute("aria-pressed",String(o===b)));
     draw(+b.dataset.speed);
   }));
 })();
@@ -591,6 +642,46 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
     document.querySelectorAll(".chordfig .seg button").forEach(o=>o.setAttribute("aria-pressed",String(o===b)));
     chord=b.dataset.chord; draw();
   }));
+})();
+
+/* ---------- vocoder drawing ---------- */
+(() => {
+  const W=520, x0=34, x1=W-6, base=196, tall=170, lo=120, hi=6000;
+  const ns="http://www.w3.org/2000/svg", el=(n,a,p)=>{ const e=document.createElementNS(ns,n); for(const k in a) e.setAttribute(k,a[k]); if(p) p.append(e); return e; };
+  const toX=f=>x0+(x1-x0)*Math.log(f/lo)/Math.log(hi/lo);
+  const grid=document.getElementById("vocGrid");
+  el("line",{x1:x0,x2:x1,y1:base,y2:base,stroke:"var(--grid)","stroke-width":1.5},grid);
+  [[200,"200"],[500,"500"],[1000,"1k"],[2000,"2k"],[5000,"5k Hz"]].forEach(([f,n])=>{
+    const t=el("text",{x:toX(f),y:base+18,class:"note-lab","text-anchor":"middle"},grid); t.textContent=n; });
+  // a vowel's shape: its formant peaks, on a log-frequency axis
+  const VOWEL={ah:[[730,1],[1090,.8],[2440,.45]], ee:[[270,1],[2290,.7],[3010,.55]], oo:[[300,1],[870,.75],[2240,.22]]};
+  const env=(v,f)=>{ let a=.05; for(const [F,g] of VOWEL[v]) a=Math.max(a, g*Math.exp(-Math.pow(Math.log(f/F)/.22,2))); return a*Math.pow(f/lo,-.08); };
+  // the mic's 8 bands, like the firmware: 180 Hz to 5 kHz, evenly spaced on a log scale
+  const N=8, bands=[...Array(N)].map((_,i)=>180*Math.pow(5000/180,i/(N-1))), step=Math.pow(5000/180,1/(N-1));
+  const bandG=document.getElementById("vocBands"), bandR=bands.map(c=>{ const a=toX(c/Math.sqrt(step))+2, b=toX(c*Math.sqrt(step))-2;
+    return el("rect",{x:a,y:base-tall,width:b-a,height:tall,rx:4,fill:"var(--accent)",opacity:.16},bandG); });
+  // the synth: harmonics of the sung note (G3), or of a pure-tuned G minor chord
+  const NOTES={note:[196], chord:[196,196*6/5,196*3/2]};
+  const spikes=[]; const spikeG=document.getElementById("vocSpikes");
+  NOTES.chord.forEach((f0,n)=>{ for(let k=1;k*f0<hi;k++){ const f=k*f0; if(f<lo) continue;
+    spikes.push({f, n, r:el("rect",{x:toX(f)-1.25,y:base-tall,width:2.5,height:tall,rx:1.25,fill:"var(--accent)"},spikeG)}); } });
+  const nearest=f=>{ let b=0; for(let i=1;i<N;i++) if(Math.abs(Math.log(f/bands[i]))<Math.abs(Math.log(f/bands[b]))) b=i; return b; };
+  let vowel="ah", carrier="note";
+  function draw(){
+    const lv=bands.map(c=>env(vowel,c)), top=Math.max(...lv);
+    bandR.forEach((r,i)=>r.style.transform="scaleY("+(lv[i]/top).toFixed(3)+")");
+    spikes.forEach(s=>{ const on = carrier==="chord" || s.n===0, b=nearest(s.f);
+      // inside a band the synth follows that band's level, fading toward the next band
+      const h=(lv[b]/top)*(.6+.4*Math.exp(-Math.pow(Math.log(s.f/bands[b])/Math.log(step),2)*3));
+      s.r.style.transform="scaleY("+h.toFixed(3)+")"; s.r.style.opacity = on ? (s.n ? .6 : 1) : 0; });
+    let d=""; for(let i=0;i<=120;i++){ const f=lo*Math.pow(hi/lo,i/120);
+      d+=(i?"L":"M")+toX(f).toFixed(1)+" "+(base-tall*env(vowel,f)/top).toFixed(1)+" "; }
+    document.getElementById("vocEnv").setAttribute("d",d);
+  }
+  draw();
+  const wire=(attr,set)=>{ const bs=document.querySelectorAll(".vocfig .seg button[data-"+attr+"]");
+    bs.forEach(b=>b.addEventListener("click",()=>{ bs.forEach(o=>o.setAttribute("aria-pressed",String(o===b))); set(b.dataset[attr]); draw(); })); };
+  wire("vowel",v=>vowel=v); wire("carrier",c=>carrier=c);
 })();
 
 /* ---------- record mode: the mic walks through the four steps ---------- */
