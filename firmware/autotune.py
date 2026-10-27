@@ -177,6 +177,9 @@ KEY_CHORDS = (
 )
 # A key chord sung on a note outside the scale falls back to this shape.
 OFF_KEY_SHAPE = (0, 4, 7, 10)
+# "double" adds one more voice an octave above or below the sung note, on
+# chords of three notes or fewer, so the harmony still fits in three voices.
+DOUBLES = (("above", 12), ("below", -12))
 
 
 def chord_by_name(name):
@@ -728,7 +731,8 @@ class Autotune:
     def __init__(self, mic, fmt, key="C", scale="chromatic", speed=1.0,
                  humanize=0.0, mix=1.0, grain_size=None,
                  density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
-                 inversion=0, harmony_octave=0, harmony_level=0.7, correct=True):
+                 inversion=0, harmony_octave=0, harmony_level=0.7, correct=True,
+                 harmony_double=None):
         import audiocore
 
         if grain_size is None:
@@ -807,6 +811,7 @@ class Autotune:
         self.harmony_level = harmony_level
         self._level = None
         self._intervals = []
+        self._double = 0        # semitones of the voice's octave double, or 0
         self._key_chord = False
         # The note the key chord is built on, and a new note waiting to
         # take over (see _chord_intervals).
@@ -820,19 +825,26 @@ class Autotune:
             self._tones = tones
             self._inversion = inversion
             self._octave = harmony_octave
+            if harmony_double is not None:
+                self._double = dict(DOUBLES).get(str(harmony_double).lower(), 0)
+                if not self._double:
+                    raise ValueError("harmonizer double is above or below, not %r" % (harmony_double,))
+                if len(tones) > 3:
+                    raise ValueError("harmonizer double needs a chord of three notes or fewer")
             if not self._key_chord:
-                self._intervals = voicing(tones, inversion, harmony_octave)
+                self._intervals = self._doubled(voicing(tones, inversion, harmony_octave))
             if self.shifter is None:
                 print("harmonizer off: it needs audiodelays.GranularPitchShift")
             else:
                 import audiodelays
                 count = len(tones) - 1
-                for _ in range(count):
+                for _ in range(count + (1 if self._double else 0)):
                     self._feeds.append(_feed_sample(self._out, fmt))
                     self.voices.append(_make_native_shifter(
                         audiodelays, fmt, 1.0, grain_size, density)[0])
                 if self._key_chord:
-                    self._intervals = voicing(OFF_KEY_SHAPE[:count + 1], inversion, harmony_octave)
+                    self._intervals = self._doubled(
+                        voicing(OFF_KEY_SHAPE[:count + 1], inversion, harmony_octave))
         if self.shifter is not None:
             # The shifters always go through a mixer, harmony or not: its
             # voice level is the render counter (see PROBE_RATE).
@@ -1144,7 +1156,13 @@ class Autotune:
             offset -= 12
         while offset < -11:
             offset += 12
-        return [offset + i for i in self._key_intervals(note + offset)]
+        return self._doubled([offset + i for i in self._key_intervals(note + offset)])
+
+    def _doubled(self, intervals):
+        """``intervals`` plus the octave above or below the sung note, if
+        the preset asks for one. (The octave is of the voice, so it stays
+        put whatever the chord's inversion or octave.)"""
+        return intervals + [self._double] if self._double else intervals
 
     def _key_intervals(self, note):
         """Harmony intervals for a key chord on the snapped MIDI note."""

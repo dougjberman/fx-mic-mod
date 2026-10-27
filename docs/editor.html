@@ -849,7 +849,9 @@ function harmonyTones(fx){
   const chord = fx.chord || "major";
   return LIB.CHORDS[chord] || LIB.KEY_CHORDS[chord] || null;
 }
-function harmonyVoices(fx){ const t = harmonyTones(fx); return t ? t.slice(1) : []; }
+function harmonyVoices(fx){ const t = harmonyTones(fx); return t ? t.slice(1).concat(fx.double ? [fx.double] : []) : []; }
+// "double": one more voice an octave above or below you, on chords of three notes or fewer
+const DOUBLE_ST = {above:12, below:-12};
 const INTERVAL_NAMES = {0:"unison",1:"♭2",2:"2nd",3:"♭3",4:"3rd",5:"4th",6:"♭5",7:"5th",8:"♯5",9:"6th",10:"♭7",11:"7th"};
 function intervalName(st){
   const a = Math.abs(st), base = INTERVAL_NAMES[a % 12];
@@ -872,7 +874,7 @@ function harmonizerCard(p, fx){
     const off = fam==="In the key" && !keyed;
     set.append(h("div",{class:"chordfam"}, h("span",{}, fam),
       h("div",{class:"chips"}, chords.map(([v,l]) => h("button",{"aria-pressed":String(chord===v), disabled:(off && chord!==v)||null, title:CHORD_NOTES[v]||null,
-        onclick:()=>{ fx.chord=v; const t=harmonyTones(fx); if ((fx.inversion||0) > LIB.maxInversion(t)) fx.inversion=0; changed(); }}, l)))));
+        onclick:()=>{ fx.chord=v; const t=harmonyTones(fx); if ((fx.inversion||0) > LIB.maxInversion(t)) fx.inversion=0; if (t && t.length > 3) delete fx.double; changed(); }}, l)))));
   });
   body.append(set);
   if (isKey && !keyed) body.append(h("p",{class:"small", style:"color:var(--warn)"}, "Key chords need autotune set to Major or Minor, so they know which 3rd to sing. Without that the mic uses C major. Pick a key in autotune above, or choose Major 3rd or Minor 3rd under Intervals."));
@@ -891,7 +893,8 @@ function harmonizerCard(p, fx){
       const steps = {major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10]}[scale];
       chordTones = tones.map(st => steps[st % 7] + 12*Math.floor(st/7));
     }
-    const ivs = LIB.voicing(chordTones, inv, oct);
+    const dbl = DOUBLE_ST[fx.double] || 0;
+    const ivs = LIB.voicing(chordTones, inv, oct).concat(dbl ? [dbl] : []);
     // label each note by its job in the chord (3rd, 7th, 9th...), whichever octave it lands in
     const role = {}; chordTones.forEach(t => { role[t % 12] = intervalName(t); });
     const roleOf = st => role[((st % 12) + 12) % 12] || intervalName(st);
@@ -899,7 +902,7 @@ function harmonizerCard(p, fx){
     const name = st => NOTES[((root+st)%12+12)%12];
     preview = h("div",{class:"voicing", role:"note", "aria-label":"Notes you would hear"},
       h("span",{class:"lead"}, "If you sing "+key+(isKey?" in "+key+" "+scale:"")+", you hear"),
-      all.map(st => h("div",{class:"nt"+(st===0?" you":"")}, h("b",{}, name(st)), h("span",{}, st===0 ? "you" : (st<0?"↓ ":"↑ ")+roleOf(st)))));
+      all.map(st => h("div",{class:"nt"+(st===0?" you":"")}, h("b",{}, name(st)), h("span",{}, st===0 ? "you" : (st<0?"↓ ":"↑ ")+(st===dbl ? "octave" : roleOf(st))))));
     const blurb = CHORD_NOTES[chord];
     if (blurb) body.append(h("p",{class:"small muted"}, blurb));
 
@@ -911,9 +914,16 @@ function harmonizerCard(p, fx){
           labels.slice(0, maxInv+1).map((l,k)=>h("button",{"aria-pressed":String(inv===k), onclick:()=>{ fx.inversion=k; changed(); }}, l)))));
       body.append(h("p",{class:"small muted"}, "Root keeps the harmony above you. Each inversion moves another chord note below your voice, so you end up on top of the chord."));
     }
-    body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
-      h("div",{class:"seg", role:"group", "aria-label":"Harmony octave"},
-        [[-1,"Down"],[0,"As sung"],[1,"Up"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
+    // "octave" (moving the whole harmony) is no longer offered; an older config that sets it still plays so
+    if (oct) body.append(h("div",{class:"row"}, h("p",{class:"small muted"}, "This harmony is moved "+(oct>0?"up":"down")+" "+Math.abs(oct)+" octave"+(Math.abs(oct)>1?"s":"")+" by an older setting."),
+      h("button",{class:"btn small ghost", onclick:()=>{ delete fx.octave; changed(); }}, "Put it back as sung")));
+    if (tones.length <= 3){
+      const cur = fx.double || "";
+      body.append(h("div",{class:"field"}, h("label",{}, "Double your voice"),
+        h("div",{class:"seg", role:"group", "aria-label":"Double your voice"},
+          [["","No"],["above","Octave above"],["below","Octave below"]].map(([v,l])=>h("button",{"aria-pressed":String(cur===v), onclick:()=>{ if (v) fx.double=v; else delete fx.double; changed(); }}, l)))));
+      body.append(h("p",{class:"small muted"}, "Adds one more voice singing your note an octave up or down, on top of the chord. The mic runs three harmony voices at most, so this is for chords of three notes or fewer, and it's one octave, not both."));
+    }
   }
 
   // level: fixed, or brought in by the squeeze
@@ -1054,7 +1064,7 @@ function addEffectBlock(list, forSample){
     if (!forSample && !list.some(fx=>fx.effect==="harmonizer"))
       menu.append(h("button",{onclick:()=>{
         const at = list.findIndex(fx=>fx.effect==="autotune");
-        list.splice(at+1, 0, {effect:"harmonizer", chord:"major", inversion:0, octave:0, level:.7}); addOpen=false; changed(); }},
+        list.splice(at+1, 0, {effect:"harmonizer", chord:"major", inversion:0, level:.7}); addOpen=false; changed(); }},
         h("b",{}, "Harmonizer"), h("span",{}, "Sings a chord with you on every note: major, minor, 7ths, 9ths and more."),
         cpuCost(2*HARMONY_VOICE_COST, " for a triad")));
     for (const [key, def] of Object.entries(EFFECTS)){

@@ -704,6 +704,7 @@ HARMONIZER_PARAMS = {
     "inversion": (_int, "inversion"),
     "octave": (_int, "harmony_octave"),
     "level": (_block, "harmony_level"),
+    "double": (_str, "harmony_double"),
 }
 
 

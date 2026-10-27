@@ -163,6 +163,8 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(tune, {"key": "C", "scale": "major", "harmony": "maj7",
                                 "inversion": 1, "harmony_octave": -1, "harmony_level": 0.5})
         self.assertEqual(len(effects), 1)
+        tune, effects = self.cl.create_preset({"list": [{"effect": "harmonizer", "chord": "major", "double": "above"}]})
+        self.assertEqual(tune["harmony_double"], "above")
 
     def test_harmonizer_without_autotune_leaves_the_voice_untuned(self):
         tune, effects = self.cl.create_preset({"list": [{"effect": "Harmonizer"}]})
@@ -206,6 +208,7 @@ class LoaderTests(unittest.TestCase):
         h.snapper = autotune.NoteSnapper()
         h.snapper.set_scale(autotune.scale_by_name("major"), 0)
         h._tones, h._inversion, h._octave = autotune.chord_by_name("key_triad")[0], 2, 0
+        h._double = 0
         h._chord_note = h._chord_next = None
         h._chord_count = 0
         g3 = h._chord_intervals(55)
@@ -569,6 +572,18 @@ class DeviceScenarioTests(unittest.TestCase):
         mixer = s["tune_mixer"]
         self.assertEqual(mixer["playing"], ["GranularPitchShift"] * 3)
         self.assertAlmostEqual(mixer["levels"][1] / mixer["levels"][0], 0.8, delta=0.01)
+
+    def test_harmonizer_double_adds_the_voice_an_octave_below(self):
+        config = {"name": "H", "presets": [{"list": [
+            {"effect": "autotune", "key": "A", "scale": "minor", "speed": 1.0},
+            {"effect": "harmonizer", "chord": "minor", "double": "below", "level": 0.8}]}], "samples": []}
+        root, out, s = run("level", config)
+        self.assertIn("harmonizer 3 voices", out)
+        lead, third, fifth, octave = s["shifters"]
+        # the triad as before, plus G2: the sung (snapped) note an octave down
+        self.assertAlmostEqual(third["min"], 3 - 0.95, delta=0.05)
+        self.assertAlmostEqual(fifth["min"], 7 - 0.95, delta=0.05)
+        self.assertAlmostEqual(octave["min"], -12 - 0.95, delta=0.05)
 
     def test_key_harmonizer_without_autotune(self):
         config = {"name": "H", "presets": [{"list": [

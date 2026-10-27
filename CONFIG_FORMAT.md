@@ -98,7 +98,7 @@ is written while the other plays. If an autotune preset crackles steadily and cl
 | type | params |
 |---|---|
 | `autotune` **(new)** | `key` "C".."B" (sharps, e.g. "F#"), `scale` "chromatic" / "major" / "minor", `speed` (B) 0 = natural .. 1 = hard snap, `humanize` 0..1, `mix` (B), `grain_size` int (default 512), `density` int (default 2), `squeeze_key` / `squeeze_scale` (same values as key/scale: the key used while the handle is fully squeezed) |
-| `harmonizer` **(new)** | `chord` (see below, default "major"), `inversion` int (default 0), `octave` int (default 0, moves the harmony by octaves), `level` (B) harmony volume against the voice, 0..1 (default 0.7) |
+| `harmonizer` **(new)** | `chord` (see below, default "major"), `inversion` int (default 0), `octave` int (default 0, moves the harmony by octaves), `level` (B) harmony volume against the voice, 0..1 (default 0.7), `double` "above" or "below" (optional: one more voice on your note an octave up or down; chords of three notes or fewer) |
 | `pitch_shift` | `semitones` (B), `window` int and `overlap` int, both in **bytes** of 16-bit audio (so samples = bytes / 2, at 16 kHz before the rate scaling), `mix` (B) |
 | `granular_pitch_shift` | `semitones` (B), `grain_size` int samples, `density` int 1..8, `spread` float 0..1 (fixed at load, not a block), `mix` (B) |
 | `distortion` | `drive` (B), `pre_gain` (B, dB), `post_gain` (B, dB), `mode` = an `audiofilters.DistortionMode` name, case-insensitive ("clip", "lofi", "overdrive", "waveshape"; "overdrive" ignores `drive`, `pre_gain` sets how hard it is pushed), `soft_clip` bool, `mix` (B) |
@@ -154,6 +154,10 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   voice stays in the chord and n notes move below it: C major sung on C is E G above (0),
   E G below (1), G below and E above (2). Up to the number of harmony voices; chords with an
   octave in them (`octave`, `power`) only allow 0.
+- `double` adds one more voice singing the sung note an octave above (`"above"`) or below
+  (`"below"`), whatever the chord's inversion or `octave`. It takes the third harmony voice, so it
+  works on chords of three notes or fewer (thirds, fifths, `power`, triads, `key_third`,
+  `key_triad`), and only one octave at a time.
 - `level` l: the voice plays at `1 / (1 + n * l)` and each of the n harmony voices at
   l times that, so the sum stays about as loud as the voice alone (the voices are copies of one
   voice, so they add up nearly in phase). `"$handle"` brings the
