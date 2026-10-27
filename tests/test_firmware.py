@@ -902,23 +902,27 @@ class DeviceScenarioTests(unittest.TestCase):
             "page 1 of 2, preset 1 of 4: P1",
             "page 1 of 2, preset 2 of 4: P2",
             "page 2 of 2, preset 2 of 2: P6",  # MIDDLE keeps the slot
-            "page 2 of 2, preset 0 of 2",      # TOP wraps to clean: no record mode
-            "page 1 of 2, preset 0 of 4",      # and stays on clean
-            "page 1 of 2, preset 1 of 4: P1",
+            "page 2 of 2, preset 1 of 2: P5",  # TOP goes round the page, no clean
+            "page 2 of 2, preset 0 of 2",      # BOTTOM: clean
+            "page 1 of 2, preset 1 of 4: P1",  # MIDDLE from clean: page 1, preset 1
             "page 1 of 2, preset 2 of 4: P2",
             "page 1 of 2, preset 3 of 4: P3",
             "page 2 of 2, preset 2 of 2: P6",  # a shorter page stops at its last
             "page 1 of 2, preset 2 of 4: P2",
+            "page 1 of 2, preset 0 of 4",      # BOTTOM: clean (a second press does nothing)
+            "page 1 of 2, preset 1 of 4: P1",  # TOP from clean: page 1, preset 1
         ])
         self.assertIsNone(s["record_spot"])
         # no sample is loaded or played, and the presets get no input mixer
         self.assertNotIn("loaded /1.wav", out)
         self.assertNotIn("playing 1", out)
         self.assertEqual(s["heads"], [])
-        # the white LEDs count the page: one, then two, then one
-        whites = [len(w) for t, w in transitions(s["white_log"]) if t < 5.5]
+        # the white LEDs count the page, and go dark with the red ones on clean
+        whites = [len(w) for t, w in transitions(s["white_log"]) if t < 5.8]
         self.assertEqual([w for i, w in enumerate(whites) if i == 0 or w != whites[i - 1]],
-                         [1, 2, 1, 2, 1])
+                         [0, 1, 2, 0, 1, 2, 1, 0, 1])
+        reds = [c for t, c in transitions(s["red_counts"]) if 2.4 < t < 2.9]
+        self.assertEqual(reds[-1], 0)
 
     def test_effects_only_caps_at_four_pages(self):
         config = {"effects_only": True,

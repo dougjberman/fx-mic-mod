@@ -54,13 +54,15 @@ Record mode (TOP past the last preset):
 
 Effects-only mode (``"effects_only": true`` in config.json):
 
-* Up to 16 presets, in pages of four. TOP steps through Clean and the current
-  page's presets (the red LEDs, as above); there is no record mode.
+* Up to 16 presets, in pages of four. TOP steps through the current page's
+  presets (the red LEDs, as above), from the last back to the first; there is
+  no Clean spot in the cycle and no record mode.
 * MIDDLE steps to the next page, wrapping from the last back to page 1. The
   white LEDs count the page: page 2 lights two, all four is page 4. The mic
   stays on the same slot of the new page (or the page's last preset if the
-  page is shorter), and on Clean if it was on Clean.
-* BOTTOM does nothing: there are no samples.
+  page is shorter).
+* BOTTOM goes to Clean, with every LED dark. It is the only way there. From
+  Clean, TOP or MIDDLE goes to preset 1 of page 1. The mic starts on Clean.
 
 Indication, counting up like the stock firmware:
 
@@ -462,9 +464,13 @@ def page_presets(ctx):
 
 def next_spot(ctx):
     """The cycle position TOP steps to: clean, the page's presets, then
-    record mode (when there is one), then round to clean."""
-    spots = len(page_presets(ctx)) + (1 if RECORD_SPOT is None else 2)
-    return (ctx.active + 1) % spots
+    record mode, then round to clean. In effects-only mode the page's
+    presets go round without clean, and clean steps to page 1's first."""
+    if EFFECTS_ONLY:
+        if not ctx.active:
+            ctx.page = 0
+        return ctx.active % len(page_presets(ctx)) + 1 if PRESETS else 0
+    return (ctx.active + 1) % (len(page_presets(ctx)) + 2)
 
 # Whether the code may write the drive (boot.py decides at power-on).
 CAN_RECORD = not storage.getmount("/").readonly
@@ -884,8 +890,11 @@ def update_red_leds(ctx):
 
 def update_white_leds(ctx):
     """Light as many white LEDs as the selected sample's number, or in
-    effects-only mode the page's."""
-    lit = ctx.page + 1 if EFFECTS_ONLY else ctx.white_active
+    effects-only mode the page's (none on clean)."""
+    if EFFECTS_ONLY:
+        lit = ctx.page + 1 if ctx.active else 0  # all dark on clean
+    else:
+        lit = ctx.white_active
     for index, _led in enumerate(white_leds):
         _led.value = index < lit
 
@@ -1103,7 +1112,11 @@ def ms_between(earlier, later):
 
 def next_page(ctx):
     """Handle a MIDDLE press in effects-only mode: step to the next page,
-    keeping the slot (or the page's last preset, on a shorter page)."""
+    keeping the slot (or the page's last preset, on a shorter page). From
+    clean, go to page 1's first preset."""
+    if not ctx.active:
+        select_preset(ctx, next_spot(ctx))
+        return
     if PAGES == 1:
         print("one page of presets: add a fifth to get a second page")
         return
@@ -1328,7 +1341,11 @@ try:
                 update_white_leds(data_context)
                 load_selected_wave_sample(data_context)
                 print("white LED {}".format(data_context.white_active))
-            if event.pressed and event.key_number == BOTTOM and not EFFECTS_ONLY:
+            if event.pressed and event.key_number == BOTTOM and EFFECTS_ONLY:
+                # The way back to clean, and the only one.
+                if data_context.active:
+                    select_preset(data_context, 0)
+            elif event.pressed and event.key_number == BOTTOM:
                 play_current_wave_sample(data_context, event_ms(event))
             if event.released and event.key_number == BOTTOM and not EFFECTS_ONLY:
                 release_current_wave(data_context, event_ms(event))
