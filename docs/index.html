@@ -98,10 +98,6 @@ code{font-family:var(--f-mono);font-size:.92em}
 .vocfig .vctl{display:flex;flex-wrap:wrap;gap:8px}
 #vocBands rect,#vocSpikes rect{transform-box:fill-box;transform-origin:50% 100%;transition:transform .45s cubic-bezier(.16,1,.3,1),opacity .3s}
 #vocEnv{transition:d .45s cubic-bezier(.16,1,.3,1)}
-.listen{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
-.listen button{font:inherit;font-size:14px;font-weight:700;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:999px;padding:7px 14px;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
-.listen button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent-text)}
-.snap .listen button svg{flex:none;width:12px;height:12px}
 
 /* record mode: animated mic + step list */
 .rec{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:36px;align-items:center}
@@ -377,18 +373,12 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
           <path id="vocEnv" fill="none" stroke="var(--voice)" stroke-width="2.5" stroke-dasharray="5 5" stroke-linecap="round"/>
         </svg>
         <div class="legend"><span><i style="background:var(--voice)"></i>Your voice's shape</span><span><i style="background:var(--accent);opacity:.25"></i>Bands the mic measures</span><span><i style="background:var(--accent)"></i>The synth, shaped to match</span></div>
-        <div class="listen" role="group" aria-label="Listen">
-          <button type="button" data-src="audio/sample-singer.mp3" aria-pressed="false"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z" fill="currentColor"/></svg>Dry voice</button>
-          <button type="button" data-src="audio/vocoder-night-call.mp3" aria-pressed="false"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z" fill="currentColor"/></svg>Through Night call</button>
-          <span>Same take, preset 2</span>
-        </div>
       </div>
       <div class="points" data-reveal-list>
         <div class="point"><span class="tag">Pitch</span><h3>It plays the note you sing</h3><p>Autotune finds your note first, so the synth lands right on it. Sing a melody and the robot sings it back, word for word.</p></div>
         <div class="point"><span class="tag">Chords</span><h3>One note or a whole chord</h3><p>Play a single note, a power chord, or a pure-tuned major, minor, 7th and more. Pick In key and every note gets its chord from the autotune key.</p></div>
         <div class="point"><span class="tag">Squeeze</span><h3>Squeeze for a different chord</h3><p>Sing one robot note, clamp down for the full chord. Or go from major to minor while autotune keeps snapping to every note.</p></div>
         <div class="point"><span class="tag">Sound</span><h3>Buzz, breath and a gate</h3><p>Saw, square and pulse carriers for different kinds of buzz. Breath lets your esses and tees through, and a noise gate keeps a humming room quiet.</p></div>
-        <div class="point wide"><span class="tag">Presets</span><h3>Start from Night call or Harder better faster stronger</h3><p>Night call is preset 2 on a fresh install: hard autotune in C minor into one pulse-wave robot, with a chord on the squeeze. Harder better faster stronger is waiting in the editor's starters.</p></div>
       </div>
     </div>
     <div class="cta"><a class="btn" href="editor.html">Try the vocoder with your computer mic</a></div>
@@ -692,15 +682,6 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
   const wire=(attr,set)=>{ const bs=document.querySelectorAll(".vocfig .seg button[data-"+attr+"]");
     bs.forEach(b=>b.addEventListener("click",()=>{ bs.forEach(o=>o.setAttribute("aria-pressed",String(o===b))); set(b.dataset[attr]); draw(); })); };
   wire("vowel",v=>vowel=v); wire("carrier",c=>carrier=c);
-  // listen: one player, each button plays its clip or stops it
-  const audio=new Audio(); audio.preload="none"; let playing=null;
-  const lb=[...document.querySelectorAll(".vocfig .listen button")];
-  const show=()=>lb.forEach(b=>b.setAttribute("aria-pressed",String(b===playing)));
-  lb.forEach(b=>b.addEventListener("click",()=>{
-    if(playing===b){ audio.pause(); playing=null; show(); return; }
-    audio.src=b.dataset.src; audio.currentTime=0; audio.play().catch(()=>{}); playing=b; show();
-  }));
-  audio.addEventListener("ended",()=>{ playing=null; show(); });
 })();
 
 /* ---------- record mode: the mic walks through the four steps ---------- */
