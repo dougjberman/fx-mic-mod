@@ -45,11 +45,10 @@ h1{font-family:var(--f-display);font-weight:800;font-size:clamp(24px,4vw,34px);l
 h1 span{color:var(--accent)}
 h2{font-family:var(--f-display);font-size:12px;text-transform:uppercase;letter-spacing:.1em;margin:0;color:var(--muted);font-weight:700}
 h3{font-family:var(--f-display);font-size:17px;margin:0;font-weight:700}
-.jump{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
-.jump > span{color:var(--muted)}
-.jump a{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);text-decoration:none;font-weight:600}
-.jump a:hover{border-color:var(--muted)}
-.jump a small{font-weight:400;color:var(--muted);font-size:12px}
+.jump{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:14px;color:var(--muted)}
+.jump a{color:var(--ink);font-weight:600;text-decoration:underline;text-decoration-color:var(--line);text-decoration-thickness:2px;text-underline-offset:4px}
+.jump a:hover{text-decoration-color:var(--accent)}
+.jump .sep{color:var(--muted)}
 .group{display:grid;gap:14px;scroll-margin-top:16px}
 .group-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--line);padding:18px 0 8px}
 .group-head h2{font-size:clamp(19px,2.6vw,23px);text-transform:none;letter-spacing:-.01em;color:var(--ink);font-weight:800}
@@ -338,7 +337,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       </g>
     </svg>
     <h1>Your presets and <span>samples</span></h1>
-    <p class="lede">Build the four effect presets on the orange button and set up the four samples on the white button. Hear them through your computer's mic, then save <span class="mono">config.json</span> to the mic.</p>
+    <p class="lede">Build the four effect presets on the orange button and set up the four samples on the <span data-dw="mid">white</span> button. Hear them through your computer's mic, then save <span class="mono">config.json</span> to the mic.</p>
   </header>
   <div class="top">
     <div class="actions">
@@ -357,8 +356,8 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
 
   <nav class="jump" aria-label="On this page">
     <span>Jump to</span>
-    <a href="#effects">Effects presets <small>orange button</small></a>
-    <a href="#samples-group">Samples <small>white button</small></a>
+    <a href="#effects">Effects presets</a><span class="sep" aria-hidden="true">·</span>
+    <a href="#samples-group">Samples</a><span class="sep" aria-hidden="true">·</span>
     <a href="#onto-mic">Getting it onto the mic</a>
   </nav>
 
@@ -391,7 +390,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <div class="group-head">
     <h2>Effects presets</h2>
     <p class="small muted">The four effect chains the orange button steps through.</p>
-    <button class="btn small ghost" id="effects-toggle" aria-expanded="true" aria-controls="effects-body">Collapse</button>
+    <button class="btn small ghost" data-collapse="effects-body" aria-expanded="true" aria-controls="effects-body">Collapse</button>
   </div>
   <div class="group-body" id="effects-body">
   <section class="panel tryit" id="tryit" aria-label="Try it">
@@ -437,10 +436,12 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <div class="group" id="samples-group">
   <div class="group-head">
     <h2>Samples</h2>
-    <p class="small muted">The four sounds the white button picks and the grey button plays.</p>
+    <p class="small muted">The four sounds the <span data-dw="mid">white</span> button picks and the <span data-dw="bot">grey</span> button plays.</p>
+    <button class="btn small ghost" data-collapse="samples-body" aria-expanded="true" aria-controls="samples-body">Collapse</button>
   </div>
+  <div class="group-body" id="samples-body">
   <section class="panel" style="display:grid;gap:12px">
-    <div class="row spread"><h2>Sample slots · white button</h2><button class="btn small" id="btn-load-samples" title="Copy 1.wav to 4.wav from the mic's drive into this page, so you can hear them here">Copy samples from the mic</button></div>
+    <div class="row spread"><h2>Sample slots · <span data-dw="mid">white</span> button</h2><button class="btn small" id="btn-load-samples" title="Copy 1.wav to 4.wav from the mic's drive into this page, so you can hear them here">Copy samples from the mic</button></div>
     <div class="small muted sample-help">
       <p>There are two ways to get samples onto the mic: copy WAV files from your computer with the <a href="install.html#samples">sample copier on the Install page</a>, or record them on the mic itself, with no computer needed. On the mic, the <span data-dw="mid">white</span> button picks a slot and the <span data-dw="bot">grey</span> button plays it.</p>
       <p>The WAVs below are only for hearing each slot here, with its effects. Choosing one doesn't change the mic, and Save to mic saves your settings, not the WAVs.</p>
@@ -454,6 +455,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     <div id="sample-fx" style="display:grid;gap:6px"></div>
     <div class="samples" id="samples"></div>
   </section>
+  </div>
   </div>
 
   <section class="panel adv" style="gap:10px">
@@ -1484,16 +1486,21 @@ function renderSqueezeHint(){
 $("#try-level-slot").append(sliderEl({label:"Preview volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }),
   h("p",{class:"small muted try-note"}, "Only sets how loud it plays in your browser. Not saved to the mic."));
 
-function setEffectsOpen(open){
-  $("#effects-body").hidden = !open;
-  const b = $("#effects-toggle");
+// The Effects presets and Samples groups fold away; the page remembers which.
+function setGroupOpen(id, open){
+  $("#"+id).hidden = !open;
+  const b = document.querySelector('[data-collapse="'+id+'"]');
   b.setAttribute("aria-expanded", String(open));
   b.textContent = open ? "Collapse" : "Expand";
-  try { localStorage.setItem(KEY+"-effects", open?"1":"0"); } catch(e){}
+  try { localStorage.setItem(KEY+"-"+id, open?"1":"0"); } catch(e){}
 }
-$("#effects-toggle").addEventListener("click", ()=>setEffectsOpen($("#effects-body").hidden));
-document.querySelector('.jump a[href="#effects"]').addEventListener("click", ()=>setEffectsOpen(true));
-try { if (localStorage.getItem(KEY+"-effects")==="0") setEffectsOpen(false); } catch(e){}
+document.querySelectorAll("[data-collapse]").forEach(b => {
+  const id = b.dataset.collapse;
+  b.addEventListener("click", ()=>setGroupOpen(id, $("#"+id).hidden));
+  try { if (localStorage.getItem(KEY+"-"+id)==="0") setGroupOpen(id, false); } catch(e){}
+});
+document.querySelector('.jump a[href="#effects"]').addEventListener("click", ()=>setGroupOpen("effects-body", true));
+document.querySelector('.jump a[href="#samples-group"]').addEventListener("click", ()=>setGroupOpen("samples-body", true));
 function setHowto(show){ $("#howto").hidden=!show; $("#howto-show").hidden=show; try { localStorage.setItem(KEY+"-howto", show?"1":"0"); } catch(e){} }
 $("#howto-hide").addEventListener("click", ()=>setHowto(false));
 $("#howto-show").addEventListener("click", ()=>setHowto(true));
