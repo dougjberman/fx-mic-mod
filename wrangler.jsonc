@@ -1,9 +1,12 @@
 // Cloudflare Workers static-assets deploy for the preset editor.
 // `npx wrangler deploy` uploads docs/ as-is; there is no build step.
+// Branch builds run `npx wrangler preview`, which needs a `previews` block
+// (it can be empty).
 {
   "name": "fx-mic-mod",
   "compatibility_date": "2025-09-01",
   "assets": {
     "directory": "./docs"
-  }
+  },
+  "previews": {}
 }
