@@ -139,6 +139,26 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .slot .name{font-weight:700;overflow-wrap:anywhere;text-wrap:balance;line-height:1.3}
 .slot .chain{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere;line-height:1.4}
 .slot.add{place-content:center;justify-items:center;color:var(--muted);border-style:dashed;background:transparent}
+.slot-wrap .slot.add{padding-top:40px}
+.slot.empty{border-style:dashed;background:transparent;cursor:default;min-height:72px}
+/* copy / paste on each slot, outside the slot's own button */
+.slot-wrap{position:relative;display:grid;min-width:0}
+.slot-wrap .slot .top{padding-right:84px;min-height:26px}
+@media (max-width:640px){.slot-wrap .slot .num{display:none}}
+.slot-tools{position:absolute;top:8px;right:8px;display:flex;gap:4px}
+.slot-tools .icon-btn{width:28px;height:26px;font-size:12px}
+.slot-tools .icon-btn.paste{width:auto;padding:0 8px;font-weight:600}
+.slot-tools .icon-btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+/* effects-only mode: one row of slots per page, the page shown on white lights */
+.pages{display:grid;gap:14px}
+.page{display:grid;gap:8px}
+.page-head{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.page-head b{color:var(--ink);font-family:var(--f-mono);font-size:12px;letter-spacing:.04em}
+.page-head .wleds{display:inline-flex;gap:3px;padding:3px 4px;border-radius:7px;background:#3a3d41}
+.page-head .wled{width:8px;height:8px;border-radius:50%;background:#5a5e63}
+.page-head .wled.lit{background:#fff;box-shadow:0 0 5px rgba(255,255,255,.85)}
+.more-fx{display:grid;gap:10px}
+.more-fx .switch{font-weight:700;font-size:16px}
 
 /* effect cards */
 .chain{display:grid;gap:12px}
@@ -402,7 +422,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <div class="group" id="effects">
   <div class="group-head">
     <h2>Effects presets</h2>
-    <p class="small muted">The four effect chains the orange button steps through.</p>
+    <p class="small muted" id="effects-sub">The four effect chains the orange button steps through.</p>
     <button class="btn small ghost" data-collapse="effects-body" aria-expanded="true" aria-controls="effects-body">Collapse</button>
   </div>
   <div class="group-body" id="effects-body">
@@ -438,7 +458,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       <div class="row small muted"><button class="btn small ghost" id="btn-reset" title="Replace your presets and samples with the editor's defaults">Reset to defaults</button><span class="adv">Pack name</span><input id="pack-name" class="text mono adv" maxlength="16" aria-label="Pack name"></div>
     </div>
     <div class="slots" id="slots"></div>
-    <p class="small muted">The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic.</p>
+    <p class="small muted" id="slots-help">The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic.</p>
     <p class="small muted" id="level-help"><b>Volume between presets.</b> Distortion and reverb can make one preset much louder than another. Sing the same phrase through each preset and watch the meter in Try it, then set each preset's <b>Output level</b> so the peak line lands in about the same place. The preview only estimates the mic, so check by ear on the mic too: switch between Clean and each preset while you sing, and turn down any that jump out.</p>
   </section>
 
@@ -453,7 +473,8 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     <button class="btn small ghost" data-collapse="samples-body" aria-expanded="true" aria-controls="samples-body">Collapse</button>
   </div>
   <div class="group-body" id="samples-body">
-  <section class="panel" style="display:grid;gap:12px">
+  <section class="panel more-fx" id="more-fx"></section>
+  <section class="panel" id="samples-panel" style="display:grid;gap:12px">
     <div class="row spread"><h2>Sample slots · <span data-dw="mid">white</span> button</h2><button class="btn small" id="btn-load-samples" title="Copy 1.wav to 4.wav from the mic's drive into this page, so you can hear them here">Copy samples from the mic</button></div>
     <div class="small muted sample-help">
       <p>There are two ways to get samples onto the mic: copy WAV files from your computer with the <a href="install.html#samples">sample copier on the Install page</a>, or record them on the mic itself, with no computer needed. On the mic, the <span data-dw="mid">white</span> button picks a slot and the <span data-dw="bot">grey</span> button plays it.</p>
@@ -634,12 +655,19 @@ function normName(n){
 let config = clone(DEFAULT_CONFIG);
 let selected = 0;
 let addOpen = false;
+// "effects_only": true trades the samples and record mode for up to four pages of four presets
+// (firmware EFFECTS_ONLY, MAX_PAGES); the mic's middle button steps the page.
+const MAX_PRESETS_PAGED = 16;
+const effectsOnly = () => config.effects_only === true;
+const maxPresets = () => effectsOnly() ? MAX_PRESETS_PAGED : 4;
+// A preset copied with a slot's copy button, waiting to be pasted into another slot.
+let copied = null;
 
 function normalizeConfig(c){
   if (!c || typeof c !== "object" || Array.isArray(c)) throw new Error("The file isn't a ting config: it should be a JSON object with presets.");
   const out = {name: typeof c.name === "string" ? c.name : "PACK", presets:[], samples:[]};
   for (const k of Object.keys(c)) if (!["name","presets","samples"].includes(k)) out[k] = c[k];
-  (Array.isArray(c.presets) ? c.presets : []).slice(0,4).forEach(p => {
+  (Array.isArray(c.presets) ? c.presets : []).slice(0, c.effects_only===true ? MAX_PRESETS_PAGED : 4).forEach(p => {
     const list = Array.isArray(p && p.list) ? p.list.map(fx => Object.assign({}, fx, {effect: normName(fx.effect) || fx.effect})) : [];
     // autotune always heads the chain
     // autotune always heads the chain, and the harmonizer or vocoder runs alongside it
@@ -721,14 +749,59 @@ function chainSummary(p){
   const names = p.list.filter(fx=>fx.enabled!==false).map(fx => fx.effect==="autotune" ? "Autotune" : fx.effect==="harmonizer" ? "Harmonizer" : fx.effect==="vocoder" ? "Vocoder" : (EFFECTS[fx.effect]?EFFECTS[fx.effect].label:fx.effect));
   return names.length ? names.join(" → ") : "No effects";
 }
+function slotEl(p, i){
+  const k = i % 4, label = effectsOnly() ? "page "+(Math.floor(i/4)+1)+" preset "+(k+1) : "preset "+(i+1);
+  const tools = h("div",{class:"slot-tools"},
+    h("button",{class:"icon-btn", title:"Copy this preset, to paste it into another slot", "aria-label":"Copy "+label,
+      "aria-pressed":String(!!copied && copied.from===p), onclick:()=>{ copied={preset:clone(p), from:p}; renderSlots(); toast("Copied \u201c"+(p.name||"Untitled")+"\u201d. Click Paste on another slot."); }}, "\u29C9"),
+    copied && copied.from!==p ? h("button",{title:"Replace this preset with the copy of \u201c"+(copied.preset.name||"Untitled")+"\u201d", "aria-label":"Paste over "+label, class:"icon-btn paste",
+      onclick:()=>{ config.presets[i]=clone(copied.preset); selected=i; changed(); toast("Pasted \u201c"+(copied.preset.name||"Untitled")+"\u201d into "+label); }}, "Paste") : null);
+  return h("div",{class:"slot-wrap"},
+    h("button",{class:"slot","aria-pressed":String(i===selected), onclick:()=>{selected=i; addOpen=false; render(); tryPreset(); renderSqueezeHint();}},
+      h("div",{class:"top"}, h("span",{class:"leds","aria-hidden":"true"}, ...[0,1,2,3].map(j=>h("span",{class:j<=k?"led lit":"led"}))), h("span",{class:"num"}, "PRESET "+(k+1))),
+      h("span",{class:"name"}, p.name || "Untitled"),
+      h("span",{class:"chain"}, chainSummary(p))),
+    tools);
+}
+function addSlotEl(){
+  const add = h("button",{class:"slot add", onclick:()=>{ config.presets.push(clone(STARTERS[0])); selected=config.presets.length-1; changed(); }}, "+ Add preset");
+  if (!copied) return add;
+  return h("div",{class:"slot-wrap"}, add, h("div",{class:"slot-tools"},
+    h("button",{title:"Add a copy of \u201c"+(copied.preset.name||"Untitled")+"\u201d here", "aria-label":"Paste as a new preset", class:"icon-btn paste",
+      onclick:()=>{ config.presets.push(clone(copied.preset)); selected=config.presets.length-1; changed(); toast("Pasted \u201c"+(copied.preset.name||"Untitled")+"\u201d as a new preset"); }}, "Paste")));
+}
 function renderSlots(){
   const root = $("#slots"); root.replaceChildren();
-  config.presets.forEach((p,i) => root.append(h("button",{class:"slot","aria-pressed":String(i===selected), onclick:()=>{selected=i; addOpen=false; render(); tryPreset(); renderSqueezeHint();}},
-    h("div",{class:"top"}, h("span",{class:"leds","aria-hidden":"true"}, ...[0,1,2,3].map(k=>h("span",{class:k<=i?"led lit":"led"}))), h("span",{class:"num"}, "PRESET "+(i+1))),
-    h("span",{class:"name"}, p.name || "Untitled"),
-    h("span",{class:"chain"}, chainSummary(p)))));
-  if (config.presets.length < 4) root.append(h("button",{class:"slot add", onclick:()=>{ config.presets.push(clone(STARTERS[0])); selected=config.presets.length-1; changed(); }}, "+ Add preset"));
+  const n = config.presets.length, adding = n < maxPresets();
+  if (!effectsOnly()){
+    root.className = "slots";
+    config.presets.forEach((p,i) => root.append(slotEl(p, i)));
+    if (adding) root.append(addSlotEl());
+  } else {
+    // four rows, one per page, like the mic: the middle button steps the page and its white lights count it
+    root.className = "pages";
+    for (let page = 0; page < 4; page++){
+      const row = h("div",{class:"slots"});
+      for (let i = page*4; i < page*4+4; i++){
+        if (i < n) row.append(slotEl(config.presets[i], i));
+        else if (i === n && adding) row.append(addSlotEl());
+        else row.append(h("div",{class:"slot empty","aria-hidden":"true"}));
+      }
+      root.append(h("div",{class:"page", role:"group", "aria-label":"Page "+(page+1)},
+        h("div",{class:"page-head"}, h("span",{class:"wleds","aria-hidden":"true"}, ...[0,1,2,3].map(j=>h("span",{class:j<=page?"wled lit":"wled"}))),
+          h("b",{}, "PAGE "+(page+1)), h("span",{}, page ? (page+1)+" white lights" : "1 white light")),
+        row));
+    }
+  }
+  $("#effects-sub").replaceChildren(...(effectsOnly()
+    ? ["Up to sixteen effect chains, in four pages of four. The orange button steps through a page; the ", dw("mid"), " button turns the page."]
+    : ["The four effect chains the orange button steps through."]));
+  $("#slots-help").replaceChildren(...(effectsOnly()
+    ? ["On the mic, the orange button steps through Clean and the four presets of the page you're on. The ", dw("mid"), " button goes to the next page, staying on the same preset number, and from the last page back to page 1. The white lights count the page: two lit is page 2. Pages fill in order, so page 2 starts at the fifth preset. Copy a preset with \u29C9, then click Paste on another slot to replace it, or on the empty slot to add it."]
+    : ["The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic. Copy a preset with \u29C9, then click Paste on another slot to replace it."]));
 }
+// A word that differs between the FX Mic and the Ting, kept up to date by site-device.js.
+function dw(key){ return h("span",{"data-dw":key}, siteDevice.word(key)); }
 
 function renderEditor(){
   const root = $("#editor"); root.replaceChildren();
@@ -1206,7 +1279,26 @@ function addEffectBlock(list, forSample){
   return wrap;
 }
 
+function renderMoreFx(){
+  const on = effectsOnly();
+  $("#more-fx").replaceChildren(
+    h("label",{class:"switch"}, h("input",{type:"checkbox", id:"effects-only", checked:on||null, onchange:(e)=>setEffectsOnly(e.target.checked)}), h("span",{class:"track"}), "Give me more effects instead of samples"),
+    h("p",{class:"small muted"}, ...(on
+      ? ["Your mic has no samples and no Record mode now. Instead it holds up to 16 effect presets, four pages of four, up in ", h("a",{href:"#effects"},"Effects presets"), ". The ", dw("mid"), " button turns the page, the white lights show which page you're on, and the ", dw("bot"), " button does nothing. Your WAV files stay on the mic, and turning this off brings the samples back."]
+      : ["Swap the samples and Record mode for more effects: four pages of four presets, sixteen in all. The ", dw("mid"), " button turns the page instead of picking a sample, and the white lights show the page. Presets are tiny next to a WAV, so they all fit."])));
+  $("#samples-panel").style.display = on ? "none" : "grid";  // hidden loses to the inline display
+}
+function setEffectsOnly(on){
+  if (on){ config.effects_only = true; changed(); toast("Up to 16 presets now, four pages of four"); track("effects-only-on"); return; }
+  const extra = config.presets.slice(4);
+  if (extra.length && !confirm("Samples on means four presets again. Presets 5 to "+config.presets.length+" ("+extra.map(p=>p.name||"Untitled").join(", ")+") will be removed from this page.\n\nOK: remove them and turn samples back on.\nCancel: keep them.")){ renderMoreFx(); return; }
+  config.presets.length = Math.min(config.presets.length, 4);
+  if (copied && !config.presets.includes(copied.from)) copied = null;
+  selected = Math.min(selected, Math.max(0, config.presets.length-1));
+  delete config.effects_only; changed(); track("effects-only-off");
+}
 function renderSamples(){
+  renderMoreFx();
   // "sample_fx": "preset" plays samples dry into the selected preset; "own" (or unset) gives each slot its own effects
   const through = String(config.sample_fx||"own").toLowerCase()==="preset";
   $("#sample-fx").replaceChildren(
@@ -1378,6 +1470,7 @@ const FIRMWARE_NEEDS = [
    uses: c => (c.presets||[]).some(p => (p.list||[]).some(fx => fx.effect==="vocoder" && fx.enabled!==false))},
   {version:"1.2", what:"tap, hold and double-tap sample playback",
    uses: c => (c.samples||[]).some(s => s && String(s.playmode||"").toLowerCase()==="auto")},
+  {version:"1.4", what:"more effects instead of samples (pages of presets)", uses: c => c.effects_only === true},
 ];
 const versionParts = v => String(v).split(".").map(n => parseInt(n,10)||0);
 function versionBelow(a, b){
@@ -1432,7 +1525,8 @@ $("#btn-save").addEventListener("click", async ()=>{
     const fh = await dir.getFileHandle("config.json", {create:true});
     const w = await fh.createWritable();
     await w.write(formatJSON(serialize())); await w.close(); markSynced();
-    notice("Saved config.json to the mic. It restarts by itself and the new presets are on now. It's still in edit mode, where it can't record: turn it off and on normally when you want to record samples.", "ok");
+    notice(effectsOnly() ? "Saved config.json to the mic. It restarts by itself and the new presets are on now. The "+siteDevice.word("mid")+" button turns the page of presets."
+      : "Saved config.json to the mic. It restarts by itself and the new presets are on now. It's still in edit mode, where it can't record: turn it off and on normally when you want to record samples.", "ok");
     track("save-to-mic-done");
   } catch(e){
     notice("The mic didn't accept the file. It's probably in play mode, where your computer can only read it. Turn the mic off, hold the orange button while you turn it on, then save again.", "bad");

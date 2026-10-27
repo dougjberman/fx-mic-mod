@@ -22,6 +22,16 @@ parameter names and types) and the demo `config.json`.
 
 - Up to 4 presets (TOP button, red LEDs; position 0 in the cycle is "clean").
 - Up to 4 samples (MIDDLE selects, white LEDs; BOTTOM plays).
+- `effects_only` **(new, optional, firmware 1.4)**: `true` trades the samples and record mode for
+  more presets, up to 16 in pages of four. Page 1 is presets 1 to 4, page 2 is 5 to 8, and so on;
+  the number of pages is however many the presets fill. TOP steps through Clean and the current
+  page's presets (red LEDs). MIDDLE steps to the next page, from the last back to page 1, and the
+  white LEDs count it (two lit is page 2). The mic keeps the slot number across a page turn (on a
+  shorter page it stops at the page's last preset; on Clean it stays on Clean). BOTTOM does
+  nothing. `samples` and the sample settings are ignored but kept, so turning this off brings them
+  back. Only the selected preset's effects are built, so 16 presets cost the mic only their JSON.
+  Firmware before 1.4 reads the first four presets and keeps its samples, so Save to mic won't
+  write `effects_only` to it.
 - `sample_fx` **(new, optional)**: where samples get their effects.
   - `"own"` (default, Adafruit's behaviour): each sample runs through its own `effects`.
   - `"preset"`: samples play dry into the effect preset currently selected on the mic (TOP button), mixed with the mic ahead of the
