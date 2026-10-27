@@ -33,7 +33,9 @@ Controls:
                         current position in the list is indicated by the white
                         LEDs.
 * BOTTOM side button -- plays the current sample wave file with any effects
-                        configured for it.
+                        configured for it. With playmode "auto", a tap plays
+                        it once, a hold plays it until let go, and a double
+                        tap plays it backwards.
 * TOP + MIDDLE, held together for 800ms -- shuts the unit down by driving
                         POWER_HOLD low.
 
@@ -97,7 +99,7 @@ from recorder import Recorder, drive_free
 # firmware knows, so keep it on one line in this form. Raise it with every
 # release that adds a config setting, and add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number.
-FIRMWARE_VERSION = "1.1"
+FIRMWARE_VERSION = "1.2"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -204,6 +206,17 @@ HANDLE_SMOOTHING = 0.25
 HANDLE_OPEN_GUESS = 0.15
 HANDLE_DEAD_ZONE = 0.4
 
+# --- The sample button ("auto" playmode) ---
+
+# A press always starts the sample at once, so a tap never waits. Held at
+# least TAP_HOLD_SECONDS, letting go stops it (hold to play); let go sooner
+# and it plays to the end (a tap). A press within DOUBLE_TAP_SECONDS of a
+# tap's press is a double tap: it plays the sample backwards from the end.
+# The forward start of the first tap is cut off by it, so keep the window
+# short: a slower second press starts the sample again forwards.
+TAP_HOLD_SECONDS = 0.25
+DOUBLE_TAP_SECONDS = 0.3
+
 # --- Record mode ---
 
 # Longest take, in seconds. Held in RAM (48 KB per second at 24 kHz) and
@@ -296,6 +309,17 @@ class DataContext:
         # whether to start or stop, and so a LED switch mid-loop can clean up
         # correctly.
         self.wave_playing = False
+        # The "auto" playmode's button: when the current press began, whether
+        # it is a double tap, and when the last tap began (None unless the
+        # last press was a tap that a second press could follow), in
+        # milliseconds as `event_ms()` gives them.
+        self.press_at = 0
+        self.press_double = False
+        self.tap_at = None
+        # The loaded sample backwards, built on its first double tap (a
+        # RawSample and the array it plays), or None.
+        self.reversed_wave = None
+        self.reversed_data = None
 
         # Whether TOP / MIDDLE are currently held down, for the shutdown combo.
         self.top_held = False
@@ -932,6 +956,10 @@ def unload_wave_sample(ctx):
         ctx.current_wave = None
     ctx.current_playmode = "oneshot"
     ctx.current_source = None
+    if ctx.reversed_wave is not None:
+        ctx.reversed_wave.deinit()
+    ctx.reversed_wave = ctx.reversed_data = None
+    ctx.tap_at = None
     gc.collect()
 
 
@@ -968,20 +996,52 @@ def set_gate(ctx, held):
     ctx.gate_open = held
 
 
-def start_sample(ctx, loop=False):
-    """Play the loaded sample from the top on whatever plays samples now."""
+def reversed_wave(ctx):
+    """The loaded sample backwards, as a RawSample, or None if it won't fit
+    in RAM. Built on the first double tap and kept until the sample is
+    unloaded. (Through autotune the sample streams backwards from flash
+    instead, so this isn't needed there.)"""
+    if ctx.reversed_wave is None:
+        began = time.monotonic()
+        try:
+            gc.collect()
+            ctx.reversed_data = autotune.load_reversed(ctx.current_path)
+            ctx.reversed_wave = audiocore.RawSample(
+                ctx.reversed_data, channel_count=1, sample_rate=RATE
+            )
+        except (MemoryError, OSError, ValueError) as error:
+            ctx.reversed_data = None
+            print("{} can't play backwards: {}".format(ctx.current_path, error))
+            gc.collect()
+            return None
+        print("{} turned round in {:.0f} ms".format(
+            ctx.current_path, (time.monotonic() - began) * 1000))
+    return ctx.reversed_wave
+
+
+def start_sample(ctx, loop=False, reverse=False):
+    """Play the loaded sample from the top on whatever plays samples now,
+    or from the end, backwards, with ``reverse``."""
     if THROUGH_PRESET and ctx.tune is not None:
         try:
-            ctx.tune.play_sample(ctx.current_path, loop)
+            ctx.tune.play_sample(ctx.current_path, loop, reverse)
         except (OSError, ValueError) as error:
             print("{} can't go through autotune: {}".format(ctx.current_path, error))
-    else:
-        try:
-            voice = sample_voice(ctx)
-            voice.level = SAMPLE_LEVEL
-            voice.play(ctx.current_source, loop=loop)
-        except (ValueError, RuntimeError) as error:
-            print("{} can't play: {}".format(ctx.current_path, error))
+        return
+    wave = reversed_wave(ctx) if reverse else None
+    if wave is None:
+        wave = ctx.current_wave
+    source = wave
+    if ctx.current_effects:
+        # Re-hand the wave to the head of the chain so the press restarts it.
+        ctx.current_effects[0].play(wave, loop=loop)
+        source = ctx.current_source
+    try:
+        voice = sample_voice(ctx)
+        voice.level = SAMPLE_LEVEL
+        voice.play(source, loop=loop)
+    except (ValueError, RuntimeError) as error:
+        print("{} can't play: {}".format(ctx.current_path, error))
 
 
 def stop_current_wave(ctx):
@@ -992,7 +1052,26 @@ def stop_current_wave(ctx):
     ctx.wave_playing = False
 
 
-def play_current_wave_sample(ctx):
+# supervisor.ticks_ms() wraps at 2**29.
+TICKS_MASK = (1 << 29) - 1
+
+
+def event_ms(event):
+    """When a button event happened, in ms: keypad's own timestamp, taken
+    when it scanned the button, so a loop pass that ran long (a sample
+    being turned round, or a 16 ms autotune block) doesn't blur a tap
+    into a hold."""
+    stamp = getattr(event, "timestamp", None)
+    if stamp is None:
+        stamp = int(time.monotonic() * 1000)
+    return stamp & TICKS_MASK
+
+
+def ms_between(earlier, later):
+    return (later - earlier) & TICKS_MASK
+
+
+def play_current_wave_sample(ctx, at=0):
     """Handle a BOTTOM button press, per the selected sample's playmode.
 
     * "oneshot"   -- plays through once; a press while it is still playing
@@ -1000,20 +1079,24 @@ def play_current_wave_sample(ctx):
                      replaces whatever a voice is doing.
     * "hold"      -- starts looping; `release_current_wave()` stops it.
     * "startstop" -- toggles between looping and stopped.
+    * "auto"      -- plays through once, at once; `release_current_wave()`
+                     stops it if the press turns out to be a hold. A press
+                     soon after a tap plays it backwards (a double tap).
 
     :param ctx: The mutable state container.
+    :param at: When the button went down, from `event_ms()`.
     """
     if ctx.current_source is None:
         print("no wave loaded for LED {}".format(ctx.white_active))
         return
 
-    if ctx.current_effects:
-        # Re-hand the wave to the head of the chain so the press restarts it.
-        ctx.current_effects[0].play(
-            ctx.current_wave, loop=ctx.current_playmode != "oneshot"
-        )
-
-    if ctx.current_playmode == "oneshot":
+    if ctx.current_playmode == "auto":
+        double = ctx.tap_at is not None and ms_between(ctx.tap_at, at) <= DOUBLE_TAP_SECONDS * 1000
+        ctx.press_at, ctx.press_double, ctx.tap_at = at, double, None
+        start_sample(ctx, reverse=double)
+        ctx.wave_playing = True
+        print("playing {} ({})".format(ctx.white_active, "double tap: backwards" if double else "auto"))
+    elif ctx.current_playmode == "oneshot":
         start_sample(ctx)
         print("playing {} (oneshot)".format(ctx.white_active))
     elif ctx.current_playmode == "hold":
@@ -1030,12 +1113,21 @@ def play_current_wave_sample(ctx):
             print("playing {} (startstop)".format(ctx.white_active))
 
 
-def release_current_wave(ctx):
-    """Handle a BOTTOM button release -- only "hold" cares about this.
+def release_current_wave(ctx, at=0):
+    """Handle a BOTTOM button release -- only "hold" and "auto" care.
 
     :param ctx: The mutable state container.
+    :param at: When the button came up, from `event_ms()`.
     """
-    if ctx.current_playmode == "hold":
+    if ctx.current_playmode == "auto" and ctx.wave_playing:
+        held = ms_between(ctx.press_at, at)
+        if held >= TAP_HOLD_SECONDS * 1000:
+            stop_current_wave(ctx)
+            print("stopped {} (held {} ms)".format(ctx.white_active, held))
+        elif not ctx.press_double:
+            # A tap: it plays on, and a second press soon is a double tap.
+            ctx.tap_at = ctx.press_at
+    elif ctx.current_playmode == "hold":
         stop_current_wave(ctx)
         print("stopped {} (hold released)".format(ctx.white_active))
 
@@ -1175,6 +1267,8 @@ print(
     )
 )
 print('handle travel = "$handle" block, 0.0 (out) to 1.0 (in)')
+print("BOTTOM on auto: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
+    TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
 
 # The DAC is permanently un-muted. The paddle gates only mixer voice 0
 # (the mic/effects chain) so that wave playback on voice 1 still works with the
@@ -1212,9 +1306,9 @@ try:
                 load_selected_wave_sample(data_context)
                 print("white LED {}".format(data_context.white_active))
             if event.pressed and event.key_number == BOTTOM:
-                play_current_wave_sample(data_context)
+                play_current_wave_sample(data_context, event_ms(event))
             if event.released and event.key_number == BOTTOM:
-                release_current_wave(data_context)
+                release_current_wave(data_context, event_ms(event))
             event = keys.events.get()
 
         # TOP + MIDDLE held together for SHUTDOWN_HOLD_SECONDS powers off.

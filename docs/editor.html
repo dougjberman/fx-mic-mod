@@ -585,7 +585,7 @@ const STAGE_FX = ["autotune", "harmonizer", "vocoder"];
 const VOCODER_COST = 12, VOCODER_BAND_COST = 2.5;
 const VOCODER_WAVES = [["saw","Saw (buzzy)"],["square","Square (hollow)"],["saw_square","Saw + square (full)"],["pulse","Pulse (nasal)"]];
 const FILTER_MODES = [["high_pass","Thin (cut lows)"],["low_pass","Muffle (cut highs)"],["band_pass","Telephone (band)"],["notch","Notch"]];
-const PLAYMODES = [["oneshot","Tap to play"],["hold","Hold to play"],["startstop","Tap start / stop"]];
+const PLAYMODES = [["auto","Auto"],["oneshot","Tap to play"],["hold","Hold to play"],["startstop","Tap start / stop"]];
 
 const STARTERS = [
   {name:"Hard tune", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"freeverb",roomsize:0,damp:.6,mix:.19}]},
@@ -606,7 +606,7 @@ STARTERS.push(
   // a hard-tuned one-note robot, after Daft Punk's "Harder, Better, Faster, Stronger"
   {name:"Harder better faster stronger", level:.45, list:[{effect:"autotune",key:"F#",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:11,octave:0,breath:.4,mix:1,gate:-55}]});
 const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[["Squeeze for backups",1],["Night call",.7],["Dream swirl",.4],["Squeeze monster",.25]].map(([n,lv])=>[STARTERS.find(s=>s.name===n),lv]).map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
-  samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"oneshot"},{file:"4.wav",playmode:"oneshot"}]};
+  samples:[{file:"1.wav",playmode:"auto"},{file:"2.wav",playmode:"auto"},{file:"3.wav",playmode:"auto"},{file:"4.wav",playmode:"auto"}]};
 
 /* ------------------------------ state ------------------------------ */
 function clone(v){ return JSON.parse(JSON.stringify(v)); }
@@ -1226,6 +1226,7 @@ function renderSamples(){
           oninput:(e)=>{ s.file=e.target.value.trim()||((i+1)+".wav"); changedQuiet(); }})),
         h("div",{class:"seg", role:"group", "aria-label":"Slot "+(i+1)+" playback"}, PLAYMODES.map(([v,l])=>h("button",{"aria-pressed":String((s.playmode||"oneshot")===v), onclick:()=>{ s.playmode=v; changed(); }}, l)))),
       slotPlayer(i));
+    if (s.playmode === "auto") body.append(h("p",{class:"small muted"}, "Tap to play it through, hold to play it until you let go, double-tap to play it backwards."));
     if (through){
       if (s.effects.length) body.append(h("p",{class:"small muted"}, s.effects.length+" effect"+(s.effects.length>1?"s":"")+" kept for \u201cHardcode effects below\u201d, unused now."));
     } else {
@@ -1253,21 +1254,36 @@ async function loadSlot(i, buf, name){
   slotAudio[i] = {data: b.getChannelData(0).slice(), name, sec: b.duration};
   trySend({samples: slotPayload()});
 }
-async function playSlot(i, loop){
+async function playSlot(i, loop, reverse){
   await tryEnsure(); await tryState.ctx.resume();
   trySend({samples: slotPayload(), sampleFx: config.sample_fx || "own"});
-  trySend({play: {idx: i, loop}});
+  trySend({play: {idx: i, loop, reverse: !!reverse}});
 }
 // The bottom (grey or white) button, per the slot's playmode, as the firmware does it:
 // tap to play = once from the top; hold to play = loops while held; tap start / stop = toggles a loop.
-let slotLooping = null;
+// Auto = plays at once; held TAP_HOLD_MS or more, letting go stops it; a press within DOUBLE_TAP_MS
+// of a tap's press plays it backwards (firmware TAP_HOLD_SECONDS / DOUBLE_TAP_SECONDS).
+const TAP_HOLD_MS = 250, DOUBLE_TAP_MS = 300;
+let slotLooping = null, autoPress = null, autoTap = null;
 function greyDown(i){
   const mode = config.samples[i].playmode || "oneshot";
+  if (mode === "auto"){
+    const now = performance.now(), double = !!autoTap && autoTap.i === i && now - autoTap.at <= DOUBLE_TAP_MS;
+    autoTap = null; autoPress = {i, at: now, double}; slotLooping = null;
+    playSlot(i, false, double);
+    return;
+  }
   if (mode === "startstop" && slotLooping === i){ trySend({stopSample:true}); slotLooping = null; return; }
   slotLooping = mode === "oneshot" ? null : i;
   playSlot(i, mode !== "oneshot");
 }
 function greyUp(i){
+  if (autoPress && autoPress.i === i){
+    const p = autoPress; autoPress = null;
+    if (performance.now() - p.at >= TAP_HOLD_MS) trySend({stopSample:true});
+    else if (!p.double) autoTap = {i, at: p.at};
+    return;
+  }
   if ((config.samples[i].playmode || "oneshot") === "hold" && slotLooping === i){ trySend({stopSample:true}); slotLooping = null; }
 }
 function slotPlayer(i){
@@ -1357,6 +1373,8 @@ const FIRMWARE_NEEDS = [
   {version:"1.0", what:"Normalize recording levels", uses: c => c.normalize_takes === true},
   {version:"1.1", what:"The vocoder",
    uses: c => (c.presets||[]).some(p => (p.list||[]).some(fx => fx.effect==="vocoder" && fx.enabled!==false))},
+  {version:"1.2", what:"Auto sample playback (tap, hold or double-tap)",
+   uses: c => (c.samples||[]).some(s => s && String(s.playmode||"").toLowerCase()==="auto")},
 ];
 const versionParts = v => String(v).split(".").map(n => parseInt(n,10)||0);
 function versionBelow(a, b){

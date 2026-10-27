@@ -723,7 +723,7 @@ function dspFactory(){
       try{
         if(!s||typeof s!=="object") throw new Error("sample must be an object");
         if(typeof s.file!=="string") throw new Error('sample needs a "file" name');
-        const pm=s.playmode==null?"oneshot":String(s.playmode).toLowerCase(); if(!["oneshot","hold","startstop"].includes(pm)) throw new Error("unknown playmode: "+s.playmode);
+        const pm=s.playmode==null?"oneshot":String(s.playmode).toLowerCase(); if(!["oneshot","hold","startstop","auto"].includes(pm)) throw new Error("unknown playmode: "+s.playmode);
         buildChain({list:s.effects||[], blocks:s.blocks}, host, true);
       }catch(e){ issues.push({where:"sample "+(i+1), msg:e.message}); }
     });
@@ -760,7 +760,7 @@ function dspFactory(){
           return {data:s.data, fx}; });
         this.voice=null;
       }
-      if(q.play!=null){ const s=this.samples[q.play.idx]; if(s&&s.data) this.voice={s, pos:0, loop:q.play.loop}; }
+      if(q.play!=null){ const s=this.samples[q.play.idx]; if(s&&s.data) this.voice={s, pos:0, loop:q.play.loop, rev:!!q.play.reverse}; }
       if(q.stopSample) this.voice=null;
       if(q._ping) this.ping={id:q._ping, phase:"quiet", t0:this.n, peak:0, at:0};
       if(q.recStart) this.rec={slot:q.recStart.slot, buf:new Float32Array(Math.round(q.recStart.maxSec*this.sr)), len:0};
@@ -789,7 +789,7 @@ function dspFactory(){
       const smp=this.smp; smp.fill(0); let playing=-1;
       if(this.voice){
         const v=this.voice, d=v.s.data; playing=this.samples.indexOf(v.s);
-        for(let i=0;i<n;i++){ if(v.pos>=d.length){ if(v.loop) v.pos=0; else { this.voice=null; break; } } smp[i]=d[v.pos++]*g.sampleLevel; }
+        for(let i=0;i<n;i++){ if(v.pos>=d.length){ if(v.loop) v.pos=0; else { this.voice=null; break; } } const k=v.pos++; smp[i]=d[v.rev?d.length-1-k:k]*g.sampleLevel; }
       }
       const gGoal=g.gate?1:0, lGoal=g.power?g.level:0, through=this.through&&!this.rec;
       // sample_fx "preset": the sample is mixed in ahead of the preset (autotune included), and the handle gates only the mic

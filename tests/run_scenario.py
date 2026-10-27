@@ -56,6 +56,21 @@ SCENARIOS = {
         paddle=[(1.0, 3.0)],
         end=2.0,
     ),
+    # "auto" playmode on the clean spot: a tap, a double tap, a hold, then
+    # two presses too far apart to be a double tap.
+    "auto": dict(
+        presses=tap(1.0, BOTTOM) + tap(2.0, BOTTOM) + tap(2.2, BOTTOM)
+        + [(3.0, BOTTOM, True), (3.6, BOTTOM, False)]
+        + tap(5.0, BOTTOM) + tap(5.5, BOTTOM),
+        paddle=[],
+        end=6.0,
+    ),
+    # The same double tap on an autotune preset with samples through it.
+    "auto_through": dict(
+        presses=tap(0.5, TOP) + tap(1.0, BOTTOM) + tap(1.2, BOTTOM),
+        paddle=[],
+        end=2.0,
+    ),
     "through": dict(
         presses=tap(0.5, TOP) + tap(1.0, BOTTOM) + tap(3.0, TOP) + tap(3.5, BOTTOM),
         paddle=[],
@@ -117,6 +132,7 @@ def main():
             for m in script.mixers
             if len(m.voice) > 1 and type(m.voice[1].playing).__name__ == "Synthesizer"), None),
         "voice0": type(env["mixer"].voice[0].playing).__name__,
+        "voice1": type(env["mixer"].voice[1].playing).__name__,
         "red_counts": [
             [round(t, 3), sum(v for k, v in leds.items() if k.startswith("LED_RED"))]
             for t, leds in script.led_log
