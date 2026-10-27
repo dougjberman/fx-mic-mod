@@ -105,6 +105,7 @@ def main():
             {"hz": [n.frequency for n in v.pressed],
              "peaks": [max(n.amplitude_log) if n.amplitude_log else None for n in v.pressed],
              "filters": [n.filter.kwargs.get("frequency") for n in v.pressed],
+             "table": len(v.pressed[0].waveform) if v.pressed else None,
              "rate": v.kwargs.get("sample_rate")}
             for v in script.synths
         ],

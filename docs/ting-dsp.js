@@ -43,11 +43,14 @@ function dspFactory(){
     t.splice(t.indexOf(0),1);
     return t.map(x=>x+12*(octave||0));
   }
-  function keyIntervals(note, snap, steps, inversion, octave){
+  // semitones of the chord built in scale steps on the snapped note, or null off the scale (firmware key_tones)
+  function keyTones(note, snap, steps){
     const allowed=snap.allowed.length===12 ? SCALES.major : snap.allowed;
     const pcs=allowed.map(pc=>(pc+snap.root)%12).sort((a,b)=>a-b), pc=((note%12)+12)%12, i=pcs.indexOf(pc), n=pcs.length;
-    const tones= i<0 ? OFF_KEY_SHAPE.slice(0,steps.length) : steps.map(st=>pcs[(i+st)%n]-pc+12*Math.floor((i+st)/n));
-    return voicing(tones, inversion, octave);
+    return i<0 ? null : steps.map(st=>pcs[(i+st)%n]-pc+12*Math.floor((i+st)/n));
+  }
+  function keyIntervals(note, snap, steps, inversion, octave){
+    return voicing(keyTones(note, snap, steps)||OFF_KEY_SHAPE.slice(0,steps.length), inversion, octave);
   }
 
   /* ---------- blocks: numbers, {"block": ...}, "$name" ---------- */
@@ -266,10 +269,14 @@ function dspFactory(){
     return vocWaves[shape]={table, density};
   }
   // carrier chords in just intonation, as whole multiples of a sub-note (firmware VOCODER_CHORDS)
-  const VOC_CHORDS={major:[4,5,6], minor:[10,12,15], "7":[4,5,6,7], maj7:[8,10,12,15], m7:[10,12,15,18], power:[2,3,4]};
+  const VOC_CHORDS={major:[4,5,6], minor:[10,12,15], "7":[4,5,6,7], maj7:[8,10,12,15], m7:[10,12,15,18], power:[2,3,4], dim:[5,6,7], m7b5:[5,6,7,9]};
+  // chords from the autotune key (firmware VOCODER_KEY_CHORDS, VOCODER_SHAPES, vocoder_key_chord)
+  const VOC_KEY_CHORDS={key_triad:[0,2,4], key_seventh:[0,2,4,6]};
+  const VOC_SHAPES={"0,4,7":"major","0,3,7":"minor","0,3,6":"dim","0,4,7,11":"maj7","0,3,7,10":"m7","0,4,7,10":"7","0,3,6,10":"m7b5"};
+  const vocKeyChord=(tones, steps)=>(tones&&VOC_SHAPES[tones.join(",")])||(steps.length>3?"7":"major");
   function chordWave(shape, chord){
     const key=shape+"/"+chord; if(vocWaves[key]) return vocWaves[key];
-    const r=VOC_CHORDS[chord]; if(!r) throw new Error("vocoder chord must be one of "+Object.keys(VOC_CHORDS).join(", "));
+    const r=VOC_CHORDS[chord]; if(!r) throw new Error("vocoder chord must be one of "+Object.keys(VOC_CHORDS).concat(Object.keys(VOC_KEY_CHORDS)).join(", "));
     const {table:base, density}=carrierWave(shape), size=base.length, n=128*r[r.length-1], w=new Float64Array(n);
     for(const m of r){ const step=m*size/n; for(let i=0;i<n;i++){ const p=i*step, j=Math.floor(p), a=base[j%size]; w[i]+=a+(base[(j+1)%size]-a)*(p-j); } }
     let pk=0; for(let i=0;i<n;i++) pk=Math.max(pk,Math.abs(w[i]));
@@ -295,8 +302,11 @@ function dspFactory(){
       if(!Number.isInteger(bands)||bands<4||bands>VOC.MAX_BANDS) throw new Error("vocoder bands must be 4 to "+VOC.MAX_BANDS);
       if(!Number.isInteger(octave)||octave<-2||octave>2) throw new Error("vocoder octave must be -2 to 2");
       if(typeof breath!=="number") throw new Error("vocoder breath must be a number");
-      const {table, density, root}= chord==null ? carrierWave(waveform) : chordWave(waveform, String(chord));
-      this.sub=chord==null ? 1 : 1/root;
+      this.keySteps=chord==null ? null : VOC_KEY_CHORDS[String(chord)]||null;
+      if(this.keySteps) chord=vocKeyChord(null, this.keySteps);
+      this.waveform=waveform; this.chord=chord==null ? null : String(chord);
+      const {table, density, root}= chord==null ? carrierWave(waveform) : chordWave(waveform, this.chord);
+      this.sub=chord==null ? 1 : 1/root; this.dk=1/Math.sqrt(density);
       this.sr=sr; this.table=table; this.oct=Math.pow(2,octave); this.hz=0; this.ph=0; this.breath=clamp(breath,0,1);
       let n=1; while(n*2<=buf) n*=2; this.n=n;
       this.hann=new Float64Array(n); for(let i=0;i<n;i++) this.hann[i]=Math.sin(Math.PI*(i+0.5)/n)**2;
@@ -304,7 +314,7 @@ function dspFactory(){
       this.bands=[];
       for(let i=0;i<bands;i++){
         const c=VOC.LOW*Math.pow(ratio,i), lo=c/half, hi=c*half, a=Math.max(1,Math.trunc(lo*n/sr+0.5)), b=Math.max(a+1,Math.trunc(hi*n/sr+0.5));
-        this.bands.push({a, b, k:VOC.GAIN*Math.sqrt(psd/(density/2*(1/lo-1/hi))), floor:hi, level:0, f:bandPass(c,Q,sr)});
+        this.bands.push({a, b, k:VOC.GAIN*Math.sqrt(psd/(0.5*(1/lo-1/hi))), floor:hi, level:0, f:bandPass(c,Q,sr)});
       }
       this.noise=null;
       if(this.breath>0){
@@ -313,12 +323,17 @@ function dspFactory(){
         this.noise={t, pos:0, a:Math.trunc(cut*n/sr+0.5), b:n/2, k:this.breath*VOC.GAIN*Math.sqrt(psd)/(17320*Math.sqrt(1-cut/(sr/2))), level:0, f:highPass(cut,0.7071,sr)};
       }
     }
+    setChord(chord){
+      if(chord===this.chord) return;
+      const {table, root, density}=chordWave(this.waveform, chord);
+      this.chord=chord; this.table=table; this.sub=1/root; this.dk=1/Math.sqrt(density);
+    }
     update(win, hz){
       if(hz>0){ hz=clamp(hz*this.oct,30,2000); if(Math.abs(hz-this.hz)>0.002*hz) this.hz=hz; }
       const n=this.n, off=win.length-n, x=new Float64Array(n);
       for(let i=0;i<n;i++) x[i]=win[off+i]*32768*this.hann[i];
       const p=powerSpectrum(x), sum=(a,b)=>{ let t=0; for(let i=a;i<b;i++) t+=p[i]; return t; };
-      const f0=this.hz||110, root=1/Math.sqrt(f0);
+      const f0=this.hz||110, root=this.dk/Math.sqrt(f0);
       for(const bd of this.bands){
         if(bd.floor<f0){ bd.level=0; continue; }
         let lv=Math.min(1,bd.k*Math.sqrt(sum(bd.a,bd.b))*root);
@@ -465,6 +480,8 @@ function dspFactory(){
               vRatios=ivs.map(iv=>Math.pow(2,(corr+iv)/12));
               if(py&&hz>0) lsh.lock(sr/hz); lsh.begin(det.BLOCK);
               // the mic measures the voice on the blocks between its pitch searches, every other block
+              // a key chord follows the snapped note (firmware: on pitch searches, no settling)
+              if(voc&&voc.keySteps&&snap.target!==null) voc.setChord(vocKeyChord(keyTones(snap.target, snap, voc.keySteps), voc.keySteps));
               if(voc&&(vocTurn^=1)===0) voc.update(det.win, hz>0 ? hz*ratio : 0);
               host.report({hz, cents: correct?cents:null, correction:corr, target: correct?snap.target:null, midi: hz>0?12*log2(hz/440)+69:null, autotune:correct, squeezed, harmony: voices.length?ivs.slice():null});
             }

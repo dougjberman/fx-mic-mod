@@ -764,6 +764,27 @@ VOCODER_CHORDS = (
     ("maj7", (8, 10, 12, 15)),
     ("m7", (10, 12, 15, 18)),
     ("power", (2, 3, 4)),
+    # the diminished chords as harmonic 5:6:7(:9), the smooth septimal
+    # tuning, rather than 25:30:36, whose table would be five times longer
+    ("dim", (5, 6, 7)),
+    ("m7b5", (5, 6, 7, 9)),
+)
+# Carrier chords from the autotune key, like the harmonizer's key chords:
+# scale steps on the note autotune snapped to pick the chord above (in C
+# major, E gets minor, F major, B diminished), and the carrier swaps to that
+# chord's table. A note outside the scale gets a major (or dominant 7) chord.
+VOCODER_KEY_CHORDS = (
+    ("key_triad", (0, 2, 4)),
+    ("key_seventh", (0, 2, 4, 6)),
+)
+VOCODER_SHAPES = (
+    ((0, 4, 7), "major"),
+    ((0, 3, 7), "minor"),
+    ((0, 3, 6), "dim"),
+    ((0, 4, 7, 11), "maj7"),
+    ((0, 3, 7, 10), "m7"),
+    ((0, 4, 7, 10), "7"),
+    ((0, 3, 6, 10), "m7b5"),
 )
 VOCODER_CHORD_SAMPLES = 128     # chord table samples per cycle of the top note
 
@@ -783,7 +804,7 @@ def chord_wave(shape, chord):
             ratios = multiples
     if ratios is None:
         raise ValueError("vocoder chord must be one of {}".format(
-            tuple(name for name, _ in VOCODER_CHORDS)))
+            tuple(name for name, _ in VOCODER_CHORDS + VOCODER_KEY_CHORDS)))
     base, density = carrier_wave(shape)
     size = len(base)
     n = VOCODER_CHORD_SAMPLES * ratios[-1]
@@ -802,6 +823,31 @@ def chord_wave(shape, chord):
     density *= scale * scale * sum(ratios) / ratios[0]
     _WAVES[key] = table, ratios[0], density
     return _WAVES[key]
+
+
+def key_tones(snapper, note, steps):
+    """Semitones above the snapped MIDI ``note`` of the chord built in scale
+    ``steps`` on it, in the snapper's key; None for a note off the scale.
+    "Every note" (chromatic) counts as the key's major scale."""
+    allowed = snapper.allowed
+    if len(allowed) == 12:
+        allowed = SCALES[1][1]
+    pcs = sorted((pc + snapper.root) % 12 for pc in allowed)
+    pc = note % 12
+    if pc not in pcs:
+        return None
+    i, n = pcs.index(pc), len(pcs)
+    return [pcs[(i + s) % n] - pc + 12 * ((i + s) // n) for s in steps]
+
+
+def vocoder_key_chord(tones, steps):
+    """The VOCODER_CHORDS name for key chord ``tones`` (from key_tones)."""
+    if tones is not None:
+        tones = tuple(tones)
+        for shape, name in VOCODER_SHAPES:
+            if shape == tones:
+                return name
+    return "7" if len(steps) > 3 else "major"
 
 
 def carrier_wave(shape):
@@ -847,7 +893,8 @@ class Vocoder:
       bands     4..VOCODER_MAX_BANDS band-pass channels
       octave    moves the carrier by whole octaves from the sung note
       chord     None, or a VOCODER_CHORDS name: the carrier plays that chord
-                on the sung note (in just intonation)
+                on the sung note (in just intonation); or a VOCODER_KEY_CHORDS
+                name, and set_chord() picks the chord as the key gives it
       breath    0..1, noise for the voice's highs (s, t, f), so words come through
     """
 
@@ -861,12 +908,25 @@ class Vocoder:
         if not -2 <= octave <= 2:
             raise ValueError("vocoder octave must be -2 to 2")
         self.breath = min(1.0, max(0.0, breath))
+        self.waveform = waveform
+        self.key_steps = dict(VOCODER_KEY_CHORDS).get(chord)
+        if self.key_steps is not None:
+            # build every table the key can ask for now, not mid-song
+            names = {vocoder_key_chord(None, self.key_steps)}
+            for shape, name in VOCODER_SHAPES:
+                if len(shape) == len(self.key_steps):
+                    names.add(name)
+            for name in names:
+                chord_wave(waveform, name)
+            chord = vocoder_key_chord(None, self.key_steps)
+        self.chord = chord
         if chord is None:
             table, density = carrier_wave(waveform)
             self._sub = 1.0
         else:
             table, root, density = chord_wave(waveform, chord)
             self._sub = 1.0 / root  # the table repeats at this share of the root
+        self._dk = 1.0 / math.sqrt(density)
         self.octave = 2.0 ** octave
         self.hz = 0.0
 
@@ -898,7 +958,8 @@ class Vocoder:
             self._bins.append((a, b))
             # amplitude = k * sqrt(band power) / sqrt(f0): the voice's band
             # level over a full-amplitude carrier's level in the band
-            self._k.append(VOCODER_GAIN * math.sqrt(psd / (density / 2 * (1 / low - 1 / top))))
+            # (over sqrt(density), the carrier's part, kept apart in _dk)
+            self._k.append(VOCODER_GAIN * math.sqrt(psd / (0.5 * (1 / low - 1 / top))))
             self._floor.append(top)
             self.notes.append(synthio.Note(
                 frequency=110.0, waveform=table, amplitude=0.0,
@@ -926,6 +987,20 @@ class Vocoder:
     def start(self):
         self.synth.press(self.notes + ([self.noise] if self.noise else []))
 
+    def set_chord(self, chord):
+        """Swap the carrier to another VOCODER_CHORDS chord (for key chords,
+        whose tables are built already)."""
+        if chord == self.chord:
+            return
+        table, root, density = chord_wave(self.waveform, chord)
+        self.chord = chord
+        self._sub = 1.0 / root
+        self._dk = 1.0 / math.sqrt(density)
+        for note in self.notes:
+            note.waveform = table
+            if self.hz:
+                note.frequency = self.hz * self._sub
+
     def measure(self, window):
         """Power in each band (and the breath band) of the analysis window."""
         x = np.frombuffer(window, dtype=np.int16)[self._start:] * self._hann
@@ -947,7 +1022,7 @@ class Vocoder:
                     note.frequency = hz * self._sub
         powers = self.measure(window)
         f0 = self.hz or 110.0
-        root = 1.0 / math.sqrt(f0)
+        root = self._dk / math.sqrt(f0)
         levels = self._levels
         for i, note in enumerate(self.notes):
             if self._floor[i] < f0:
@@ -1478,16 +1553,9 @@ class Autotune:
 
     def _key_intervals(self, note):
         """Harmony intervals for a key chord on the snapped MIDI note."""
-        allowed = self.snapper.allowed
-        if len(allowed) == 12:
-            allowed = SCALES[1][1]
-        pcs = sorted((pc + self.snapper.root) % 12 for pc in allowed)
-        pc = note % 12
         steps = self._tones
-        if pc in pcs:
-            i, n = pcs.index(pc), len(pcs)
-            tones = [pcs[(i + s) % n] - pc + 12 * ((i + s) // n) for s in steps]
-        else:
+        tones = key_tones(self.snapper, note, steps)
+        if tones is None:
             tones = OFF_KEY_SHAPE[:len(steps)]
         return voicing(tones, self._inversion, self._octave)
 
@@ -1601,7 +1669,7 @@ class Autotune:
         # the pitch is found one block less often (48 ms rather than 32).
         every = DETECT_EVERY + (1 if self.sample is not None and self.gate else 0)
         self._turn = (self._turn + 1) % every
-        if not (self.enabled and (self.correct or self._key_chord or self.vocoder)):
+        if not (self.enabled and (self.correct or self._key_chord or self.vocoder is not None)):
             self.cents = None
             self.hz = 0.0
             self._target = 0.0
@@ -1646,6 +1714,12 @@ class Autotune:
                 voice.semitones = self.correction + interval
             self._set_levels()
         if self.vocoder is not None:
+            steps = self.vocoder.key_steps
+            if steps and self._turn == 0 and self.snapper.target is not None:
+                # a key chord follows the note autotune snapped to; the
+                # carrier moves with the note, so the chord needn't settle
+                self.vocoder.set_chord(vocoder_key_chord(
+                    key_tones(self.snapper, self.snapper.target, steps), steps))
             # On the blocks between pitch searches (see VOCODER_EVERY_BLOCK);
             # the carrier plays the sung note plus autotune's correction.
             if VOCODER_EVERY_BLOCK or DETECT_EVERY == 1 or self._turn != 0:

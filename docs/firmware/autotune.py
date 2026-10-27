@@ -764,6 +764,27 @@ VOCODER_CHORDS = (
     ("maj7", (8, 10, 12, 15)),
     ("m7", (10, 12, 15, 18)),
     ("power", (2, 3, 4)),
+
+
+    ("dim", (5, 6, 7)),
+    ("m7b5", (5, 6, 7, 9)),
+)
+
+
+
+
+VOCODER_KEY_CHORDS = (
+    ("key_triad", (0, 2, 4)),
+    ("key_seventh", (0, 2, 4, 6)),
+)
+VOCODER_SHAPES = (
+    ((0, 4, 7), "major"),
+    ((0, 3, 7), "minor"),
+    ((0, 3, 6), "dim"),
+    ((0, 4, 7, 11), "maj7"),
+    ((0, 3, 7, 10), "m7"),
+    ((0, 4, 7, 10), "7"),
+    ((0, 3, 6, 10), "m7b5"),
 )
 VOCODER_CHORD_SAMPLES = 128
 
@@ -783,7 +804,7 @@ def chord_wave(shape, chord):
             ratios = multiples
     if ratios is None:
         raise ValueError("vocoder chord must be one of {}".format(
-            tuple(name for name, _ in VOCODER_CHORDS)))
+            tuple(name for name, _ in VOCODER_CHORDS + VOCODER_KEY_CHORDS)))
     base, density = carrier_wave(shape)
     size = len(base)
     n = VOCODER_CHORD_SAMPLES * ratios[-1]
@@ -802,6 +823,31 @@ def chord_wave(shape, chord):
     density *= scale * scale * sum(ratios) / ratios[0]
     _WAVES[key] = table, ratios[0], density
     return _WAVES[key]
+
+
+def key_tones(snapper, note, steps):
+    0
+
+
+    allowed = snapper.allowed
+    if len(allowed) == 12:
+        allowed = SCALES[1][1]
+    pcs = sorted((pc + snapper.root) % 12 for pc in allowed)
+    pc = note % 12
+    if pc not in pcs:
+        return None
+    i, n = pcs.index(pc), len(pcs)
+    return [pcs[(i + s) % n] - pc + 12 * ((i + s) // n) for s in steps]
+
+
+def vocoder_key_chord(tones, steps):
+    0
+    if tones is not None:
+        tones = tuple(tones)
+        for shape, name in VOCODER_SHAPES:
+            if shape == tones:
+                return name
+    return "7" if len(steps) > 3 else "major"
 
 
 def carrier_wave(shape):
@@ -851,6 +897,7 @@ class Vocoder:
 
 
 
+
     def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0, chord=None):
         import synthio
 
@@ -861,12 +908,25 @@ class Vocoder:
         if not -2 <= octave <= 2:
             raise ValueError("vocoder octave must be -2 to 2")
         self.breath = min(1.0, max(0.0, breath))
+        self.waveform = waveform
+        self.key_steps = dict(VOCODER_KEY_CHORDS).get(chord)
+        if self.key_steps is not None:
+
+            names = {vocoder_key_chord(None, self.key_steps)}
+            for shape, name in VOCODER_SHAPES:
+                if len(shape) == len(self.key_steps):
+                    names.add(name)
+            for name in names:
+                chord_wave(waveform, name)
+            chord = vocoder_key_chord(None, self.key_steps)
+        self.chord = chord
         if chord is None:
             table, density = carrier_wave(waveform)
             self._sub = 1.0
         else:
             table, root, density = chord_wave(waveform, chord)
             self._sub = 1.0 / root
+        self._dk = 1.0 / math.sqrt(density)
         self.octave = 2.0 ** octave
         self.hz = 0.0
 
@@ -898,7 +958,8 @@ class Vocoder:
             self._bins.append((a, b))
 
 
-            self._k.append(VOCODER_GAIN * math.sqrt(psd / (density / 2 * (1 / low - 1 / top))))
+
+            self._k.append(VOCODER_GAIN * math.sqrt(psd / (0.5 * (1 / low - 1 / top))))
             self._floor.append(top)
             self.notes.append(synthio.Note(
                 frequency=110.0, waveform=table, amplitude=0.0,
@@ -926,6 +987,20 @@ class Vocoder:
     def start(self):
         self.synth.press(self.notes + ([self.noise] if self.noise else []))
 
+    def set_chord(self, chord):
+        0
+
+        if chord == self.chord:
+            return
+        table, root, density = chord_wave(self.waveform, chord)
+        self.chord = chord
+        self._sub = 1.0 / root
+        self._dk = 1.0 / math.sqrt(density)
+        for note in self.notes:
+            note.waveform = table
+            if self.hz:
+                note.frequency = self.hz * self._sub
+
     def measure(self, window):
         0
         x = np.frombuffer(window, dtype=np.int16)[self._start:] * self._hann
@@ -947,7 +1022,7 @@ class Vocoder:
                     note.frequency = hz * self._sub
         powers = self.measure(window)
         f0 = self.hz or 110.0
-        root = 1.0 / math.sqrt(f0)
+        root = self._dk / math.sqrt(f0)
         levels = self._levels
         for i, note in enumerate(self.notes):
             if self._floor[i] < f0:
@@ -1478,16 +1553,9 @@ class Autotune:
 
     def _key_intervals(self, note):
         0
-        allowed = self.snapper.allowed
-        if len(allowed) == 12:
-            allowed = SCALES[1][1]
-        pcs = sorted((pc + self.snapper.root) % 12 for pc in allowed)
-        pc = note % 12
         steps = self._tones
-        if pc in pcs:
-            i, n = pcs.index(pc), len(pcs)
-            tones = [pcs[(i + s) % n] - pc + 12 * ((i + s) // n) for s in steps]
-        else:
+        tones = key_tones(self.snapper, note, steps)
+        if tones is None:
             tones = OFF_KEY_SHAPE[:len(steps)]
         return voicing(tones, self._inversion, self._octave)
 
@@ -1601,7 +1669,7 @@ class Autotune:
 
         every = DETECT_EVERY + (1 if self.sample is not None and self.gate else 0)
         self._turn = (self._turn + 1) % every
-        if not (self.enabled and (self.correct or self._key_chord or self.vocoder)):
+        if not (self.enabled and (self.correct or self._key_chord or self.vocoder is not None)):
             self.cents = None
             self.hz = 0.0
             self._target = 0.0
@@ -1646,6 +1714,12 @@ class Autotune:
                 voice.semitones = self.correction + interval
             self._set_levels()
         if self.vocoder is not None:
+            steps = self.vocoder.key_steps
+            if steps and self._turn == 0 and self.snapper.target is not None:
+
+
+                self.vocoder.set_chord(vocoder_key_chord(
+                    key_tones(self.snapper, self.snapper.target, steps), steps))
 
 
             if VOCODER_EVERY_BLOCK or DETECT_EVERY == 1 or self._turn != 0:

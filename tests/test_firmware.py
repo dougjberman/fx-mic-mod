@@ -240,7 +240,25 @@ class LoaderTests(unittest.TestCase):
             for m in ratios:
                 self.assertGreater(spec[m], 0.1 * spec.max(), (name, m))
         with self.assertRaises(ValueError):
-            autotune.chord_wave("saw", "dim")
+            autotune.chord_wave("saw", "aug")
+        # key chords: the chord the scale builds on the snapped note
+        snap = autotune.NoteSnapper()
+        snap.set_scale(autotune.scale_by_name("major"), autotune.key_by_name("C"))
+        triad, seventh = (dict(autotune.VOCODER_KEY_CHORDS)[n] for n in ("key_triad", "key_seventh"))
+        names = {note: autotune.vocoder_key_chord(autotune.key_tones(snap, note, triad), triad)
+                 for note in (60, 62, 64, 65, 67, 71, 61)}
+        self.assertEqual(names, {60: "major", 62: "minor", 64: "minor", 65: "major",
+                                 67: "major", 71: "dim", 61: "major"})
+        names = {note: autotune.vocoder_key_chord(autotune.key_tones(snap, note, seventh), seventh)
+                 for note in (60, 62, 67, 71, 61)}
+        self.assertEqual(names, {60: "maj7", 62: "m7", 67: "7", 71: "m7b5", 61: "7"})
+        voc = autotune.Vocoder(rate, chord="key_triad")
+        self.assertEqual(voc.chord, "major")
+        voc.update(array.array("h", [0] * autotune.BUFFER_SIZE), 220.0)
+        self.assertAlmostEqual(voc.notes[0].frequency, 55.0)  # 220 / 4
+        voc.set_chord("dim")
+        self.assertAlmostEqual(voc.notes[0].frequency, 44.0)  # 220 / 5, the 5:6:7 sub-note
+        self.assertEqual(len(voc.notes[0].waveform), autotune.VOCODER_CHORD_SAMPLES * 7)
         voc = autotune.Vocoder(rate, chord="minor")
         voc.update(array.array("h", [0] * autotune.BUFFER_SIZE), 220.0)
         self.assertAlmostEqual(voc.notes[0].frequency, 22.0)  # 220 / 10, the minor chord's sub-note
@@ -712,6 +730,18 @@ class DeviceScenarioTests(unittest.TestCase):
         peaks = voc["peaks"]
         self.assertGreater(min(peaks[:2]), 0.2)
         self.assertLess(max(peaks[2:]), 0.05)
+
+    def test_vocoder_key_chord(self):
+        config = {"name": "V", "presets": [{"list": [
+            {"effect": "autotune", "key": "A", "scale": "minor", "speed": 1.0},
+            {"effect": "vocoder", "bands": 6, "octave": -1, "chord": "key_seventh"}]}],
+            "samples": []}
+        root, out, s = run("level", config)
+        voc, = s["vocoders"]
+        # 207 Hz snaps to G, and G in A minor is G B D F, a dominant 7th
+        # (4:5:6:7): the carrier plays its sub-note, two octaves under 98 Hz
+        self.assertAlmostEqual(voc["hz"][0], 24.5, delta=0.2)
+        self.assertEqual(voc["table"], 128 * 7)  # VOCODER_CHORD_SAMPLES per multiple
 
     def test_vocoder_with_the_voice(self):
         config = {"name": "V", "presets": [{"list": [

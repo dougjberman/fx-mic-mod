@@ -33,7 +33,9 @@ each band and sets each band note's amplitude. With `mix` 1 nothing plays the vo
 builds no shifter and the synth heads the chain; otherwise a two-voice mixer sums voice and synth.
 A `chord` carrier costs nothing extra: the chord's notes are whole-number multiples of a lower
 note (minor is 10:12:15), so one longer table holds the whole chord and each band note plays it
-at the sung note divided by the root's multiple.
+at the sung note divided by the root's multiple. A key chord (`key_triad`, `key_seventh`)
+builds every chord its key can ask for when the preset loads, and on each pitch search sets the
+band notes' `waveform` to the chord the scale gives the snapped note.
 
 ## Needs checking on the device
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
@@ -57,7 +59,9 @@ at the sung note divided by the root's multiple.
   the synth's soft clip. Band levels step every 32 ms; listen for zipper noise on held vowels.
 - **Chord tables:** a chord carrier's table is 128 samples per multiple of its top note, so up to
   2304 samples for `m7`. Check synthio takes waveforms that long, and that low sung notes don't
-  alias (the sub-note can sit below 20 Hz, which synthio should play fine).
+  alias (the sub-note can sit below 20 Hz, which synthio should play fine). A `key_seventh`
+  preset holds four tables (about 12 KB) and takes a moment more to load; listen for a click
+  when the chord swaps (setting `Note.waveform` mid-note).
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.
