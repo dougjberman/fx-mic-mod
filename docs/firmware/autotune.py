@@ -756,6 +756,9 @@ class Autotune:
         self._turn = 0
         self.busy_ms = 0.0
         self.wait_ms = 0.0
+        self.idle_ms = 0.0
+        self.outside_ms = 0.0
+        self._ended = 0
         self._analyse_ns = 0
 
 
@@ -1198,8 +1201,11 @@ class Autotune:
     def step(self, speed_override=None):
         0
         block = self._block
+        entered = time.monotonic_ns()
         got = self.mic.record(block, BLOCK_SIZE)
         began = time.monotonic_ns()
+        self.idle_ms = (began - entered) / 1e6
+        self.outside_ms = (entered - self._ended) / 1e6 if self._ended else 0.0
         for i in range(got, BLOCK_SIZE):
             block[i] = 0
         if not self.gate:
@@ -1243,8 +1249,9 @@ class Autotune:
             self._sample_ready = self.sample.read(self.sample_gain)
 
 
+        self._ended = time.monotonic_ns()
         self.wait_ms = waited / 1e6
-        self.busy_ms = (time.monotonic_ns() - began - waited) / 1e6
+        self.busy_ms = (self._ended - began - waited) / 1e6
         return got
 
     def _analyse(self, block, speed_override=None):
@@ -1256,7 +1263,10 @@ class Autotune:
 
 
 
-        self._turn = (self._turn + 1) % DETECT_EVERY
+
+
+        every = DETECT_EVERY + (1 if self.sample is not None and self.gate else 0)
+        self._turn = (self._turn + 1) % every
         if not (self.enabled and (self.correct or self._key_chord)):
             self.cents = None
             self.hz = 0.0
@@ -1279,7 +1289,7 @@ class Autotune:
                 self._target = semis
             else:
 
-                self._target *= 0.9 ** DETECT_EVERY
+                self._target *= 0.9 ** every
         if not self.correct:
             self._target = 0.0
 

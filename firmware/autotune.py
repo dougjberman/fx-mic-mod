@@ -756,6 +756,9 @@ class Autotune:
         self._turn = 0
         self.busy_ms = 0.0
         self.wait_ms = 0.0      # of that pass, spent waiting for the chain
+        self.idle_ms = 0.0      # of that pass, spent in mic.record (spare time)
+        self.outside_ms = 0.0   # from the pass before ending to this one starting
+        self._ended = 0
         self._analyse_ns = 0    # what the pitch work costs, a slowly falling max
         # Mic level, 0 or 1, applied before pitch detection. Used when
         # samples are mixed into this stage, so the paddle can mute the mic
@@ -1198,8 +1201,11 @@ class Autotune:
     def step(self, speed_override=None):
         """Process one block. Blocks for BLOCK_SIZE samples of audio."""
         block = self._block
+        entered = time.monotonic_ns()
         got = self.mic.record(block, BLOCK_SIZE)
         began = time.monotonic_ns()
+        self.idle_ms = (began - entered) / 1e6
+        self.outside_ms = (entered - self._ended) / 1e6 if self._ended else 0.0
         for i in range(got, BLOCK_SIZE):
             block[i] = 0
         if not self.gate:
@@ -1243,8 +1249,9 @@ class Autotune:
             self._sample_ready = self.sample.read(self.sample_gain)
         # Python time this block took, in ms. Over ~16 ms (one block of audio)
         # and the mic overflows; code.py prints it with each overflow.
+        self._ended = time.monotonic_ns()
         self.wait_ms = waited / 1e6
-        self.busy_ms = (time.monotonic_ns() - began - waited) / 1e6
+        self.busy_ms = (self._ended - began - waited) / 1e6
         return got
 
     def _analyse(self, block, speed_override=None):
@@ -1256,7 +1263,10 @@ class Autotune:
 
         # Without retuning, only a key chord needs to know the note. Pitch
         # is found every DETECT_EVERY blocks; between, the last target holds.
-        self._turn = (self._turn + 1) % DETECT_EVERY
+        # With a sample in and the mic open the chain has the most to do, so
+        # the pitch is found one block less often (48 ms rather than 32).
+        every = DETECT_EVERY + (1 if self.sample is not None and self.gate else 0)
+        self._turn = (self._turn + 1) % every
         if not (self.enabled and (self.correct or self._key_chord)):
             self.cents = None
             self.hz = 0.0
@@ -1279,7 +1289,7 @@ class Autotune:
                 self._target = semis
             else:
                 # silence / noise: relax back toward no shift
-                self._target *= 0.9 ** DETECT_EVERY
+                self._target *= 0.9 ** every
         if not self.correct:
             self._target = 0.0
 

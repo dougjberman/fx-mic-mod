@@ -1304,7 +1304,12 @@ try:
         if not idle and mic.overflow:
             if data_context.tune is not None:
                 tune = data_context.tune
-                print("overflow (autotune took {:.1f} ms of 16, plus {:.1f} waiting for the chain)".format(tune.busy_ms, tune.wait_ms))
+                # The pass before: its work, its wait for the chain, the
+                # time it had spare in mic.record, and the loop's time
+                # outside autotune before it.
+                print("overflow (autotune took {:.1f} ms of 16, plus {:.1f} waiting for the chain; "
+                      "{:.1f} spare, {:.1f} outside)".format(
+                          tune.busy_ms, tune.wait_ms, tune.idle_ms, tune.outside_ms))
             else:
                 print("overflow")
 
