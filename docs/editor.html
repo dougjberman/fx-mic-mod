@@ -1004,12 +1004,22 @@ function vocoderCard(p, fx){
   const keyJob = tune && (tune.squeeze_key!=null || tune.squeeze_scale!=null);
   const sq = typeof fx.squeeze_chord==="string" ? fx.squeeze_chord : null;
   const sqBusy = keyJob || fx.mix==="$handle";
-  body.append(h("div",{class:"field"}, h("label",{}, "Squeeze for"),
-    h("div",{class:"seg", role:"group", "aria-label":"Chord on a full squeeze"},
-      [[null,"Off"]].concat(VOCODER_CHORD_CHOICES.map(([v,l])=>[v||"none",l])).map(([v,l])=>h("button",{"aria-pressed":String(sq===v),
-        disabled:((sqBusy && v) || (VOCODER_KEY_CHORDS[v] && !keyed)) && sq!==v || null,
-        onclick:()=>{ if (v) fx.squeeze_chord=v; else delete fx.squeeze_chord; changed(); }}, l)))));
-  if (sq) body.append(h("p",{class:"small muted"}, "Squeeze the handle far in to switch to this chord, and ease off to go back. Pair it with autotune on Every note to pick major or minor on any note you sing."));
+  const sqId = nid("vsc");
+  body.append(h("label",{class:"switch", for:sqId},
+    h("input",{type:"checkbox", id:sqId, checked:sq?true:null, disabled:(sqBusy && !sq)||null,
+      onchange:(e)=>{ if (e.target.checked) fx.squeeze_chord = chord==="minor" ? "major" : "minor"; else delete fx.squeeze_chord; changed(); }}),
+    h("span",{class:"track"}), h("span",{}, "Squeeze for a different chord")));
+  if (sq){
+    const box = h("div",{class:"squeeze"});
+    box.append(h("div",{class:"field"}, h("label",{}, "Squeezed chord"),
+      h("div",{class:"seg", role:"group", "aria-label":"Chord on a full squeeze"},
+        VOCODER_CHORD_CHOICES.map(([v,l])=>[v||"none",l]).map(([v,l])=>h("button",{"aria-pressed":String(sq===v),
+          disabled:(VOCODER_KEY_CHORDS[v] && !keyed && sq!==v)||null,
+          onclick:()=>{ fx.squeeze_chord=v; changed(); }}, l)))));
+    const name = v => (VOCODER_CHORD_CHOICES.find(([c])=>(c||"none")===v)||[0,v])[1];
+    box.append(h("p",{class:"small muted"}, "Sing with a light squeeze for "+name(chord||"none")+". Squeeze past about two-thirds for "+name(sq)+". Ease off to halfway to go back."));
+    body.append(box);
+  }
   else if (sqBusy) body.append(h("p",{class:"small muted"}, keyJob ? "The squeeze already changes the autotune key, so it can't switch the chord too." : "The squeeze already brings in the vocoder, so it can't switch the chord too."));
   const oct = typeof fx.octave==="number" ? fx.octave : 0;
   body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
