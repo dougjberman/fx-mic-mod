@@ -975,7 +975,7 @@ function vocoderCard(p, fx){
   const oct = typeof fx.octave==="number" ? fx.octave : 0;
   body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
     h("div",{class:"seg", role:"group", "aria-label":"Carrier octave"},
-      [[-2,"−2"],[-1,"Down"],[0,"As sung"],[1,"Up"],[2,"+2"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
+      [[-2,"−2"],[-1,"−1"],[0,"As sung"],[1,"+1"],[2,"+2"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
   body.append(sliderEl({label:"Bands",min:4,max:11,step:1,ends:["Smooth, lo-fi","Clear words"]}, typeof fx.bands==="number"?fx.bands:8, v=>{ fx.bands=v; changed(); }));
   body.append(sliderEl({label:"Breath",min:0,max:1,step:.01,ends:["Off","Hissy s and t"]}, typeof fx.breath==="number"?fx.breath:0, v=>{ fx.breath=v; changedQuiet(); }));
   // amount: fixed, or brought in by the squeeze
