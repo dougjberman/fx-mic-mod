@@ -40,6 +40,9 @@ chord needs the note).
   write due less than half a block before a burst waits for it, so every write has half a block
   of slack. The console prints `feed sync: … ; waits for it` or `writes ahead`. If a load still
   crackles, type `f` and Enter to flip it, and keep that load's line.
+  Which half a burst reads first depends on pulls left over from wiring the chain (a RawSample
+  never resets to half 0), so `start()` runs the chain on silence for `SETTLE_S` (0.2 s) before
+  starting the feeds. That should make every load read half 0 first.
 - **Recording after playback:** record mode stops the mic feeding the mixer, then calls
   `mic.record()`. Check that the first block of a take is not stale audio from before the squeeze
   (the 50 ms trim and 0.1 s settle should cover it).

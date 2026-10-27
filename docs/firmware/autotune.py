@@ -82,6 +82,17 @@ BLOCK_NS = 16000000
 
 
 
+
+
+
+
+
+
+SETTLE_S = 0.2
+
+
+
+
 NATURAL_RATE = 0.08
 HUMANIZE_CENTS = 30
 NOTE_HYSTERESIS = 0.3
@@ -786,8 +797,9 @@ class Autotune:
                 for index, voice in enumerate(self.voices):
                     self.mixer.voice[index + 1].play(voice, loop=True)
                 self._set_levels()
-                for voice, feed in zip(self.voices, self._feeds):
-                    voice.play(feed, loop=True)
+            time.sleep(SETTLE_S)
+            for voice, feed in zip(self.voices, self._feeds):
+                voice.play(feed, loop=True)
             self.shifter.play(self.feed, loop=True)
             if FEED_SYNC and FEED_PHASE is not None:
                 try:
