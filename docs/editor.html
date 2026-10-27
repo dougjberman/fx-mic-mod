@@ -275,8 +275,10 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 @media (prefers-reduced-motion:reduce){#try-squeeze-slot.nudge{animation:none}}
 /* how-to strip */
 .howto{display:grid;gap:12px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;background:var(--panel);padding:16px 18px}
-.howto ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.howto ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media (max-width:1100px){.howto ol{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:820px){.howto ol{grid-template-columns:1fr}}
+.howto .whole{margin:0;font-size:14px;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
 .howto li{display:grid;gap:4px;align-content:start;font-size:14px;color:var(--muted)}
 .howto li b{color:var(--ink);font-size:15px}
 .howto .n{font-family:var(--f-mono);font-size:12px;color:var(--accent-text)}
@@ -366,12 +368,14 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       <h2>How to use this page</h2>
       <button class="btn small ghost" id="howto-hide">Hide</button>
     </div>
+    <p class="whole"><b>One file holds everything on this page.</b> Your four effect presets and your sample settings all live in <span class="mono">config.json</span>, and <b>Save to mic replaces the whole file</b>. To change one part and keep the rest, start from the mic's own file (step 1). The sounds themselves, <span class="mono">1.wav</span> to <span class="mono">4.wav</span>, aren't in it and are never touched.</p>
     <ol>
-      <li><span class="n">1 · DESIGN</span><b>Pick a preset and build its chain</b>Each card below is one press of the orange button. Start from a template or add effects. Autotune always runs first.</li>
-      <li><span class="n">2 · LISTEN</span><b>Try it with your computer's mic</b>Click Use my mic and wear wired headphones (Bluetooth adds a delay the real mic doesn't have). Every change you make plays right away. Drag the Squeeze slider to try squeeze settings like a key change.</li>
-      <li><span class="n">3 · SAVE</span><b>Put it on the mic</b>Hold orange while you squeeze the handle to power on the mic, plug it in, then click Save to mic and pick CIRCUITPY. The mic restarts by itself with the new presets. To record samples, power it off, then squeeze the handle on its own to power on.</li>
+      <li><span class="n">1 · START</span><b>Load what's on the mic</b><span>Turn the mic on in edit mode (hold orange while you squeeze the handle) and plug it in. Click Open a config.json and pick <span class="mono">config.json</span> on <span class="mono">CIRCUITPY</span>. The page now matches the mic, so whatever you don't change stays as it was. Skip this only if you want to start fresh.</span></li>
+      <li><span class="n">2 · EFFECTS</span><b>Build and hear your presets</b><span>Each card is one press of the orange button. Start from a template or add effects; autotune always runs first. Click Use my mic and wear wired headphones (Bluetooth adds a delay the real mic doesn't have). Drag the Squeeze slider to try squeeze settings.</span></li>
+      <li><span class="n">3 · SAMPLES</span><b>Set up the <span data-dw="mid">white</span> button's slots</b><span>Click Copy samples from the mic to hear 1.wav to 4.wav here and through your presets. Pick how each slot plays when you press the button, and set the record-mode options: cutting the handle clicks and the volume of takes.</span></li>
+      <li><span class="n">4 · SAVE</span><b>Put it on the mic</b><span>Click Save to mic and pick <span class="mono">CIRCUITPY</span>. This replaces the mic's presets <i>and</i> sample settings with this page. If the mic has settings this page hasn't loaded, it asks first. The mic restarts by itself; to record samples, turn it off, then on again with just a squeeze.</span></li>
     </ol>
-    <p class="small muted">This page changes your presets and sample settings (<span class="mono">config.json</span>). The sample WAVs themselves go on with the <a href="install.html#samples">sample copier</a> or by recording on the mic. If your mic doesn't have fx-mic-mod yet, follow the <a href="install.html">install guide</a> first.</p>
+    <p class="small muted">If your mic doesn't have fx-mic-mod yet, follow the <a href="install.html">install guide</a> first. New sample WAVs go on with the <a href="install.html#samples">sample copier</a> or by recording on the mic.</p>
   </section>
   <button class="btn small ghost" id="howto-show" style="justify-self:start" hidden>How to use this page</button>
 
@@ -467,7 +471,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     <h2>Getting it onto the mic</h2>
     <ol class="steps small">
       <li>Turn the mic off. Plug it into your computer, then <b>hold the orange button while you squeeze the handle to turn it on</b>. That's edit mode, where your computer can save files to it. (No fx-mic-mod on it yet? Use the <a href="install.html">install guide</a>.)</li>
-      <li>Click <b>Save to mic</b> and pick the <span class="mono">CIRCUITPY</span> drive. In browsers without folder access (Safari, Firefox), click <b>Download</b> and drag <span class="mono">config.json</span> onto the drive.</li>
+      <li>Click <b>Save to mic</b> and pick the <span class="mono">CIRCUITPY</span> drive. In browsers without folder access (Safari, Firefox), click <b>Download</b> and drag <span class="mono">config.json</span> onto the drive. Either way the mic's whole <span class="mono">config.json</span> is replaced, presets and sample settings both, so open the mic's file first (<b>Open a config.json</b>) if you want to keep anything on it.</li>
       <li>The mic restarts by itself and plays the new presets straight away. It stays in edit mode until you turn it off, so to record samples, turn it off and on again normally (just squeeze the handle).</li>
     </ol>
   </section>
@@ -1185,8 +1189,14 @@ function save(){ try { localStorage.setItem(KEY, JSON.stringify(serialize())); }
 function restore(){ try { const t = localStorage.getItem(KEY); if (t) return normalizeConfig(JSON.parse(t)); } catch(e){} return null; }
 
 /* ---------------------------- file I/O ----------------------------- */
+/* What the page last matched on the mic (opened from it or saved to it), so Save to
+   mic can tell when the mic has settings this page hasn't seen. */
+const SYNC_KEY = KEY + "-synced";
+function markSynced(){ try { localStorage.setItem(SYNC_KEY, formatJSON(serialize())); } catch(e){} }
+function synced(){ try { return localStorage.getItem(SYNC_KEY); } catch(e){ return null; } }
+function serializeOf(c){ const keep = config; config = c; try { return serialize(); } finally { config = keep; } }
 function adoptText(text, source){
-  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Opened "+source); }
+  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Opened "+source); markSynced(); }
   catch(e){ notice("Couldn't open "+source+": "+e.message, "bad"); }
 }
 $("#file-open").addEventListener("change", async (e)=>{ const f=e.target.files[0]; if(!f) return; track("load-file"); adoptText(await f.text(), f.name); e.target.value=""; });
@@ -1223,9 +1233,22 @@ $("#btn-save").addEventListener("click", async ()=>{
     let isTing = false;
     try { await dir.getFileHandle("code.py"); isTing = true; } catch(e){}
     if (!isTing){ notice("That folder has no code.py, so it doesn't look like the mic's CIRCUITPY drive. Pick CIRCUITPY and try again.", "bad"); return; }
+    // The whole file is replaced, so ask first if the mic has settings this page hasn't seen.
+    let onMic = null;
+    try { onMic = serializeOf(normalizeConfig(JSON.parse(await (await (await dir.getFileHandle("config.json")).getFile()).text()))); } catch(e){}
+    if (onMic && formatJSON(onMic) !== synced()){
+      const page = serialize(), parts = [];
+      if (JSON.stringify(onMic.presets) !== JSON.stringify(page.presets)) parts.push("effect presets");
+      const rest = c => JSON.stringify(Object.assign({}, c, {presets: null, name: null}));
+      if (rest(onMic) !== rest(page)) parts.push("sample settings");
+      if (parts.length && !confirm("The mic has " + parts.join(" and ") + " that this page doesn't. Saving replaces the mic's whole config.json with this page, so they'll be lost.\n\nOK: replace them.\nCancel: keep them. Then click Open a config.json, pick the mic's file and make your changes on top of it.")){
+        notice("Nothing saved. To keep what's on the mic, click Open a config.json and pick config.json on CIRCUITPY, then make your changes and save.", "");
+        return;
+      }
+    }
     const fh = await dir.getFileHandle("config.json", {create:true});
     const w = await fh.createWritable();
-    await w.write(formatJSON(serialize())); await w.close();
+    await w.write(formatJSON(serialize())); await w.close(); markSynced();
     notice("Saved config.json to the mic. It restarts by itself and the new presets are on now. It's still in edit mode, where it can't record: turn it off and on normally when you want to record samples.", "ok");
     track("save-to-mic-done");
   } catch(e){
