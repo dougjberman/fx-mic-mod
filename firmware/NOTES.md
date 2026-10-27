@@ -60,8 +60,15 @@ builds no shifter and the synth heads the chain; otherwise a two-voice mixer sum
   Python counts renders and knows which feed half the next one reads first (a RawSample flips
   halves on every pull and never resets to half 0). Each write puts the new block where the next
   render reads it second and the block before it where it reads first. The console prints
-  `feed sync: counting renders, …` on each load; `render counter off: …` means it fell back to
-  the timed sync below. `f` still flips the halves.
+  `feed sync: counting renders, …; every N ms` on each load; `render counter off: …` means it
+  fell back to the timed sync below. `f` still flips the halves. The counter also times the
+  renders: a write less than 4 ms before one waits for it (with 1.5 ms of hysteresis),
+  since on the harmonizer the render lands about 1 ms after each mic block, right on the write.
+  The window was half a block, but those waits ran to 10 ms, and with a sample plus harmony or
+  echoes the pass overran 16 ms: the mic dropped a block (the sample played slow, and crackled).
+  When a wait is longer than the pitch work, the pitch work also runs in it, before the write.
+  `overflow (… ms of 16, plus … waiting for the chain; … spare, … outside)` shows the pass before:
+  "spare" near 16 means a block was lost just before it.
 - **FEED_PHASE / FEED_SYNC** in autotune.py (fallback): the chain reads both feed halves in one burst every
   two blocks (half 0 first). At each load the sync times the burst and the mic's block edges; a
   write due less than half a block before a burst waits for it, so every write has half a block
@@ -78,6 +85,9 @@ builds no shifter and the synth heads the chain; otherwise a two-voice mixer sum
   about -35 dBFS (`ONSET_LEVEL` in recorder.py) and 150 ms after the last. If quiet starts get
   clipped, lower it; if hum stops the trim, raise it. `"trim_takes": false` turns it off. A take
   ended by letting go always loses its last 100 ms (`RELEASE_MS`), the release click.
+- **Take normalize** (`"normalize_takes": true`, off by default): each take is scaled so its peak
+  sits at -3 dBFS (`NORMALIZE_PEAK`), boosting by at most +12 dB (`NORMALIZE_MAX_GAIN`). It runs
+  before saving, so check the save time on a 4 s take; it uses ulab when the build has it.
 - **Samples through the preset** (`"sample_fx": "preset"`): non-autotune presets get a second
   `audiomixer.Mixer` at the chain input. Autotune presets stream the WAV from flash 512 bytes per
   block and mix it in Python before pitch detection. Check for crackle or `overflow` while a

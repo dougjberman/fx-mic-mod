@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<title>Preset Editor</title>
+<title>Effects &amp; Samples Editor</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Barlow:wght@300;400&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -45,6 +45,16 @@ h1{font-family:var(--f-display);font-weight:800;font-size:clamp(24px,4vw,34px);l
 h1 span{color:var(--accent)}
 h2{font-family:var(--f-display);font-size:12px;text-transform:uppercase;letter-spacing:.1em;margin:0;color:var(--muted);font-weight:700}
 h3{font-family:var(--f-display);font-size:17px;margin:0;font-weight:700}
+.jump{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:14px;color:var(--muted)}
+.jump a{color:var(--ink);font-weight:600;text-decoration:underline;text-decoration-color:var(--line);text-decoration-thickness:2px;text-underline-offset:4px}
+.jump a:hover{text-decoration-color:var(--accent)}
+.jump .sep{color:var(--muted)}
+.group{display:grid;gap:14px;scroll-margin-top:16px}
+.group-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--line);padding:18px 0 8px}
+.group-head h2{font-size:clamp(19px,2.6vw,23px);text-transform:none;letter-spacing:-.01em;color:var(--ink);font-weight:800}
+.group-head p{flex:1 1 260px}
+.group-body{display:grid;gap:20px}
+.group-body[hidden]{display:none}
 p{margin:0}
 .muted{color:var(--muted)}
 .small{font-size:13px}
@@ -101,12 +111,12 @@ a{color:var(--accent-text)}
 .switch input:focus-visible + .track{outline:2px solid var(--accent);outline-offset:2px}
 
 /* slider */
-.slider{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr) 74px;gap:12px;align-items:center}
+.slider{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr) 88px;gap:12px;align-items:center}
 .slider label{font-size:14px;font-weight:600}
 .slider .ends{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;margin-top:-2px}
-.slider .val{font-family:var(--f-mono);font-size:13px;text-align:right;color:var(--muted)}
+.slider .val{font-family:var(--f-mono);font-size:13px;text-align:right;color:var(--muted);white-space:nowrap}
 input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;display:block}
-@media (max-width:560px){.slider{grid-template-columns:minmax(0,1fr) 64px}.slider label{grid-column:1/-1}}
+@media (max-width:560px){.slider{grid-template-columns:minmax(0,1fr) 80px}.slider label{grid-column:1/-1}}
 
 /* preset slots, styled after the red LEDs */
 .slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
@@ -120,8 +130,8 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .slot .led.lit{background:color-mix(in srgb,var(--led-r) 45%,var(--led-off))}
 .slot[aria-pressed="true"] .led.lit{background:var(--led-r);box-shadow:0 0 6px var(--led-r)}
 .slot .num{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
-.slot .name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.slot .chain{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot .name{font-weight:700;overflow-wrap:anywhere;text-wrap:balance;line-height:1.3}
+.slot .chain{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere;line-height:1.4}
 .slot.add{place-content:center;justify-items:center;color:var(--muted);border-style:dashed;background:transparent}
 
 /* effect cards */
@@ -174,6 +184,8 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 }
 .try-note{margin:4px 0 0}
 .levelrow{border-top:1px solid var(--line);padding-top:10px}
+/* Help text keeps a readable line length on wide screens. */
+.panel p,.panel li{max-width:75ch}
 .slot-player{gap:8px;margin-top:8px}
 .grey-key{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px 4px 6px;font-weight:600;font-size:13px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--ink)}
 .grey-key .dot{width:20px;height:20px;border-radius:50%;background:var(--btn-bot,#b5b6b8);border:1px solid rgba(0,0,0,.25);transition:transform .08s}
@@ -212,6 +224,9 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 
 /* samples */
 .samples{display:grid;gap:10px}
+#sample-fx{display:grid;gap:18px}
+.opt{display:grid;gap:6px}
+@media (min-width:561px){.opt > p{padding-left:162px}}
 .sample{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 14px;align-items:start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
 /* the slot's white lights, in a little window like the mic's: slot 3 lights three */
 .sample .wleds{display:grid;gap:3px;align-content:start;align-self:start;margin-top:10px;padding:4px;border-radius:8px;background:#3a3d41}
@@ -264,9 +279,11 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 @keyframes nudge{50%{box-shadow:inset 0 0 0 2px transparent}}
 @media (prefers-reduced-motion:reduce){#try-squeeze-slot.nudge{animation:none}}
 /* how-to strip */
-.howto{display:grid;gap:12px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;background:var(--panel);padding:16px 18px}
-.howto ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.howto{display:grid;gap:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px 18px}
+.howto ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media (max-width:1100px){.howto ol{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:820px){.howto ol{grid-template-columns:1fr}}
+.howto .whole{margin:0;font-size:14px;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
 .howto li{display:grid;gap:4px;align-content:start;font-size:14px;color:var(--muted)}
 .howto li b{color:var(--ink);font-size:15px}
 .howto .n{font-family:var(--f-mono);font-size:12px;color:var(--accent-text)}
@@ -283,13 +300,13 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <ul>
     <li><a class="tab" href="index.html">How It Works</a></li>
     <li><a class="tab" href="install.html">Install</a></li>
-    <li><a class="tab" href="editor.html" aria-current="page">Preset Editor</a></li>
+    <li><a class="tab" href="editor.html" aria-current="page">Editor</a></li>
     <li><a class="tab" href="https://github.com/dougjberman/fx-mic-mod" target="_blank" rel="noopener">GitHub</a></li>
   </ul>
 </nav>
 <main class="wrap">
   <header class="page-head">
-    <span class="eyebrow">Late-thirties engineering · EP–2350 firmware mod · preset editor</span>
+    <span class="eyebrow">Late-thirties engineering · EP–2350 firmware mod · editor</span>
     <svg class="hero-dev" viewBox="282 -4 296 418" aria-hidden="true">
       <defs>
         <pattern id="holesHero" x="341" y="3" width="14.1" height="14.1" patternUnits="userSpaceOnUse"><circle cx="7" cy="7" r="5.2" fill="var(--hole)"/></pattern>
@@ -326,8 +343,8 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
         <circle cx="520" cy="109" r="4" fill="var(--ledoff)"/><circle class="w1" cx="520" cy="109" r="4" fill="#ffffff" filter="url(#glowWHero)"/><circle cx="520" cy="123" r="4" fill="var(--ledoff)"/><circle cx="520" cy="137" r="4" fill="var(--ledoff)"/><circle cx="520" cy="151" r="4" fill="var(--ledoff)"/>
       </g>
     </svg>
-    <h1>Design your <span>presets</span></h1>
-    <p class="lede">Build the four effect chains on the orange button, hear them through your computer's mic, then save <span class="mono">config.json</span> to the mic.</p>
+    <h1>Your effects and <span>samples</span></h1>
+    <p class="lede">Build the four effect presets on the orange button and set up the four samples on the <span data-dw="mid">white</span> button. Hear them through your computer's mic, then save <span class="mono">config.json</span> to the mic.</p>
   </header>
   <div class="top">
     <div class="actions">
@@ -344,17 +361,26 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     </div>
   </div>
 
+  <nav class="jump" aria-label="On this page">
+    <span>Jump to</span>
+    <a href="#effects">Effects presets</a><span class="sep" aria-hidden="true">·</span>
+    <a href="#samples-group">Samples</a><span class="sep" aria-hidden="true">·</span>
+    <a href="#onto-mic">Getting it onto the mic</a>
+  </nav>
+
   <section class="howto" id="howto" aria-label="How to use this page">
     <div class="row spread">
       <h2>How to use this page</h2>
       <button class="btn small ghost" id="howto-hide">Hide</button>
     </div>
+    <p class="whole"><b>One file holds everything on this page.</b> Your four effect presets and your sample settings all live in <span class="mono">config.json</span>, and <b>Save to mic replaces the whole file</b>. To change one part and keep the rest, start from the mic's own file (step 1). Your recordings (<span class="mono">1.wav</span> to <span class="mono">4.wav</span>) are separate files: saving leaves them as they are. To swap one, record over it on the mic or use the <a href="install.html#samples">sample copier</a>.</p>
     <ol>
-      <li><span class="n">1 · DESIGN</span><b>Pick a preset and build its chain</b>Each card below is one press of the orange button. Start from a template or add effects. Autotune always runs first.</li>
-      <li><span class="n">2 · LISTEN</span><b>Try it with your computer's mic</b>Click Use my mic and wear wired headphones (Bluetooth adds a delay the real mic doesn't have). Every change you make plays right away. Drag the Squeeze slider to try squeeze settings like a key change.</li>
-      <li><span class="n">3 · SAVE</span><b>Put it on the mic</b>Hold orange while you squeeze the handle to power on the mic, plug it in, then click Save to mic and pick CIRCUITPY. The mic restarts by itself with the new presets. To record samples, power it off, then squeeze the handle on its own to power on.</li>
+      <li><span class="n">1 · START</span><b>Load what's on the mic</b><span>Turn the mic on in edit mode (hold orange while you squeeze the handle) and plug it in. Click Open a config.json and pick <span class="mono">config.json</span> on <span class="mono">CIRCUITPY</span>. The page now matches the mic, so whatever you don't change stays as it was. Skip this only if you want to start fresh.</span></li>
+      <li><span class="n">2 · EFFECTS</span><b>Build and hear your presets</b><span>Build four unique effects chain presets, one per press of the orange button. Start from a template or add effects; autotune always runs first. Click Use my mic and wear wired headphones (Bluetooth adds a delay the real mic doesn't have). Drag the Squeeze slider to try squeeze settings.</span></li>
+      <li><span class="n">3 · SAMPLES</span><b>Set up the <span data-dw="mid">white</span> button's slots</b><span>Click Copy samples from the mic to hear 1.wav to 4.wav here and through your presets. Pick how each slot plays when you press the button, and set the record-mode options: whether to trim silence and/or normalize recording levels.</span></li>
+      <li><span class="n">4 · SAVE</span><b>Put it on the mic</b><span>Click Save to mic and pick <span class="mono">CIRCUITPY</span>. This replaces the mic's presets <i>and</i> sample settings with this page. If the mic has settings this page hasn't loaded, it asks first. The mic restarts by itself; to record samples, turn it off, then on again with just a squeeze.</span></li>
     </ol>
-    <p class="small muted">This page only changes your presets (<span class="mono">config.json</span>). If your mic doesn't have fx-mic-mod yet, follow the <a href="install.html">install guide</a> first.</p>
+    <p class="small muted">If your mic doesn't have fx-mic-mod yet, follow the <a href="install.html">install guide</a> first. New sample WAVs go on with the <a href="install.html#samples">sample copier</a> or by recording on the mic.</p>
   </section>
   <button class="btn small ghost" id="howto-show" style="justify-self:start" hidden>How to use this page</button>
 
@@ -369,6 +395,13 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     </form>
   </dialog>
 
+  <div class="group" id="effects">
+  <div class="group-head">
+    <h2>Effects presets</h2>
+    <p class="small muted">The four effect chains the orange button steps through.</p>
+    <button class="btn small ghost" data-collapse="effects-body" aria-expanded="true" aria-controls="effects-body">Collapse</button>
+  </div>
+  <div class="group-body" id="effects-body">
   <section class="panel tryit" id="tryit" aria-label="Try it">
     <div class="row head">
       <div class="row"><h2>Try it on your computer</h2><span class="small muted" id="try-status">Use wired headphones. Speakers feed back into the mic, and Bluetooth adds a delay the real mic doesn't have.</span></div>
@@ -406,9 +439,18 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   </section>
 
   <section id="editor" style="display:grid;gap:14px"></section>
+  </div>
+  </div>
 
+  <div class="group" id="samples-group">
+  <div class="group-head">
+    <h2>Samples</h2>
+    <p class="small muted">The four sounds the <span data-dw="mid">white</span> button picks and the <span data-dw="bot">grey</span> button plays.</p>
+    <button class="btn small ghost" data-collapse="samples-body" aria-expanded="true" aria-controls="samples-body">Collapse</button>
+  </div>
+  <div class="group-body" id="samples-body">
   <section class="panel" style="display:grid;gap:12px">
-    <div class="row spread"><h2>Samples</h2><button class="btn small" id="btn-load-samples" title="Copy 1.wav to 4.wav from the mic's drive into this page, so you can hear them here">Copy samples from the mic</button></div>
+    <div class="row spread"><h2>Sample slots · <span data-dw="mid">white</span> button</h2><button class="btn small" id="btn-load-samples" title="Copy 1.wav to 4.wav from the mic's drive into this page, so you can hear them here">Copy samples from the mic</button></div>
     <div class="small muted sample-help">
       <p>There are two ways to get samples onto the mic: copy WAV files from your computer with the <a href="install.html#samples">sample copier on the Install page</a>, or record them on the mic itself, with no computer needed. On the mic, the <span data-dw="mid">white</span> button picks a slot and the <span data-dw="bot">grey</span> button plays it.</p>
       <p>The WAVs below are only for hearing each slot here, with its effects. Choosing one doesn't change the mic, and Save to mic saves your settings, not the WAVs.</p>
@@ -416,26 +458,30 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       <ul>
         <li>Press the orange button to step past preset 4 into Record mode, where all four red lights start blinking.</li>
         <li>Use the <span data-dw="mid">white</span> button to pick the slot, and hold the handle while you talk (up to 4 seconds).</li>
-        <li>The audio you record takes a second to process and save to the mic, and a light runs down the mic from top to bottom while it does. Silence before and after your audio is trimmed, unless you turn that off below.</li>
+        <li>The audio you record takes a second to process and save to the mic, and a light runs down the mic from top to bottom while it does. Silence before and after your audio is trimmed, unless you turn that off below. Takes keep the volume you recorded them at, unless you choose Normalize below.</li>
       </ul>
     </div>
-    <div id="sample-fx" style="display:grid;gap:6px"></div>
+    <div id="sample-fx"></div>
     <div class="samples" id="samples"></div>
   </section>
+  </div>
+  </div>
 
   <section class="panel adv" style="gap:10px">
     <div class="row spread"><h2>config.json</h2><button class="btn small" id="btn-copy2">Copy</button></div>
     <pre class="out" id="json-out"></pre>
   </section>
 
+  <div class="group" id="onto-mic">
+  <div class="group-head"><h2>Getting it onto the mic</h2></div>
   <section class="panel" style="display:grid;gap:10px">
-    <h2>Getting it onto the mic</h2>
     <ol class="steps small">
       <li>Turn the mic off. Plug it into your computer, then <b>hold the orange button while you squeeze the handle to turn it on</b>. That's edit mode, where your computer can save files to it. (No fx-mic-mod on it yet? Use the <a href="install.html">install guide</a>.)</li>
-      <li>Click <b>Save to mic</b> and pick the <span class="mono">CIRCUITPY</span> drive. In browsers without folder access (Safari, Firefox), click <b>Download</b> and drag <span class="mono">config.json</span> onto the drive.</li>
+      <li>Click <b>Save to mic</b> and pick the <span class="mono">CIRCUITPY</span> drive. In browsers without folder access (Safari, Firefox), click <b>Download</b> and drag <span class="mono">config.json</span> onto the drive. Either way the mic's whole <span class="mono">config.json</span> is replaced, presets and sample settings both, so open the mic's file first (<b>Open a config.json</b>) if you want to keep anything on it.</li>
       <li>The mic restarts by itself and plays the new presets straight away. It stays in edit mode until you turn it off, so to record samples, turn it off and on again normally (just squeeze the handle).</li>
     </ol>
   </section>
+  </div>
 </main>
 <div class="toast" id="toast" hidden></div>
 
@@ -812,7 +858,9 @@ function harmonyTones(fx){
   const chord = fx.chord || "major";
   return LIB.CHORDS[chord] || LIB.KEY_CHORDS[chord] || null;
 }
-function harmonyVoices(fx){ const t = harmonyTones(fx); return t ? t.slice(1) : []; }
+function harmonyVoices(fx){ const t = harmonyTones(fx); return t ? t.slice(1).concat(fx.double ? [fx.double] : []) : []; }
+// "double": one more voice an octave above or below you, on chords of three notes or fewer
+const DOUBLE_ST = {above:12, below:-12};
 const INTERVAL_NAMES = {0:"unison",1:"♭2",2:"2nd",3:"♭3",4:"3rd",5:"4th",6:"♭5",7:"5th",8:"♯5",9:"6th",10:"♭7",11:"7th"};
 function intervalName(st){
   const a = Math.abs(st), base = INTERVAL_NAMES[a % 12];
@@ -835,7 +883,7 @@ function harmonizerCard(p, fx){
     const off = fam==="In the key" && !keyed;
     set.append(h("div",{class:"chordfam"}, h("span",{}, fam),
       h("div",{class:"chips"}, chords.map(([v,l]) => h("button",{"aria-pressed":String(chord===v), disabled:(off && chord!==v)||null, title:CHORD_NOTES[v]||null,
-        onclick:()=>{ fx.chord=v; const t=harmonyTones(fx); if ((fx.inversion||0) > LIB.maxInversion(t)) fx.inversion=0; changed(); }}, l)))));
+        onclick:()=>{ fx.chord=v; const t=harmonyTones(fx); if ((fx.inversion||0) > LIB.maxInversion(t)) fx.inversion=0; if (t && t.length > 3) delete fx.double; changed(); }}, l)))));
   });
   body.append(set);
   if (isKey && !keyed) body.append(h("p",{class:"small", style:"color:var(--warn)"}, "Key chords need autotune set to Major or Minor, so they know which 3rd to sing. Without that the mic uses C major. Pick a key in autotune above, or choose Major 3rd or Minor 3rd under Intervals."));
@@ -854,7 +902,8 @@ function harmonizerCard(p, fx){
       const steps = {major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10]}[scale];
       chordTones = tones.map(st => steps[st % 7] + 12*Math.floor(st/7));
     }
-    const ivs = LIB.voicing(chordTones, inv, oct);
+    const dbl = DOUBLE_ST[fx.double] || 0;
+    const ivs = LIB.voicing(chordTones, inv, oct).concat(dbl ? [dbl] : []);
     // label each note by its job in the chord (3rd, 7th, 9th...), whichever octave it lands in
     const role = {}; chordTones.forEach(t => { role[t % 12] = intervalName(t); });
     const roleOf = st => role[((st % 12) + 12) % 12] || intervalName(st);
@@ -862,7 +911,7 @@ function harmonizerCard(p, fx){
     const name = st => NOTES[((root+st)%12+12)%12];
     preview = h("div",{class:"voicing", role:"note", "aria-label":"Notes you would hear"},
       h("span",{class:"lead"}, "If you sing "+key+(isKey?" in "+key+" "+scale:"")+", you hear"),
-      all.map(st => h("div",{class:"nt"+(st===0?" you":"")}, h("b",{}, name(st)), h("span",{}, st===0 ? "you" : (st<0?"↓ ":"↑ ")+roleOf(st)))));
+      all.map(st => h("div",{class:"nt"+(st===0?" you":"")}, h("b",{}, name(st)), h("span",{}, st===0 ? "you" : (st<0?"↓ ":"↑ ")+(st===dbl ? "octave" : roleOf(st))))));
     const blurb = CHORD_NOTES[chord];
     if (blurb) body.append(h("p",{class:"small muted"}, blurb));
 
@@ -874,9 +923,16 @@ function harmonizerCard(p, fx){
           labels.slice(0, maxInv+1).map((l,k)=>h("button",{"aria-pressed":String(inv===k), onclick:()=>{ fx.inversion=k; changed(); }}, l)))));
       body.append(h("p",{class:"small muted"}, "Root keeps the harmony above you. Each inversion moves another chord note below your voice, so you end up on top of the chord."));
     }
-    body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
-      h("div",{class:"seg", role:"group", "aria-label":"Harmony octave"},
-        [[-1,"Down"],[0,"As sung"],[1,"Up"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
+    // "octave" (moving the whole harmony) is no longer offered; an older config that sets it still plays so
+    if (oct) body.append(h("div",{class:"row"}, h("p",{class:"small muted"}, "This harmony is moved "+(oct>0?"up":"down")+" "+Math.abs(oct)+" octave"+(Math.abs(oct)>1?"s":"")+" by an older setting."),
+      h("button",{class:"btn small ghost", onclick:()=>{ delete fx.octave; changed(); }}, "Put it back as sung")));
+    if (tones.length <= 3){
+      const cur = fx.double || "";
+      body.append(h("div",{class:"field"}, h("label",{}, "Double your voice"),
+        h("div",{class:"seg", role:"group", "aria-label":"Double your voice"},
+          [["","No"],["above","Octave above"],["below","Octave below"]].map(([v,l])=>h("button",{"aria-pressed":String(cur===v), onclick:()=>{ if (v) fx.double=v; else delete fx.double; changed(); }}, l)))));
+      body.append(h("p",{class:"small muted"}, "Adds one more voice singing your note an octave up or down, on top of the chord. The mic runs three harmony voices at most, so this is for chords of three notes or fewer, and it's one octave, not both."));
+    }
   }
 
   // level: fixed, or brought in by the squeeze
@@ -1062,7 +1118,7 @@ function addEffectBlock(list, forSample){
     if (!forSample && !list.some(fx=>fx.effect==="harmonizer" || fx.effect==="vocoder"))
       menu.append(h("button",{onclick:()=>{
         const at = list.findIndex(fx=>fx.effect==="autotune");
-        list.splice(at+1, 0, {effect:"harmonizer", chord:"major", inversion:0, octave:0, level:.7}); addOpen=false; changed(); }},
+        list.splice(at+1, 0, {effect:"harmonizer", chord:"major", inversion:0, level:.7}); addOpen=false; changed(); }},
         h("b",{}, "Harmonizer"), h("span",{}, "Sings a chord with you on every note: major, minor, 7ths, 9ths and more."),
         cpuCost(2*HARMONY_VOICE_COST, " for a triad")));
     for (const [key, def] of Object.entries(EFFECTS)){
@@ -1081,19 +1137,26 @@ function renderSamples(){
   // "sample_fx": "preset" plays samples dry into the selected preset; "own" (or unset) gives each slot its own effects
   const through = String(config.sample_fx||"own").toLowerCase()==="preset";
   $("#sample-fx").replaceChildren(
-    h("div",{class:"field"}, h("label",{}, "Sample effects"),
+    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Sample effects"),
       h("div",{class:"seg", role:"group", "aria-label":"Sample effects"},
-        [["preset","Through the mic's preset"],["own","Each slot's own effects"]].map(([v,l])=>h("button",{"aria-pressed":String((through?"preset":"own")===v), onclick:()=>{ if (v==="own") delete config.sample_fx; else config.sample_fx=v; changed(); }}, l)))),
+        [["preset","Through the mic's preset"],["own","Hardcode effects below"]].map(([v,l])=>h("button",{"aria-pressed":String((through?"preset":"own")===v), onclick:()=>{ if (v==="own") delete config.sample_fx; else config.sample_fx=v; changed(); }}, l)))),
     h("p",{class:"small muted"}, through
       ? "Samples play dry into whichever effect preset is selected on the mic right now (the one the orange button picked), the same chain your voice goes through, autotune included. On Clean and in Record mode they play dry."
-      : "Each slot gets its own effects below, whichever effect preset is selected on the mic. This is how Adafruit's packs work."),
+      : "Each slot gets its own effects below, whichever effect preset is selected on the mic. This is how Adafruit's packs work.")),
     // "trim_takes": false keeps the silence around takes recorded on the mic (firmware TRIM_TAKES)
-    h("div",{class:"field"}, h("label",{}, "Takes recorded on the mic"),
+    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Takes recorded on the mic"),
       h("div",{class:"seg", role:"group", "aria-label":"Takes recorded on the mic"},
         [[true,"Trim silence"],[false,"Keep whole"]].map(([v,l])=>h("button",{"aria-pressed":String((config.trim_takes!==false)===v), onclick:()=>{ if (v) delete config.trim_takes; else config.trim_takes=false; changed(); }}, l)))),
     h("p",{class:"small muted"}, config.trim_takes!==false
-      ? "Silence before and after the sound is cut, so a take plays the moment you press and stops when the sound does. The click of letting go of the handle is always cut."
-      : "Takes keep everything from the squeeze to the release, apart from the handle's clicks."),
+      ? "Silence before and after the sound is cut, so a take plays the moment you press and stops when the sound does. Either way, the handle's clicks are always cut: the first 50 ms (squeezing) and the last 100 ms (letting go), with a 5 ms fade at each end."
+      : "Takes keep everything from the squeeze to the release, apart from the handle's clicks: the first 50 ms (squeezing) and the last 100 ms (letting go) are always cut, with a 5 ms fade at each end.")),
+    // "normalize_takes": true evens out the level of takes recorded on the mic (firmware NORMALIZE_TAKES)
+    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Volume of takes"),
+      h("div",{class:"seg", role:"group", "aria-label":"Volume of takes"},
+        [[false,"As recorded"],[true,"Normalize"]].map(([v,l])=>h("button",{"aria-pressed":String((config.normalize_takes===true)===v), onclick:()=>{ if (v) config.normalize_takes=true; else delete config.normalize_takes; changed(); }}, l)))),
+    h("p",{class:"small muted"}, config.normalize_takes===true
+      ? "Each take is turned up or down so its loudest moment sits at -3 dB, so quiet and loud takes come out about the same. The boost stops at +12 dB, so a take with almost nothing in it doesn't turn into loud hiss."
+      : "Each take keeps the level it was recorded at, so a quiet take plays quietly. Choose Normalize to even them out.")),
     // "sample_level": a trim on every sample, full by default (firmware SAMPLE_LEVEL)
     h("div",{class:"levelrow"}, sliderEl({label:"Sample volume", min:0, max:1, step:.05}, typeof config.sample_level==="number" ? config.sample_level : 1,
       v=>{ v=Math.round(v*100)/100; if (v===1) delete config.sample_level; else config.sample_level=v; trySend({g:tryG()}); changedQuiet(); })));
@@ -1107,7 +1170,7 @@ function renderSamples(){
         h("div",{class:"seg", role:"group", "aria-label":"Slot "+(i+1)+" playback"}, PLAYMODES.map(([v,l])=>h("button",{"aria-pressed":String((s.playmode||"oneshot")===v), onclick:()=>{ s.playmode=v; changed(); }}, l)))),
       slotPlayer(i));
     if (through){
-      if (s.effects.length) body.append(h("p",{class:"small muted"}, s.effects.length+" effect"+(s.effects.length>1?"s":"")+" kept for \u201cEach slot's own effects\u201d, unused now."));
+      if (s.effects.length) body.append(h("p",{class:"small muted"}, s.effects.length+" effect"+(s.effects.length>1?"s":"")+" kept for \u201cHardcode effects below\u201d, unused now."));
     } else {
       if (s.effects.length){
         const chain = h("div",{class:"chain"});
@@ -1197,8 +1260,14 @@ function save(){ try { localStorage.setItem(KEY, JSON.stringify(serialize())); }
 function restore(){ try { const t = localStorage.getItem(KEY); if (t) return normalizeConfig(JSON.parse(t)); } catch(e){} return null; }
 
 /* ---------------------------- file I/O ----------------------------- */
+/* What the page last matched on the mic (opened from it or saved to it), so Save to
+   mic can tell when the mic has settings this page hasn't seen. */
+const SYNC_KEY = KEY + "-synced";
+function markSynced(){ try { localStorage.setItem(SYNC_KEY, formatJSON(serialize())); } catch(e){} }
+function synced(){ try { return localStorage.getItem(SYNC_KEY); } catch(e){ return null; } }
+function serializeOf(c){ const keep = config; config = c; try { return serialize(); } finally { config = keep; } }
 function adoptText(text, source){
-  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Opened "+source); }
+  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Opened "+source); markSynced(); }
   catch(e){ notice("Couldn't open "+source+": "+e.message, "bad"); }
 }
 $("#file-open").addEventListener("change", async (e)=>{ const f=e.target.files[0]; if(!f) return; track("load-file"); adoptText(await f.text(), f.name); e.target.value=""; });
@@ -1221,6 +1290,29 @@ $("#btn-download").addEventListener("click", ()=>{
   toast("Downloaded config.json");
 });
 
+/* Settings that need a firmware newer than some mics have. Each release that
+ * adds a config setting raises FIRMWARE_VERSION in code.py and adds a row
+ * here with that number, so Save to mic can stop before writing a file the
+ * mic's firmware would skip parts of. Mics from before 1.0 have no number. */
+const FIRMWARE_NEEDS = [
+  {version:"1.0", what:"Double your voice on a harmonizer",
+   uses: c => (c.presets||[]).some(p => (p.list||[]).some(fx => fx.effect==="harmonizer" && fx.double && fx.enabled!==false))},
+  {version:"1.0", what:"Normalize recording levels", uses: c => c.normalize_takes === true},
+  {version:"1.1", what:"The vocoder",
+   uses: c => (c.presets||[]).some(p => (p.list||[]).some(fx => fx.effect==="vocoder" && fx.enabled!==false))},
+];
+const versionParts = v => String(v).split(".").map(n => parseInt(n,10)||0);
+function versionBelow(a, b){
+  const x = versionParts(a), y = versionParts(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++){ if ((x[i]||0) !== (y[i]||0)) return (x[i]||0) < (y[i]||0); }
+  return false;
+}
+// The release number in the mic's code.py, or null for firmware from before 1.0.
+function firmwareVersion(codePy){ const m = /^FIRMWARE_VERSION\s*=\s*["']([\d.]+)["']/m.exec(codePy); return m ? m[1] : null; }
+function firmwareShortfall(config, version){
+  return FIRMWARE_NEEDS.filter(n => n.uses(config) && (version === null || versionBelow(version, n.version)));
+}
+
 const canPickFolder = "showDirectoryPicker" in window;
 if (!canPickFolder) $("#btn-save").title = "Your browser can't write to drives. Use Download, then drag the file onto CIRCUITPY.";
 $("#btn-save").addEventListener("click", async ()=>{
@@ -1232,12 +1324,36 @@ $("#btn-save").addEventListener("click", async ()=>{
   const btn = $("#btn-save"); btn.disabled = true;
   notice("Saving to the mic", "busy");
   try {
-    let isTing = false;
-    try { await dir.getFileHandle("code.py"); isTing = true; } catch(e){}
-    if (!isTing){ notice("That folder has no code.py, so it doesn't look like the mic's CIRCUITPY drive. Pick CIRCUITPY and try again.", "bad"); return; }
+    let codePy = null;
+    try { codePy = await (await (await dir.getFileHandle("code.py")).getFile()).text(); } catch(e){}
+    if (codePy === null){ notice("That folder has no code.py, so it doesn't look like the mic's CIRCUITPY drive. Pick CIRCUITPY and try again.", "bad"); return; }
+    // Stop before writing settings the mic's firmware doesn't know yet.
+    const version = firmwareVersion(codePy), short = firmwareShortfall(serialize(), version);
+    if (short.length){
+      const need = short.map(n => n.version).reduce((a, b) => versionBelow(a, b) ? b : a);
+      const msg = "Nothing saved. The mic has firmware " + (version ? version : "from before 1.0") + ", and this config uses " +
+        short.map(n => n.what).join(" and ") + ", which needs firmware " + need + " or newer. ";
+      notice(msg, "bad");
+      $("#notice").append(h("a",{href:"install.html#install"}, "Update the firmware"), " first, or turn that setting off and save again.");
+      track("save-to-mic-old-firmware");
+      return;
+    }
+    // The whole file is replaced, so ask first if the mic has settings this page hasn't seen.
+    let onMic = null;
+    try { onMic = serializeOf(normalizeConfig(JSON.parse(await (await (await dir.getFileHandle("config.json")).getFile()).text()))); } catch(e){}
+    if (onMic && formatJSON(onMic) !== synced()){
+      const page = serialize(), parts = [];
+      if (JSON.stringify(onMic.presets) !== JSON.stringify(page.presets)) parts.push("effect presets");
+      const rest = c => JSON.stringify(Object.assign({}, c, {presets: null, name: null}));
+      if (rest(onMic) !== rest(page)) parts.push("sample settings");
+      if (parts.length && !confirm("The mic has " + parts.join(" and ") + " that this page doesn't. Saving replaces the mic's whole config.json with this page, so they'll be lost.\n\nOK: replace them.\nCancel: keep them. Then click Open a config.json, pick the mic's file and make your changes on top of it.")){
+        notice("Nothing saved. To keep what's on the mic, click Open a config.json and pick config.json on CIRCUITPY, then make your changes and save.", "");
+        return;
+      }
+    }
     const fh = await dir.getFileHandle("config.json", {create:true});
     const w = await fh.createWritable();
-    await w.write(formatJSON(serialize())); await w.close();
+    await w.write(formatJSON(serialize())); await w.close(); markSynced();
     notice("Saved config.json to the mic. It restarts by itself and the new presets are on now. It's still in edit mode, where it can't record: turn it off and on normally when you want to record samples.", "ok");
     track("save-to-mic-done");
   } catch(e){
@@ -1507,6 +1623,21 @@ function renderSqueezeHint(){
 $("#try-level-slot").append(sliderEl({label:"Preview volume",min:0,max:1,step:.01}, tryState.level, v=>{ tryState.level=v; trySend({g:tryG()}); }),
   h("p",{class:"small muted try-note"}, "Only sets how loud it plays in your browser. Not saved to the mic."));
 
+// The Effects presets and Samples groups fold away; the page remembers which.
+function setGroupOpen(id, open){
+  $("#"+id).hidden = !open;
+  const b = document.querySelector('[data-collapse="'+id+'"]');
+  b.setAttribute("aria-expanded", String(open));
+  b.textContent = open ? "Collapse" : "Expand";
+  try { localStorage.setItem(KEY+"-"+id, open?"1":"0"); } catch(e){}
+}
+document.querySelectorAll("[data-collapse]").forEach(b => {
+  const id = b.dataset.collapse;
+  b.addEventListener("click", ()=>setGroupOpen(id, $("#"+id).hidden));
+  try { if (localStorage.getItem(KEY+"-"+id)==="0") setGroupOpen(id, false); } catch(e){}
+});
+document.querySelector('.jump a[href="#effects"]').addEventListener("click", ()=>setGroupOpen("effects-body", true));
+document.querySelector('.jump a[href="#samples-group"]').addEventListener("click", ()=>setGroupOpen("samples-body", true));
 function setHowto(show){ $("#howto").hidden=!show; $("#howto-show").hidden=show; try { localStorage.setItem(KEY+"-howto", show?"1":"0"); } catch(e){} }
 $("#howto-hide").addEventListener("click", ()=>setHowto(false));
 $("#howto-show").addEventListener("click", ()=>setHowto(true));

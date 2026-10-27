@@ -92,6 +92,14 @@ from config_loader import (
 )
 from recorder import Recorder, drive_free
 
+# The firmware's release number. The editor reads this line from the mic's
+# code.py before Save to mic, to check the presets only use settings this
+# firmware knows, so keep it on one line in this form. Raise it with every
+# release that adds a config setting, and add that setting to the editor's
+# FIRMWARE_NEEDS table with the new number.
+FIRMWARE_VERSION = "1.1"
+print("fx-mic-mod firmware", FIRMWARE_VERSION)
+
 # Where to look for the preset config
 CONFIG_PATHS = ("/config.json", "/ep2350_circuitpython_config.json")
 
@@ -379,6 +387,14 @@ if not isinstance(TRIM_TAKES, bool):
     print("trim_takes must be true or false; using true")
     TRIM_TAKES = True
 
+# "normalize_takes": true scales each take recorded on the mic so its loudest
+# moment sits at -3 dBFS, boosting by at most +12 dB. Off by default (see
+# recorder.NORMALIZE_PEAK).
+NORMALIZE_TAKES = CONFIG.get("normalize_takes", False)
+if not isinstance(NORMALIZE_TAKES, bool):
+    print("normalize_takes must be true or false; using false")
+    NORMALIZE_TAKES = False
+
 # "sample_level": how loud samples play, 0..1. Full level by default, so a
 # take recorded on the mic plays back as loud as it was sung; the install
 # guide's converter brings imported files down to about the mic's level.
@@ -640,7 +656,7 @@ def enter_record_mode(ctx):
     ctx.chain = []
     if CAN_RECORD:
         ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE,
-                                trim=TRIM_TAKES)
+                                trim=TRIM_TAKES, normalize=NORMALIZE_TAKES)
         if ctx.recorder.seconds < RECORD_SECONDS:
             print("record mode: memory is short, takes stop at {:.1f} s".format(
                 ctx.recorder.seconds))
@@ -1297,7 +1313,13 @@ try:
         )
         if not idle and mic.overflow:
             if data_context.tune is not None:
-                print("overflow (autotune took {:.1f} ms of 16)".format(data_context.tune.busy_ms))
+                tune = data_context.tune
+                # The pass before: its work, its wait for the chain, the
+                # time it had spare in mic.record, and the loop's time
+                # outside autotune before it.
+                print("overflow (autotune took {:.1f} ms of 16, plus {:.1f} waiting for the chain; "
+                      "{:.1f} spare, {:.1f} outside)".format(
+                          tune.busy_ms, tune.wait_ms, tune.idle_ms, tune.outside_ms))
             else:
                 print("overflow")
 

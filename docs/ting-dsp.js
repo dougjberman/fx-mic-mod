@@ -327,7 +327,7 @@ function dspFactory(){
   /* ---------- effects ---------- */
   const PARAMS={
     autotune:["key","scale","speed","humanize","mix","grain_size","density","squeeze_key","squeeze_scale"],
-    harmonizer:["chord","inversion","octave","level"],
+    harmonizer:["chord","inversion","octave","level","double"],
     vocoder:["waveform","bands","octave","breath","mix"],
     pitch_shift:["semitones","mix","window","overlap"],
     granular_pitch_shift:["semitones","mix","grain_size","density","spread"],
@@ -349,7 +349,8 @@ function dspFactory(){
     if(!spec||typeof spec!=="object") throw new Error("effect config must be a dict");
     if(!("effect" in spec)) throw new Error('effect config is missing the "effect" key');
     const type=effectKey(spec.effect), sr=host.sr, S=sr/BASE;
-    for(const k in spec) if(k!=="effect"&&k!=="enabled"&&!PARAMS[type].includes(k)) throw new Error(type+" has no parameter "+k);
+    // Like the firmware, leave out parameters it doesn't know instead of failing.
+    for(const k in spec) if(k!=="effect"&&k!=="enabled"&&!PARAMS[type].includes(k)) console.warn(type+" has no parameter "+k+"; ignoring it");
     const P=(k,d)=>compile(spec[k]??d, type+" "+k, ns);
     const mixF=P("mix",MIX_DEFAULT[type]);
     const fx={type, latency:0};
@@ -381,12 +382,12 @@ function dspFactory(){
         fx.latency=grain/2+2;
         // harmonizer: one more grain shifter per harmony voice, summed with the corrected voice
         const correct=!harm||harm.correct;
-        let voices=[], ivs=[], keyChord=null, inv=0, oct=0, levelF=null;
+        let voices=[], ivs=[], keyChord=null, inv=0, oct=0, levelF=null, dbl=0;
         // vocoder: a carrier at the tuned note, with the voice (vocMix 0) or instead of it (1)
         let voc=null, vocMixF=null, vocTurn=0;
         if(harm&&harm.vocoder){
           const vs=harm.spec;
-          for(const k in vs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.vocoder.includes(k)) throw new Error("vocoder has no parameter "+k);
+          for(const k in vs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.vocoder.includes(k)) console.warn("vocoder has no parameter "+k+"; ignoring it");
           const usesH=v=> typeof v==="string" ? v==="$handle" : (v&&typeof v==="object" ? Object.values(v).some(usesH) : false);
           if(alt&&usesH(vs.mix)) throw new Error("vocoder: the handle can change the key or drive the mix, not both");
           const intOf=(v,d,nm)=>{ v=v==null?d:v; if(typeof v!=="number") throw new Error("vocoder "+nm+" must be a number"); return Math.trunc(v); };
@@ -395,16 +396,23 @@ function dspFactory(){
         }
         else if(harm){
           const hs=harm.spec;
-          for(const k in hs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.harmonizer.includes(k)) throw new Error("harmonizer has no parameter "+k);
+          for(const k in hs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.harmonizer.includes(k)) console.warn("harmonizer has no parameter "+k+"; ignoring it");
           const chord=hs.chord==null?"major":String(hs.chord);
           const tones=CHORDS[chord]||KEY_CHORDS[chord];
           if(!tones) throw new Error("unknown harmonizer chord: "+chord);
           inv=hs.inversion==null?0:hs.inversion; oct=hs.octave==null?0:hs.octave;
           if(!Number.isInteger(inv)||inv<0||inv>maxInversion(tones)) throw new Error("harmonizer "+chord+" has no inversion "+hs.inversion);
           if(!Number.isInteger(oct)) throw new Error("harmonizer octave must be a whole number");
+          // "double": one more voice an octave above or below the sung note (firmware DOUBLES)
+          if(hs.double!=null){
+            dbl={above:12,below:-12}[String(hs.double).toLowerCase()]||0;
+            if(!dbl) throw new Error("harmonizer double is above or below, not "+hs.double);
+            if(tones.length>3) throw new Error("harmonizer double needs a chord of three notes or fewer");
+          }
           levelF=compile(hs.level??0.7,"harmonizer level",ns);
           keyChord=KEY_CHORDS[chord]||null;
           ivs=voicing(keyChord ? OFF_KEY_SHAPE.slice(0,tones.length) : tones, inv, oct);
+          if(dbl) ivs.push(dbl);
           voices=ivs.map(()=>new CPGranular(grain,density,0));
         }
         let vRatios=ivs.map(iv=>Math.pow(2,iv/12));
@@ -439,6 +447,7 @@ function dspFactory(){
                 else { chordNext=pc; chordCount=1; }
                 let off=chordNote-note; while(off>11) off-=12; while(off<-11) off+=12;
                 ivs=keyIntervals(note+off, snap, keyChord, inv, oct).map(iv=>off+iv);
+                if(dbl) ivs.push(dbl);
               }
               vRatios=ivs.map(iv=>Math.pow(2,(corr+iv)/12));
               if(py&&hz>0) lsh.lock(sr/hz); lsh.begin(det.BLOCK);

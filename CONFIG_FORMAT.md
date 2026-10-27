@@ -84,6 +84,9 @@ the mic scales them, so a grain keeps its length in time.
 A top-level `"trim_takes"` (default true) cuts the silence before and after the sound in a take
 recorded on the mic. Set it to false to keep everything between the squeeze and the release.
 
+A top-level `"normalize_takes"` (default false) scales each take recorded on the mic so its loudest
+moment sits at -3 dBFS, boosting by at most +12 dB so a near-silent take doesn't become loud hiss.
+
 A top-level `"sample_level"` (0..1, default 1) turns every sample down. A take recorded on the mic
 already sits at the voice's level; the install guide's converter brings imported files to about that
 level too.
@@ -95,7 +98,7 @@ is written while the other plays. If an autotune preset crackles steadily and cl
 | type | params |
 |---|---|
 | `autotune` **(new)** | `key` "C".."B" (sharps, e.g. "F#"), `scale` "chromatic" / "major" / "minor", `speed` (B) 0 = natural .. 1 = hard snap, `humanize` 0..1, `mix` (B), `grain_size` int (default 512), `density` int (default 2), `squeeze_key` / `squeeze_scale` (same values as key/scale: the key used while the handle is fully squeezed) |
-| `harmonizer` **(new)** | `chord` (see below, default "major"), `inversion` int (default 0), `octave` int (default 0, moves the harmony by octaves), `level` (B) harmony volume against the voice, 0..1 (default 0.7) |
+| `harmonizer` **(new)** | `chord` (see below, default "major"), `inversion` int (default 0), `octave` int (default 0, moves the harmony by octaves), `level` (B) harmony volume against the voice, 0..1 (default 0.7), `double` "above" or "below" (optional: one more voice on your note an octave up or down; chords of three notes or fewer) |
 | `vocoder` **(new)** | `waveform` "saw" / "square" / "pulse" (default "saw"), `bands` int 4..11 (default 8), `octave` int -2..2 (default 0), `breath` 0..1 (default 0), `mix` (B) vocoder against the voice, 0..1 (default 1 = vocoder only) |
 | `pitch_shift` | `semitones` (B), `window` int and `overlap` int, both in **bytes** of 16-bit audio (so samples = bytes / 2, at 16 kHz before the rate scaling), `mix` (B) |
 | `granular_pitch_shift` | `semitones` (B), `grain_size` int samples, `density` int 1..8, `spread` float 0..1 (fixed at load, not a block), `mix` (B) |
@@ -152,6 +155,10 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   voice stays in the chord and n notes move below it: C major sung on C is E G above (0),
   E G below (1), G below and E above (2). Up to the number of harmony voices; chords with an
   octave in them (`octave`, `power`) only allow 0.
+- `double` adds one more voice singing the sung note an octave above (`"above"`) or below
+  (`"below"`), whatever the chord's inversion or `octave`. It takes the third harmony voice, so it
+  works on chords of three notes or fewer (thirds, fifths, `power`, triads, `key_third`,
+  `key_triad`), and only one octave at a time.
 - `level` l: the voice plays at `1 / (1 + n * l)` and each of the n harmony voices at
   l times that, so the sum stays about as loud as the voice alone (the voices are copies of one
   voice, so they add up nearly in phase). `"$handle"` brings the
@@ -159,6 +166,8 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   Source of truth: `firmware/autotune.py` (`CHORDS`, `voicing`, `Autotune`).
 
 ### vocoder rules
+- Needs firmware 1.1. Older firmware doesn't know the effect and plays that preset clean, so the
+  editor's Save to mic won't write a config with a vocoder to a mic on 1.0 or earlier.
 - A channel vocoder whose carrier is a synth playing the note you sing (pitch tracking), so the mic
   needs no second input: your words, played by the synth. With an `autotune` in the preset the
   carrier plays the corrected note (it follows `key`, `scale` and `speed`); without one it follows
@@ -181,6 +190,18 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
 - TOP+MIDDLE power-off hold is **0.8 s** (`SHUTDOWN_HOLD_SECONDS` in Adafruit's code.py; its
   docstring says 500 ms but the constant wins).
 - Omitted effect params use the CircuitPython constructor defaults.
+
+## Firmware versions
+The firmware's release number is `FIRMWARE_VERSION` in `code.py` (it prints at boot). Mics
+from before 1.0 have none. To keep configs and firmware working together after release:
+- New firmware always reads older configs. A setting the editor drops (like the harmonizer's
+  `octave`) stays readable on the mic.
+- A config setting added after a release raises `FIRMWARE_VERSION` and gets a row in the
+  editor's `FIRMWARE_NEEDS` table with that number. Save to mic reads the mic's `code.py`
+  and refuses to write a config that uses a setting the mic's firmware is too old for.
+- Firmware from 1.0 on skips an effect parameter it doesn't know, with a console line
+  (`... has no parameter x; ignoring it`), instead of failing the whole preset.
+  Unknown top-level keys were always ignored.
 
 ## Blocks
 - `{"block": "lfo", "waveform": "sine|triangle|square|saw|ramp_down", "rate", "scale", "offset", "phase_offset", "once", "interpolate"}`

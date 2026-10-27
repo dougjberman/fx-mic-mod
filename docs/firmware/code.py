@@ -93,6 +93,14 @@ from config_loader import (
 from recorder import Recorder, drive_free
 
 
+
+
+
+
+FIRMWARE_VERSION = "1.1"
+print("fx-mic-mod firmware", FIRMWARE_VERSION)
+
+
 CONFIG_PATHS = ("/config.json", "/ep2350_circuitpython_config.json")
 
 def load_config():
@@ -382,6 +390,14 @@ if not isinstance(TRIM_TAKES, bool):
 
 
 
+NORMALIZE_TAKES = CONFIG.get("normalize_takes", False)
+if not isinstance(NORMALIZE_TAKES, bool):
+    print("normalize_takes must be true or false; using false")
+    NORMALIZE_TAKES = False
+
+
+
+
 SAMPLE_LEVEL = 1.0
 _sample_level = CONFIG.get("sample_level", SAMPLE_LEVEL)
 if isinstance(_sample_level, (int, float)) and not isinstance(_sample_level, bool) and 0 <= _sample_level <= 1:
@@ -640,7 +656,7 @@ def enter_record_mode(ctx):
     ctx.chain = []
     if CAN_RECORD:
         ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE,
-                                trim=TRIM_TAKES)
+                                trim=TRIM_TAKES, normalize=NORMALIZE_TAKES)
         if ctx.recorder.seconds < RECORD_SECONDS:
             print("record mode: memory is short, takes stop at {:.1f} s".format(
                 ctx.recorder.seconds))
@@ -1297,7 +1313,13 @@ try:
         )
         if not idle and mic.overflow:
             if data_context.tune is not None:
-                print("overflow (autotune took {:.1f} ms of 16)".format(data_context.tune.busy_ms))
+                tune = data_context.tune
+
+
+
+                print("overflow (autotune took {:.1f} ms of 16, plus {:.1f} waiting for the chain; "
+                      "{:.1f} spare, {:.1f} outside)".format(
+                          tune.busy_ms, tune.wait_ms, tune.idle_ms, tune.outside_ms))
             else:
                 print("overflow")
 

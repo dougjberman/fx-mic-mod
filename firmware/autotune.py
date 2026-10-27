@@ -74,6 +74,19 @@ FEED_PHASE = 0
 # only repeats or skips a block, once.
 # Without a working LFO, FEED_SYNC below is the fallback.
 PROBE_RATE = 62.5 / 64  # LFO cycles a second: one cycle per 64 renders
+# Order alone isn't enough: on the harmonizer the chain renders about 1 ms
+# after a mic block lands, just when the block is written, so writes fell
+# before or after it at random and blocks were repeated and skipped. So the
+# counter also times the renders, and a write less than RENDER_NEAR_NS before
+# one waits for it to run. (Half a block, at first: but those waits ran to
+# 10 ms, and with a sample in and the harmony or echoes up, wait plus work
+# passed 16 ms and the mic dropped blocks.) The edge moves by RENDER_HYST_NS
+# to stay where it last was, so a write that jitters near it doesn't flip
+# sides either. RENDER_GUARD_NS is how late a render can run and still be
+# waited for.
+RENDER_GUARD_NS = 2000000
+RENDER_NEAR_NS = 4000000
+RENDER_HYST_NS = 1500000
 # On a Ting the right FEED_PHASE changed from one preset load to the next, and
 # flipping it cured a crackling load. The chain renders two blocks at a time
 # every two blocks, in a burst that reads half 0 and then half 1, so half 0
@@ -88,6 +101,9 @@ PROBE_RATE = 62.5 / 64  # LFO cycles a second: one cycle per 64 renders
 # picked to match.
 FEED_SYNC = True
 BLOCK_NS = 16000000     # one BLOCK_SIZE of audio, at any rate
+# The pitch work runs in a wait for the chain only if the wait is this much
+# longer than it has lately taken (see step()).
+ANALYSE_SPARE_NS = 1000000
 
 # Retune speed. `speed` 0..1 (0 = natural, 1 = hard snap) is mapped to the
 # fraction of the remaining correction applied per 16 ms block, from
@@ -161,6 +177,9 @@ KEY_CHORDS = (
 )
 # A key chord sung on a note outside the scale falls back to this shape.
 OFF_KEY_SHAPE = (0, 4, 7, 10)
+# "double" adds one more voice an octave above or below the sung note, on
+# chords of three notes or fewer, so the harmony still fits in three voices.
+DOUBLES = (("above", 12), ("below", -12))
 
 
 def chord_by_name(name):
@@ -599,8 +618,9 @@ class WaveReader:
             else:
                 f.seek(size + (size & 1), 1)
 
-    def read(self):
-        """Fill ``buf`` with the next block. Returns how many samples."""
+    def read(self, gain=256):
+        """Fill ``buf`` with the next block, scaled by ``gain`` / 256.
+        Returns how many samples."""
         if self.done:
             return 0
         if self.left <= 0:
@@ -612,11 +632,55 @@ class WaveReader:
         want = min(BLOCK_SIZE, self.left)
         got = (self.file.readinto(self._view[0:want]) or 0) // 2
         self.left = self.left - got if got else 0
+        if gain != 256 and got:
+            _scale(self.buf, got, gain)
         return got
 
     def close(self):
         self.done = True
         self.file.close()
+
+
+# Mixing a sample into the mic block, and scaling it, one sample at a time in
+# Python took several ms a block. With the harmony voices running that pushed
+# a pass past 16 ms, so the sample (one block a pass) played slow and the
+# chain ran dry. ulab does it in well under a ms, through views of the arrays,
+# when its frombuffer is a view (checked once, below).
+def _views_write_through():
+    if np is None:
+        return False
+    try:
+        buf = array.array("h", [0])
+        np.frombuffer(buf, dtype=np.int16)[0:1] = np.array([7], dtype=np.int16)
+        return buf[0] == 7
+    except Exception:
+        return False
+
+
+_NP_VIEWS = _views_write_through()
+
+
+def _mix_into(block, extra, n):
+    """block[0:n] += extra[0:n], clipped to 16 bits."""
+    if _NP_VIEWS:
+        out = np.frombuffer(block, dtype=np.int16)
+        mixed = np.array(out[0:n], dtype=_FLOAT) + np.frombuffer(extra, dtype=np.int16)[0:n]
+        out[0:n] = np.array(np.clip(mixed, -32768, 32767), dtype=np.int16)
+        return
+    for i in range(n):
+        value = block[i] + extra[i]
+        block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
+
+
+def _scale(buf, n, gain):
+    """buf[0:n] *= gain / 256."""
+    if _NP_VIEWS:
+        out = np.frombuffer(buf, dtype=np.int16)
+        scaled = np.array(out[0:n], dtype=_FLOAT) * (gain / 256)
+        out[0:n] = np.array(np.clip(scaled, -32768, 32767), dtype=np.int16)
+        return
+    for i in range(n):
+        buf[i] = (buf[i] * gain) >> 8
 
 
 def _value(param):
@@ -880,8 +944,8 @@ class Autotune:
                  humanize=0.0, mix=1.0, grain_size=None,
                  density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
                  inversion=0, harmony_octave=0, harmony_level=0.7, correct=True,
-                 vocoder=None, vocoder_bands=8, vocoder_octave=0, vocoder_breath=0.0,
-                 vocoder_mix=1.0):
+                 harmony_double=None, vocoder=None, vocoder_bands=8, vocoder_octave=0,
+                 vocoder_breath=0.0, vocoder_mix=1.0):
         import audiocore
 
         if vocoder is not None and harmony is not None:
@@ -912,8 +976,15 @@ class Autotune:
         self._renders = 0
         self._probe_phase = 0.0
         self._newest = 0        # the half holding the last block written
+        self._period = 0        # time between renders, as the counter saw it
+        self._waiting = False   # the last write near a render waited for it
         self._turn = 0
         self.busy_ms = 0.0
+        self.wait_ms = 0.0      # of that pass, spent waiting for the chain
+        self.idle_ms = 0.0      # of that pass, spent in mic.record (spare time)
+        self.outside_ms = 0.0   # from the pass before ending to this one starting
+        self._ended = 0
+        self._analyse_ns = 0    # what the pitch work costs, a slowly falling max
         # Mic level, 0 or 1, applied before pitch detection. Used when
         # samples are mixed into this stage, so the paddle can mute the mic
         # without muting the sample.
@@ -921,6 +992,7 @@ class Autotune:
         # The WaveReader being mixed in, or None, and its level in 256ths.
         self.sample = None
         self.sample_gain = 256
+        self._sample_ready = 0   # samples of the next block already read
         self._zeros = array.array("h", [0] * BLOCK_SIZE)
         self.gate_open = False
         self._gate_hold = 0
@@ -959,6 +1031,7 @@ class Autotune:
         self.harmony_level = harmony_level
         self._level = None
         self._intervals = []
+        self._double = 0        # semitones of the voice's octave double, or 0
         self._key_chord = False
         # The note the key chord is built on, and a new note waiting to
         # take over (see _chord_intervals).
@@ -972,19 +1045,26 @@ class Autotune:
             self._tones = tones
             self._inversion = inversion
             self._octave = harmony_octave
+            if harmony_double is not None:
+                self._double = dict(DOUBLES).get(str(harmony_double).lower(), 0)
+                if not self._double:
+                    raise ValueError("harmonizer double is above or below, not %r" % (harmony_double,))
+                if len(tones) > 3:
+                    raise ValueError("harmonizer double needs a chord of three notes or fewer")
             if not self._key_chord:
-                self._intervals = voicing(tones, inversion, harmony_octave)
+                self._intervals = self._doubled(voicing(tones, inversion, harmony_octave))
             if self.shifter is None:
                 print("harmonizer off: it needs audiodelays.GranularPitchShift")
             else:
                 import audiodelays
                 count = len(tones) - 1
-                for _ in range(count):
+                for _ in range(count + (1 if self._double else 0)):
                     self._feeds.append(_feed_sample(self._out, fmt))
                     self.voices.append(_make_native_shifter(
                         audiodelays, fmt, 1.0, grain_size, density)[0])
                 if self._key_chord:
-                    self._intervals = voicing(OFF_KEY_SHAPE[:count + 1], inversion, harmony_octave)
+                    self._intervals = self._doubled(
+                        voicing(OFF_KEY_SHAPE[:count + 1], inversion, harmony_octave))
         if self.shifter is not None:
             # The shifters always go through a mixer, harmony or not: its
             # voice level is the render counter (see PROBE_RATE).
@@ -1034,6 +1114,7 @@ class Autotune:
         sample already playing."""
         self.stop_sample()
         self.sample = WaveReader(path, loop)
+        self._sample_ready = self.sample.read(self.sample_gain)
 
     def stop_sample(self):
         if self.sample is not None:
@@ -1105,14 +1186,19 @@ class Autotune:
         began = now()
         total = 0.0
         first = last = None
-        while now() - began < 5 * BLOCK_NS:
+        starts = []  # when each render began: just before Python was held
+        prev = began
+        while prev - began < 5 * BLOCK_NS:
+            t = now()
             p = probe.phase
             if p != phase:
                 total += (p - phase) % 1.0
                 phase = p
-                last = (now(), total)
+                last = (t, total)
+                starts.append(prev)
                 if first is None:
                     first = last
+            prev = t
         renders = 0 if first is None else (last[0] - first[0] + BLOCK_NS // 2) // BLOCK_NS
         if not renders:
             print("render counter off: too few renders seen")
@@ -1125,10 +1211,58 @@ class Autotune:
         self._step = per if abs(measured - per) < abs(measured - per / 2) else per / 2
         self._renders = int(total / self._step + 0.5)
         self._probe_phase = phase
+        self._burst_due = None
+        if len(starts) > 1:
+            gap = min(b - a for a, b in zip(starts, starts[1:]))
+            self._period = max(1, (gap + BLOCK_NS // 2) // BLOCK_NS) * BLOCK_NS
+            self._burst_due = starts[-1] + self._period
         self._feed_block(self._zeros)
-        print("feed sync: counting renders, {} in {:.0f} ms, {} since the feed started".format(
-            renders, (last[0] - first[0]) / 1e6, self._renders))
+        print("feed sync: counting renders, {} in {:.0f} ms, {} since the feed started; every {} ms".format(
+            renders, (last[0] - first[0]) / 1e6, self._renders, self._period // 1000000))
         return True
+
+    def _render_ahead(self):
+        """How long until the render that _wait_for_render would wait for,
+        in ns, or 0 when the write needn't wait. Changes nothing."""
+        due, period = self._burst_due, self._period
+        if not self._step or due is None or not period:
+            return 0
+        t = time.monotonic_ns()
+        while due + RENDER_GUARD_NS <= t:
+            due += period
+        near = RENDER_NEAR_NS + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
+        return due - t if 0 < due - t < near else 0
+
+    def _wait_for_render(self):
+        """With the counter: if a render is due less than half a block
+        ahead (see RENDER_GUARD_NS), spin until it has run (the counter moves)
+        or is that late. Returns the time spent waiting, in ns."""
+        due, period = self._burst_due, self._period
+        if due is None:
+            return 0
+        now = time.monotonic_ns
+        t = began = now()
+        while due + RENDER_GUARD_NS <= t:
+            due += period
+        near = RENDER_NEAR_NS + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
+        if due - t >= near:
+            if due - t < BLOCK_NS:
+                self._waiting = False
+        else:
+            self._waiting = True
+            probe = self._probe
+            seen = probe.phase
+            if t < due or seen == self._probe_phase:  # else it has just run
+                prev = t
+                while t < due + RENDER_GUARD_NS:
+                    if probe.phase != seen:
+                        due = prev  # it ran: follow it, should the clocks drift
+                        break
+                    prev = t
+                    t = now()
+            due += period
+        self._burst_due = due
+        return now() - began
 
     def _sync_feed(self):
         """Time the chain's burst and set ``_half`` so the last write before
@@ -1190,6 +1324,8 @@ class Autotune:
         """If the chain's burst is due within the guard, spin until it has
         run (or is that late), so the write lands after it. Returns the time
         spent waiting, in ns."""
+        if self._step:
+            return self._wait_for_render()
         due, guard = self._burst_due, self._guard
         if due is None or not guard:
             return 0
@@ -1273,7 +1409,13 @@ class Autotune:
             offset -= 12
         while offset < -11:
             offset += 12
-        return [offset + i for i in self._key_intervals(note + offset)]
+        return self._doubled([offset + i for i in self._key_intervals(note + offset)])
+
+    def _doubled(self, intervals):
+        """``intervals`` plus the octave above or below the sung note, if
+        the preset asks for one. (The octave is of the voice, so it stays
+        put whatever the chord's inversion or octave.)"""
+        return intervals + [self._double] if self._double else intervals
 
     def _key_intervals(self, note):
         """Harmony intervals for a key chord on the snapped MIDI note."""
@@ -1333,19 +1475,26 @@ class Autotune:
     def step(self, speed_override=None):
         """Process one block. Blocks for BLOCK_SIZE samples of audio."""
         block = self._block
+        entered = time.monotonic_ns()
         got = self.mic.record(block, BLOCK_SIZE)
         began = time.monotonic_ns()
+        self.idle_ms = (began - entered) / 1e6
+        self.outside_ms = (entered - self._ended) / 1e6 if self._ended else 0.0
         for i in range(got, BLOCK_SIZE):
             block[i] = 0
         if not self.gate:
             block[0:BLOCK_SIZE] = self._zeros
+        # The sample's next block was read (and scaled) after the last write,
+        # so the write below lands at the same moment with or without one: a
+        # file read here pushed it across the chain's render now and then.
         sample = self.sample
         if sample is not None:
-            extra, n, gain = sample.buf, sample.read(), self.sample_gain
-            for i in range(n):
-                value = block[i] + ((extra[i] * gain) >> 8)
-                block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
-            if sample.done:
+            extra, n = sample.buf, self._sample_ready
+            if not self.gate:  # the mic is muted: the block is just the sample
+                block[0:n] = extra[0:n]
+            elif n:
+                _mix_into(block, extra, n)
+            if not n and sample.done:
                 self.stop_sample()
         # Hand the block to the pitch shifter straight away, at the same
         # moment every pass. Writing it after the pitch search made the write
@@ -1354,9 +1503,34 @@ class Autotune:
         # The shift amount set below applies from the next grain. (The Python
         # OLA fallback shifts the block itself, so it still writes at the end.)
         self._noise_gate(block)
+        waited = 0
         if self.shifter is not None:
-            began += self._wait_out_burst()  # waiting is not work
+            # A write due just before a render waits for it, up to half a
+            # block. On a busy preset with a sample in, that wait plus the
+            # pitch work after the write ran past the next mic block (an
+            # overflow, and the sample played slow). So when the wait is
+            # longer than the pitch work, do the pitch work in it.
+            early = self._render_ahead() > self._analyse_ns + ANALYSE_SPARE_NS
+            if early:
+                self._analyse(block, speed_override)
+            waited = self._wait_out_burst()  # waiting is not work
             self._feed_block(block)
+            if not early:
+                self._analyse(block, speed_override)
+        else:
+            self._analyse(block, speed_override)
+        if self.sample is not None:
+            self._sample_ready = self.sample.read(self.sample_gain)
+        # Python time this block took, in ms. Over ~16 ms (one block of audio)
+        # and the mic overflows; code.py prints it with each overflow.
+        self._ended = time.monotonic_ns()
+        self.wait_ms = waited / 1e6
+        self.busy_ms = (self._ended - began - waited) / 1e6
+        return got
+
+    def _analyse(self, block, speed_override=None):
+        """Find the pitch in the latest window and set the shift amounts."""
+        began = time.monotonic_ns()
         window = self._window
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]
         window[BLOCK_SIZE:BUFFER_SIZE] = block
@@ -1364,7 +1538,10 @@ class Autotune:
         # Without retuning, only a key chord or the vocoder needs to know the
         # note. Pitch is found every DETECT_EVERY blocks; between, the last
         # target holds.
-        self._turn = (self._turn + 1) % DETECT_EVERY
+        # With a sample in and the mic open the chain has the most to do, so
+        # the pitch is found one block less often (48 ms rather than 32).
+        every = DETECT_EVERY + (1 if self.sample is not None and self.gate else 0)
+        self._turn = (self._turn + 1) % every
         if not (self.enabled and (self.correct or self._key_chord or self.vocoder)):
             self.cents = None
             self.hz = 0.0
@@ -1387,7 +1564,7 @@ class Autotune:
                 self._target = semis
             else:
                 # silence / noise: relax back toward no shift
-                self._target *= 0.9 ** DETECT_EVERY
+                self._target *= 0.9 ** every
         if not self.correct:
             self._target = 0.0
 
@@ -1417,10 +1594,11 @@ class Autotune:
                 self.vocoder.update(window, hz)
             if self._vmixer is not None:
                 self._set_vocoder_levels()
-        # Python time this block took, in ms. Over ~16 ms (one block of audio)
-        # and the mic overflows; code.py prints it with each overflow.
-        self.busy_ms = (time.monotonic_ns() - began) / 1e6
-        return got
+        cost = time.monotonic_ns() - began
+        # An average, not a max: a slow pass (a garbage collection) would
+        # keep the work out of the wait for seconds. Should it overrun the
+        # render, the write still lands after it, as when waiting.
+        self._analyse_ns += (cost - self._analyse_ns) // 4
 
 
 

@@ -522,6 +522,17 @@ ALIASES = {
 }
 
 
+def _skip(effect, param):
+    0
+
+
+
+
+
+
+    print("{} has no parameter {}; ignoring it (newer firmware?)".format(effect, param))
+
+
 def _normalize(name):
     0
     if not isinstance(name, str):
@@ -588,7 +599,8 @@ def create_effect(
 
             continue
         if name not in params:
-            raise ValueError("{} has no parameter {}".format(class_name, name))
+            _skip(class_name, name)
+            continue
         kwargs[name] = params[name](value, name, blocks)
 
     try:
@@ -704,6 +716,7 @@ HARMONIZER_PARAMS = {
     "inversion": (_int, "inversion"),
     "octave": (_int, "harmony_octave"),
     "level": (_block, "harmony_level"),
+    "double": (_str, "harmony_double"),
 }
 
 
@@ -825,7 +838,8 @@ def create_preset(preset, blocks=None, **format_args):
             if name in ("effect", "enabled") or name in FORMAT_ARGS:
                 continue
             if name not in AUTOTUNE_PARAMS:
-                raise ValueError("autotune has no parameter {}".format(name))
+                _skip("autotune", name)
+                continue
             tune[name] = AUTOTUNE_PARAMS[name](value, name, namespace)
 
     if harmony_specs:
@@ -843,7 +857,8 @@ def create_preset(preset, blocks=None, **format_args):
             if name in ("effect", "enabled") or name in FORMAT_ARGS:
                 continue
             if name not in HARMONIZER_PARAMS:
-                raise ValueError("harmonizer has no parameter {}".format(name))
+                _skip("harmonizer", name)
+                continue
             convert, keyword = HARMONIZER_PARAMS[name]
             tune[keyword] = convert(value, name, namespace)
 
@@ -862,7 +877,8 @@ def create_preset(preset, blocks=None, **format_args):
             if name in ("effect", "enabled") or name in FORMAT_ARGS:
                 continue
             if name not in VOCODER_PARAMS:
-                raise ValueError("vocoder has no parameter {}".format(name))
+                _skip("vocoder", name)
+                continue
             convert, keyword = VOCODER_PARAMS[name]
             tune[keyword] = convert(value, name, namespace)
 

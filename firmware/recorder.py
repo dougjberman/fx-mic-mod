@@ -32,6 +32,7 @@ except ImportError:
         import numpy as np  # desktop CPython, for testing
     except ImportError:
         np = None
+_FLOAT = getattr(np, "float", float)  # ulab's float dtype; numpy takes float
 
 SAMPLE_RATE = 16000
 BLOCK_MS = 16           # audio per record() call, the loop's pace
@@ -47,6 +48,12 @@ FADE_MS = 5             # fade-in and fade-out at the ends of each take, against
 ONSET_LEVEL = 600
 PRE_ROLL_MS = 10
 POST_ROLL_MS = 150
+# With normalizing on, a take is scaled so its loudest sample sits at
+# NORMALIZE_PEAK (-3 dBFS), but never boosted more than NORMALIZE_MAX_GAIN
+# (+12 dB), so a near-silent take doesn't come back as loud hiss. A take with
+# nothing at ONSET_LEVEL is left alone.
+NORMALIZE_PEAK = 23197
+NORMALIZE_MAX_GAIN = 4.0
 WRITE_SAMPLES = 2048    # samples per file write, so the save animation keeps moving
 CHUNK = 8192            # samples per buffer piece (16 KB)
 MIN_SECONDS = 1         # shortest take worth offering when memory is short
@@ -96,9 +103,10 @@ class Recorder:
     out part way the take is shortened to what fit, down to MIN_SECONDS.
     """
 
-    def __init__(self, mic, seconds=4, sample_rate=SAMPLE_RATE, trim=True):
+    def __init__(self, mic, seconds=4, sample_rate=SAMPLE_RATE, trim=True, normalize=False):
         self.mic = mic
         self.trim = trim
+        self.normalize = normalize
         self.sample_rate = sample_rate
         wanted = int(seconds * sample_rate)
         # Sized by time, not samples: a fixed 256 was 16 ms at 16 kHz but
@@ -218,6 +226,45 @@ class Recorder:
             at += hi - lo
         return None
 
+    def _parts(self, start, end):
+        """(chunk, lo, hi) pieces covering samples start..end."""
+        at = start
+        while at < end:
+            chunk = self._chunks[at // CHUNK]
+            lo = at % CHUNK
+            hi = min(len(chunk), lo + end - at)
+            yield chunk, lo, hi
+            at += hi - lo
+
+    def peak(self, start, end):
+        """Largest absolute sample in start..end."""
+        peak = 0
+        for chunk, lo, hi in self._parts(start, end):
+            if np is not None:
+                part = chunk[lo:hi]
+                peak = max(peak, int(np.max(part)), -int(np.min(part)))
+            else:
+                for i in range(lo, hi):
+                    value = chunk[i]
+                    peak = max(peak, value, -value)
+        return peak
+
+    def _normalize(self, start, end, tick=None):
+        """Scale start..end in place (see NORMALIZE_PEAK)."""
+        peak = self.peak(start, end)
+        if peak < ONSET_LEVEL:
+            return
+        gain = min(NORMALIZE_PEAK / peak, NORMALIZE_MAX_GAIN)
+        for chunk, lo, hi in self._parts(start, end):
+            if tick is not None:
+                tick()
+            if np is not None:
+                scaled = np.array(chunk[lo:hi], dtype=_FLOAT) * gain
+                chunk[lo:hi] = np.array(np.clip(scaled, -32768, 32767), dtype=np.int16)
+            else:
+                for i in range(lo, hi):
+                    chunk[i] = max(-32768, min(32767, int(chunk[i] * gain)))
+
     def save(self, path, tick=None):
         """Write the take to ``path`` as a WAV. Returns the frames written.
 
@@ -234,6 +281,8 @@ class Recorder:
             return 0
 
         chunks = self._chunks
+        if self.normalize:
+            self._normalize(start, end, tick)
         fade = min(frames, self.sample_rate * FADE_MS // 1000)
         if start > 0:
             for i in range(fade):

@@ -108,6 +108,44 @@ class RecorderTests(unittest.TestCase):
             rec.step()
         self.assertEqual(rec.take(), (24000 * recorder.TRIM_MS // 1000, 24000))
 
+    def test_normalize_brings_the_peak_to_minus_3_db(self):
+        for level in (10000, 32000):  # turned up, and turned down
+            class Mic:
+                def record(self, block, count):
+                    for i in range(count):
+                        block[i] = level if i % 2 else -level // 2
+                    return count
+
+            rec = recorder.Recorder(Mic(), seconds=1, sample_rate=24000, normalize=True)
+            rec.start()
+            while rec.recording:
+                rec.step()
+            start, end = rec.take()
+            rec._normalize(start, end)
+            self.assertAlmostEqual(rec.peak(start, end), recorder.NORMALIZE_PEAK, delta=2)
+
+    def test_normalize_boosts_at_most_12_db(self):
+        class SoftMic:
+            def record(self, block, count):
+                for i in range(count):
+                    block[i] = 1000 if i % 2 else -1000
+                return count
+
+        rec = recorder.Recorder(SoftMic(), seconds=1, sample_rate=24000, normalize=True)
+        rec.start()
+        while rec.recording:
+            rec.step()
+        start, end = rec.take()
+        rec._normalize(start, end)
+        self.assertEqual(rec.peak(start, end), 1000 * recorder.NORMALIZE_MAX_GAIN)
+
+    def test_normalize_is_off_by_default(self):
+        rec = self._burst_take(True)
+        self.assertFalse(rec.normalize)
+        path = os.path.join(tempfile.mkdtemp(), "1.wav")
+        rec.save(path)
+        self.assertEqual(rec.peak(*rec.take()), 5000)
+
     def test_save_ticks_while_it_writes(self):
         rec = self._take()
         ticks = []

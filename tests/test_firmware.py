@@ -121,9 +121,14 @@ class LoaderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [{"effect": "autotune"}, {"effect": "AutoTune"}]})
 
-    def test_unknown_autotune_param_rejected(self):
-        with self.assertRaises(ValueError):
-            self.cl.create_preset({"list": [{"effect": "autotune", "pitch": 3}]})
+    def test_unknown_params_are_skipped(self):
+        tune, effects = self.cl.create_preset({"list": [
+            {"effect": "autotune", "pitch": 3},
+            {"effect": "harmonizer", "chord": "major", "sparkle": 1},
+            {"effect": "echo", "sparkle": 1}]})
+        self.assertNotIn("pitch", tune)
+        self.assertNotIn("sparkle", tune)
+        self.assertEqual(len(effects), 1)
 
     def test_squeeze_key_must_be_text(self):
         with self.assertRaises(ValueError):
@@ -163,6 +168,8 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(tune, {"key": "C", "scale": "major", "harmony": "maj7",
                                 "inversion": 1, "harmony_octave": -1, "harmony_level": 0.5})
         self.assertEqual(len(effects), 1)
+        tune, effects = self.cl.create_preset({"list": [{"effect": "harmonizer", "chord": "major", "double": "above"}]})
+        self.assertEqual(tune["harmony_double"], "above")
 
     def test_harmonizer_without_autotune_leaves_the_voice_untuned(self):
         tune, effects = self.cl.create_preset({"list": [{"effect": "Harmonizer"}]})
@@ -172,8 +179,6 @@ class LoaderTests(unittest.TestCase):
     def test_harmonizer_checks(self):
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [{"effect": "harmonizer"}, {"effect": "harmony"}]})
-        with self.assertRaises(ValueError):
-            self.cl.create_preset({"list": [{"effect": "harmonizer", "voices": 3}]})
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [
                 {"effect": "autotune", "squeeze_scale": "minor"},
@@ -198,7 +203,6 @@ class LoaderTests(unittest.TestCase):
         for preset in (
                 [{"effect": "vocoder"}, {"effect": "vocoder"}],
                 [{"effect": "vocoder"}, {"effect": "harmonizer"}],
-                [{"effect": "vocoder", "carrier": "saw"}],
                 [{"effect": "vocoder", "bands": "many"}]):
             with self.assertRaises(ValueError):
                 self.cl.create_preset({"list": preset})
@@ -208,6 +212,9 @@ class LoaderTests(unittest.TestCase):
                 {"effect": "vocoder", "mix": "$handle"}]}, blocks={"handle": 0.5})
         with self.assertRaises(ValueError):
             self.cl.create_effects({"list": [{"effect": "vocoder"}]})
+        # like every effect from 1.0 on, an unknown setting is left out
+        tune, _ = self.cl.create_preset({"list": [{"effect": "vocoder", "carrier": "saw"}]})
+        self.assertEqual(tune, {"correct": False, "vocoder": "saw"})
 
     def test_vocoder_bands_follow_the_voice(self):
         import array
@@ -281,6 +288,7 @@ class LoaderTests(unittest.TestCase):
         h.snapper = autotune.NoteSnapper()
         h.snapper.set_scale(autotune.scale_by_name("major"), 0)
         h._tones, h._inversion, h._octave = autotune.chord_by_name("key_triad")[0], 2, 0
+        h._double = 0
         h._chord_note = h._chord_next = None
         h._chord_count = 0
         g3 = h._chord_intervals(55)
@@ -422,6 +430,65 @@ class LoaderTests(unittest.TestCase):
             if not trial % 2:  # on time: every block, once
                 got = [blk for pair in reads for blk in pair]
                 self.assertEqual(got, list(range(got[0], got[0] + len(got))), trial)
+
+    def test_counted_renders_wait_for_a_render_due_at_the_write(self):
+        # On the harmonizer the chain renders about 1 ms after a mic block
+        # lands, while the block is being written. Writes that fall either
+        # side of it at random repeat and skip blocks; the guard makes them
+        # all land after it, so every block is read once, in order. That
+        # holds with the pitch work done in the wait, even when it overruns.
+        import array
+        import random
+        import autotune
+        A, n, B = autotune.Autotune, autotune.BLOCK_SIZE, autotune.BLOCK_NS
+        rng = random.Random(3)
+        for render_after in (0.2, 0.6, 1.0, 1.5, 2.5, 5.0, 8.0, 11.0, 15.5, 20.0, 30.0):
+            for length_ms, work_ms in ((3, 0), (12, 0), (14.5, 0), (3, 4), (3, 7), (12, 4)):
+                h = A.__new__(A)
+                h._out = array.array("h", [-1] * (2 * n))
+                view = memoryview(h._out)
+                h._front, h._back = view[:n], view[n:]
+                h._step, h._period, h._newest, h._waiting = 1 / 64, 2 * B, 0, False
+                h._probe = type("Probe", (), {"phase": 0.0})()
+                h._probe_phase, h._renders = 0.0, 0
+                first = B + int(render_after * 1000000)
+                length = int(length_ms * 1000000)
+                h._burst_due = first + int(rng.uniform(-0.3, 0.3) * 1000000)  # as timed
+                state = {"t": 0, "next": first, "renders": 0}
+                reads = []
+
+                def run_to(t):
+                    while state["next"] <= t:  # a render holds Python up
+                        pair = []
+                        for _ in (0, 1):
+                            pair.append(h._out[(state["renders"] % 2) * n])
+                            state["renders"] += 1
+                            h._probe.phase = (h._probe.phase + h._step) % 1.0
+                        reads.append(pair)
+                        t = max(t, state["next"] + length)
+                        state["next"] += 2 * B
+                    state["t"] = t
+
+                def now():
+                    t = state["t"]
+                    run_to(t + 100000)
+                    return t
+
+                saved = autotune.time.monotonic_ns
+                autotune.time.monotonic_ns = now
+                try:
+                    for m in range(1, 60):
+                        run_to(max(state["t"], m * B + int(rng.uniform(0.3, 1.1) * 1000000)))
+                        if work_ms and h._render_ahead() > work_ms * 1000000:
+                            # the pitch work, done in the wait (it can overrun)
+                            run_to(state["t"] + int(work_ms * rng.uniform(0.5, 1.6) * 1000000))
+                        h._wait_out_burst()
+                        h._feed_block(array.array("h", [m] * n))
+                finally:
+                    autotune.time.monotonic_ns = saved
+                got = [blk for pair in reads[2:-1] for blk in pair]
+                self.assertEqual(got, list(range(got[0], got[0] + len(got))),
+                                 (render_after, length_ms, work_ms))
 
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
@@ -585,6 +652,18 @@ class DeviceScenarioTests(unittest.TestCase):
         mixer = s["tune_mixer"]
         self.assertEqual(mixer["playing"], ["GranularPitchShift"] * 3)
         self.assertAlmostEqual(mixer["levels"][1] / mixer["levels"][0], 0.8, delta=0.01)
+
+    def test_harmonizer_double_adds_the_voice_an_octave_below(self):
+        config = {"name": "H", "presets": [{"list": [
+            {"effect": "autotune", "key": "A", "scale": "minor", "speed": 1.0},
+            {"effect": "harmonizer", "chord": "minor", "double": "below", "level": 0.8}]}], "samples": []}
+        root, out, s = run("level", config)
+        self.assertIn("harmonizer 3 voices", out)
+        lead, third, fifth, octave = s["shifters"]
+        # the triad as before, plus G2: the sung (snapped) note an octave down
+        self.assertAlmostEqual(third["min"], 3 - 0.95, delta=0.05)
+        self.assertAlmostEqual(fifth["min"], 7 - 0.95, delta=0.05)
+        self.assertAlmostEqual(octave["min"], -12 - 0.95, delta=0.05)
 
     def test_key_harmonizer_without_autotune(self):
         config = {"name": "H", "presets": [{"list": [

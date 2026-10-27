@@ -37,7 +37,7 @@ instructions to match your mic.
 | TOP + MIDDLE 0.8 s | Power off. |
 
 **Record mode:** all four red LEDs flash together and the white LEDs show the slot to record into. MIDDLE picks the slot,
-squeeze and hold the handle to record, release to save. The red LEDs stop flashing and count down the 4 second max sample length as you record. While the take saves, a light runs down the mic from the top red LED to the bottom white one. Silence before and after the sound is trimmed (the editor can turn that off), so the sample starts right on it.
+squeeze and hold the handle to record, release to save. The red LEDs stop flashing and count down the 4 second max sample length as you record. While the take saves, a light runs down the mic from the top red LED to the bottom white one. Silence before and after the sound is trimmed (the editor can turn that off), so the sample starts right on it. The editor can also normalize takes, so each one peaks at -3 dB (off by default).
 A recording immediately replaces the slot's WAV. BOTTOM plays it back to decide if you want another take.
 
 ## Two power-on modes (boot.py)
@@ -69,7 +69,7 @@ One static site, deployed by Cloudflare from `docs/` (see `wrangler.jsonc`):
 - `install.html`: back up the mic (Ting or FX Mic), flash CircuitPython, then install fx-mic-mod in one click
   (it copies the files in `docs/firmware/` to CIRCUITPY), plus a serial console and restore steps.
   Adapted from this project's Ting Flash Bench.
-- `editor.html`: the preset editor. Simple mode uses sliders and switches, Advanced mode shows every
+- `editor.html`: the Effects & Samples Editor. Simple mode uses sliders and switches, Advanced mode shows every
   raw parameter. **Try it on your computer** plays the selected preset live through your computer's
   mic (or a sample singer) using `ting-dsp.js`, a Web Audio approximation of the firmware. Saves
   `config.json` straight to CIRCUITPY in Chrome and Edge, or downloads it elsewhere.
