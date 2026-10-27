@@ -71,6 +71,17 @@ SCENARIOS = {
         paddle=[],
         end=2.0,
     ),
+    # effects_only, two pages: TOP x2 -> page 1 preset 2; MIDDLE -> page 2
+    # preset 2; TOP -> clean (page 2 has two presets, and no record mode);
+    # MIDDLE -> page 1 clean; TOP x3 -> preset 3; MIDDLE -> page 2, which
+    # stops at preset 2; MIDDLE -> page 1 again. BOTTOM plays nothing.
+    "pages": dict(
+        presses=tap(0.5, TOP) + tap(1.0, TOP) + tap(1.5, MIDDLE) + tap(2.0, TOP)
+        + tap(2.5, MIDDLE) + tap(3.0, TOP) + tap(3.2, TOP) + tap(3.4, TOP)
+        + tap(4.0, MIDDLE) + tap(4.5, BOTTOM) + tap(5.0, MIDDLE),
+        paddle=[],
+        end=5.5,
+    ),
     "through": dict(
         presses=tap(0.5, TOP) + tap(1.0, BOTTOM) + tap(3.0, TOP) + tap(3.5, BOTTOM),
         paddle=[],

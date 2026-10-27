@@ -59,6 +59,18 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 import gc
 import json
 import os
@@ -99,7 +111,7 @@ from recorder import Recorder, drive_free
 
 
 
-FIRMWARE_VERSION = "1.3"
+FIRMWARE_VERSION = "1.4"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 
@@ -153,6 +165,16 @@ SAMPLE_COUNT_PARAMS = ("grain_size", "window", "overlap")
 
 MAX_PRESETS = 4
 MAX_SAMPLES = 4
+
+
+
+
+
+MAX_PAGES = 4
+EFFECTS_ONLY = CONFIG.get("effects_only", False)
+if not isinstance(EFFECTS_ONLY, bool):
+    print("effects_only must be true or false; using false")
+    EFFECTS_ONLY = False
 
 
 SHUTDOWN_HOLD_SECONDS = 0.8
@@ -286,6 +308,8 @@ class DataContext:
 
         self.active = 0
 
+        self.page = 0
+
 
         self.white_active = 1
 
@@ -358,7 +382,9 @@ PACK_NAME = CONFIG.get("name", "none")
 
 
 
-PRESETS = list(CONFIG.get("presets", ())[:MAX_PRESETS])
+PRESETS = list(CONFIG.get("presets", ())[:MAX_PRESETS * (MAX_PAGES if EFFECTS_ONLY else 1)])
+
+PAGES = max(1, (len(PRESETS) + MAX_PRESETS - 1) // MAX_PRESETS)
 
 
 def at_rate(effects):
@@ -381,13 +407,13 @@ def at_rate(effects):
 PRESETS = [dict(p, list=at_rate(p.get("list"))) if isinstance(p, dict) else p for p in PRESETS]
 
 
-SAMPLES = load_samples(CONFIG, max_samples=MAX_SAMPLES)
+SAMPLES = [] if EFFECTS_ONLY else load_samples(CONFIG, max_samples=MAX_SAMPLES)
 SAMPLES = [dict(e, effects=at_rate(e.get("effects"))) for e in SAMPLES]
 
 
 
 try:
-    THROUGH_PRESET = sample_routing(CONFIG) == "preset"
+    THROUGH_PRESET = sample_routing(CONFIG) == "preset" and not EFFECTS_ONLY
 except ValueError as error:
     print("config: {}".format(error))
     THROUGH_PRESET = False
@@ -425,7 +451,20 @@ else:
     print("sample_level must be a number from 0 to 1; using {}".format(SAMPLE_LEVEL))
 
 
-RECORD_SPOT = len(PRESETS) + 1
+
+RECORD_SPOT = None if EFFECTS_ONLY else len(PRESETS) + 1
+
+
+def page_presets(ctx):
+    0
+    return PRESETS[ctx.page * MAX_PRESETS:(ctx.page + 1) * MAX_PRESETS]
+
+
+def next_spot(ctx):
+    0
+
+    spots = len(page_presets(ctx)) + (1 if RECORD_SPOT is None else 2)
+    return (ctx.active + 1) % spots
 
 
 CAN_RECORD = not storage.getmount("/").readonly
@@ -625,7 +664,7 @@ def select_preset(ctx, index):
         if index == RECORD_SPOT:
             enter_record_mode(ctx)
         else:
-            build(ctx, PRESETS[index - 1] if index else [])
+            build(ctx, page_presets(ctx)[index - 1] if index else [])
     except (ValueError, MemoryError) as error:
         print("preset {} failed: {}".format(index, error))
         teardown(ctx)
@@ -638,13 +677,15 @@ def select_preset(ctx, index):
         print("record mode, {} bytes free, {} KB left on the drive".format(
             gc.mem_free(), (drive_free() or 0) // 1024))
     else:
+        presets = page_presets(ctx)
         print(
-            "preset {} of {}{} ({} effects{}), {} bytes free".format(
+            "{}preset {} of {}{} ({} effects{}), {} bytes free".format(
+                "page {} of {}, ".format(ctx.page + 1, PAGES) if EFFECTS_ONLY else "",
                 ctx.active,
-                len(PRESETS),
-                ": " + PRESETS[ctx.active - 1]["name"]
-                if ctx.active and isinstance(PRESETS[ctx.active - 1], dict)
-                and isinstance(PRESETS[ctx.active - 1].get("name"), str) else "",
+                len(presets),
+                ": " + presets[ctx.active - 1]["name"]
+                if ctx.active and isinstance(presets[ctx.active - 1], dict)
+                and isinstance(presets[ctx.active - 1].get("name"), str) else "",
                 len(ctx.chain),
                 ", {} via {}{}".format(
                     "autotune" if ctx.tune.correct else "voice",
@@ -843,8 +884,10 @@ def update_red_leds(ctx):
 
 def update_white_leds(ctx):
     0
+
+    lit = ctx.page + 1 if EFFECTS_ONLY else ctx.white_active
     for index, _led in enumerate(white_leds):
-        _led.value = index < ctx.white_active
+        _led.value = index < lit
 
 
 def build_sample_chain(wave, sample):
@@ -1058,6 +1101,16 @@ def ms_between(earlier, later):
     return (later - earlier) & TICKS_MASK
 
 
+def next_page(ctx):
+    0
+
+    if PAGES == 1:
+        print("one page of presets: add a fifth to get a second page")
+        return
+    ctx.page = (ctx.page + 1) % PAGES
+    select_preset(ctx, min(ctx.active, len(page_presets(ctx))))
+
+
 def play_current_wave_sample(ctx, at=0):
     0
 
@@ -1217,14 +1270,17 @@ data_context.paddle_held = paddle.value
 
 
 update_white_leds(data_context)
-load_selected_wave_sample(data_context)
+if not EFFECTS_ONLY:
+    load_selected_wave_sample(data_context)
 
 print(
     "demo v2: pack {!r}, {} preset(s), {} Hz, mic gain {:.0f} dB, codec ADC HPF {:d} Hz".format(
         PACK_NAME, len(PRESETS), RATE, codec.mic_gain, HPF_HZ
     )
 )
-print("TOP button = next preset ({} spots, 0 = clean)".format(len(PRESETS) + 1))
+if EFFECTS_ONLY:
+    print("effects only: {} page(s) of presets, MIDDLE = next page, no samples or record mode".format(PAGES))
+print("TOP button = next preset ({} spots, 0 = clean)".format(len(page_presets(data_context)) + 1))
 print(
     "volume knob = DAC volume, {:.0f} to {:+.0f} dB".format(
         VOLUME_MIN_DB, VOLUME_MAX_DB
@@ -1259,8 +1315,11 @@ try:
 
 
 
-                select_preset(data_context, (data_context.active + 1) % (RECORD_SPOT + 1))
-            if event.pressed and event.key_number == MIDDLE:
+
+                select_preset(data_context, next_spot(data_context))
+            if event.pressed and event.key_number == MIDDLE and EFFECTS_ONLY:
+                next_page(data_context)
+            elif event.pressed and event.key_number == MIDDLE:
 
 
                 data_context.white_active = (
@@ -1269,9 +1328,9 @@ try:
                 update_white_leds(data_context)
                 load_selected_wave_sample(data_context)
                 print("white LED {}".format(data_context.white_active))
-            if event.pressed and event.key_number == BOTTOM:
+            if event.pressed and event.key_number == BOTTOM and not EFFECTS_ONLY:
                 play_current_wave_sample(data_context, event_ms(event))
-            if event.released and event.key_number == BOTTOM:
+            if event.released and event.key_number == BOTTOM and not EFFECTS_ONLY:
                 release_current_wave(data_context, event_ms(event))
             event = keys.events.get()
 

@@ -889,6 +889,47 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertAlmostEqual(mixer["levels"][0], 0.0, places=5)
         self.assertAlmostEqual(mixer["levels"][1], 1.0, places=5)
 
+    def test_effects_only_pages(self):
+        config = {"name": "PAGES", "effects_only": True, "sample_fx": "preset",
+                  "presets": [{"name": "P%d" % (i + 1), "list": [
+                      {"effect": "echo", "max_delay_ms": 200, "delay_ms": 100 + i, "mix": 0.3}]}
+                      for i in range(6)],
+                  "samples": [{"file": "1.wav", "playmode": "auto"}]}
+        root, out, s = run("pages", config, tone=(340.0, 1.0))
+        picks = [l.split(" (")[0] for l in out.splitlines() if l.startswith("page ")]
+        self.assertEqual(picks, [
+            "page 1 of 2, preset 0 of 4",     # boot: clean
+            "page 1 of 2, preset 1 of 4: P1",
+            "page 1 of 2, preset 2 of 4: P2",
+            "page 2 of 2, preset 2 of 2: P6",  # MIDDLE keeps the slot
+            "page 2 of 2, preset 0 of 2",      # TOP wraps to clean: no record mode
+            "page 1 of 2, preset 0 of 4",      # and stays on clean
+            "page 1 of 2, preset 1 of 4: P1",
+            "page 1 of 2, preset 2 of 4: P2",
+            "page 1 of 2, preset 3 of 4: P3",
+            "page 2 of 2, preset 2 of 2: P6",  # a shorter page stops at its last
+            "page 1 of 2, preset 2 of 4: P2",
+        ])
+        self.assertIsNone(s["record_spot"])
+        # no sample is loaded or played, and the presets get no input mixer
+        self.assertNotIn("loaded /1.wav", out)
+        self.assertNotIn("playing 1", out)
+        self.assertEqual(s["heads"], [])
+        # the white LEDs count the page: one, then two, then one
+        whites = [len(w) for t, w in transitions(s["white_log"]) if t < 5.5]
+        self.assertEqual([w for i, w in enumerate(whites) if i == 0 or w != whites[i - 1]],
+                         [1, 2, 1, 2, 1])
+
+    def test_effects_only_caps_at_four_pages(self):
+        config = {"effects_only": True,
+                  "presets": [{"list": []} for _ in range(20)]}
+        root, out, s = run("pages", config)
+        self.assertIn("effects only: 4 page(s) of presets", out)
+        # without effects_only only four presets are read, as before
+        root, out, s = run("pages", dict(config, effects_only=False))
+        self.assertIn("4 preset(s)", out)
+        self.assertEqual(s["record_spot"], 5)
+
     def test_shutdown_combo_over_usb_keeps_running(self):
         root, out, s = run("shutdown_on_usb")
         self.assertEqual(out.count("shutting down"), 1)
