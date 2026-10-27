@@ -216,6 +216,42 @@ class LoaderTests(unittest.TestCase):
         tune, _ = self.cl.create_preset({"list": [{"effect": "vocoder", "carrier": "saw"}]})
         self.assertEqual(tune, {"correct": False, "vocoder": "saw"})
 
+    def test_vocoder_squeeze_chord(self):
+        import array
+        import autotune
+        rate = autotune.SAMPLE_RATE
+        voc = autotune.Vocoder(rate, chord="major", squeeze_chord="minor")
+        self.assertEqual(voc.chord, "major")
+        voc.update(array.array("h", [0] * autotune.BUFFER_SIZE), 220.0)
+        voc.squeeze(True)
+        self.assertEqual(voc.chord, "minor")
+        self.assertAlmostEqual(voc.notes[0].frequency, 22.0)  # 220 / 10
+        voc.squeeze(False)
+        self.assertEqual(voc.chord, "major")
+        # one note, squeezing into a key chord
+        voc = autotune.Vocoder(rate, squeeze_chord="key_triad")
+        self.assertIsNone(voc.chord)
+        self.assertIsNone(voc.key_steps)
+        voc.squeeze(True)
+        self.assertEqual(voc.key_steps, (0, 2, 4))
+        voc.set_chord("dim")
+        voc.squeeze(False)
+        self.assertIsNone(voc.chord)
+        # and back to one note from a chord
+        voc = autotune.Vocoder(rate, chord="m7", squeeze_chord="none")
+        voc.squeeze(True)
+        self.assertIsNone(voc.chord)
+        with self.assertRaises(ValueError):
+            autotune.Vocoder(rate, squeeze_chord="aug")
+        # the loader: the handle does one job
+        tune, _ = self.cl.create_preset({"list": [{"effect": "vocoder", "squeeze_chord": "minor"}]})
+        self.assertEqual(tune["vocoder_squeeze_chord"], "minor")
+        for bad in ({"list": [{"effect": "autotune", "squeeze_scale": "minor"},
+                              {"effect": "vocoder", "squeeze_chord": "minor"}]},
+                    {"list": [{"effect": "vocoder", "squeeze_chord": "minor", "mix": "$handle"}]}):
+            with self.assertRaises(ValueError):
+                self.cl.create_preset(bad)
+
     def test_vocoder_bands_follow_the_voice(self):
         import array
         import math
@@ -758,6 +794,15 @@ class DeviceScenarioTests(unittest.TestCase):
         # (4:5:6:7): the carrier plays its sub-note, two octaves under 98 Hz
         self.assertAlmostEqual(voc["hz"][0], 24.5, delta=0.2)
         self.assertEqual(voc["table"], 128 * 7)  # VOCODER_CHORD_SAMPLES per multiple
+
+    def test_vocoder_squeeze_switches_chord(self):
+        config = dict(TEST_CONFIG, presets=[{"list": [
+            {"effect": "autotune", "key": "A", "scale": "chromatic"},
+            {"effect": "vocoder", "chord": "major", "squeeze_chord": "minor"}]}]
+            + TEST_CONFIG["presets"][1:])
+        root, out, s = run("record", config)
+        self.assertIn("vocoder chord now minor", out)
+        self.assertLess(out.index("vocoder chord now minor"), out.index("vocoder chord now major"))
 
     def test_vocoder_with_the_voice(self):
         config = {"name": "V", "presets": [{"list": [

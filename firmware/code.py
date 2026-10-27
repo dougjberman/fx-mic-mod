@@ -213,7 +213,7 @@ RECORD_SECONDS = 4
 RECORD_BLINK_SECONDS = 0.25
 
 # Handle travel (0 out .. 1 in) at which an autotune preset's "squeeze_key"
-# takes over, and below which it lets go again.
+# (or a vocoder's "squeeze_chord") takes over, and below which it lets go again.
 SQUEEZE_KEY_ON = 0.67
 SQUEEZE_KEY_OFF = 0.5
 
@@ -1301,6 +1301,15 @@ try:
                 key, scale = data_context.tune_keys[1 if not squeezed else 0]
                 data_context.tune.set_key_scale(key, scale)
                 print("autotune now {} {}".format(key, scale))
+        # A vocoder's "squeeze_chord" switches chord the same way.
+        vocoder = data_context.tune.vocoder if data_context.tune is not None else None
+        if vocoder is not None and vocoder.squeezable:
+            position = handle_control.a
+            if (not vocoder.squeezed and position >= SQUEEZE_KEY_ON) or (
+                vocoder.squeezed and position <= SQUEEZE_KEY_OFF
+            ):
+                vocoder.squeeze(not vocoder.squeezed)
+                print("vocoder chord now {}".format(vocoder.chord or "one note"))
 
         # Reading .overflow clears it. It trips if the playback side falls
         # behind the mic, which should not happen here. Both run off the

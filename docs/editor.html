@@ -601,6 +601,7 @@ STARTERS.push(
   {name:"Slap-back", list:[{effect:"filter",filter:{mode:"high_pass",frequency:120,Q:.7071},mix:1},{effect:"echo",delay_ms:120,decay:{block:"math",operation:"constrained_lerp",a:.1,b:.5,c:"$handle"},mix:.35,freq_shift:false,max_delay_ms:200},{effect:"freeverb",roomsize:.2,damp:.6,mix:.12}]},
   {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"lfo",waveform:"sine",rate:{block:"math",operation:"constrained_lerp",a:0.25,b:0.8,c:"$handle"},scale:{block:"math",operation:"constrained_lerp",a:300,b:1150,c:"$handle"},offset:{block:"math",operation:"constrained_lerp",a:900,b:1850,c:"$handle"}},feedback:{block:"math",operation:"constrained_lerp",a:0.4,b:0.85,c:"$handle"},mix:{block:"math",operation:"constrained_lerp",a:0.25,b:0.5,c:"$handle"},stages:8},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.2}]},
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]},
+  {name:"Squeeze for minor", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"major",squeeze_chord:"minor",bands:10,octave:-1,breath:.3},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.5,damp:.5,mix:.25}]},
   {name:"Night drive", list:[{effect:"autotune",key:"A",scale:"minor",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"key_triad",bands:10,octave:-1,breath:.35},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.35},{effect:"freeverb",roomsize:.55,damp:.5,mix:.3}]},
   {name:"Robot in key", list:[{effect:"autotune",key:"C",scale:"major",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:9,octave:0,breath:.3,mix:"$handle"},{effect:"chorus",max_delay_ms:50,delay_ms:15,voices:2,mix:.3},{effect:"echo",max_delay_ms:400,delay_ms:250,decay:.25,mix:.12,freq_shift:false}]});
 const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.4],[STARTERS[1],1],[STARTERS[9],.4],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
@@ -999,6 +1000,17 @@ function vocoderCard(p, fx){
     ? "The chord follows the autotune key, like the harmonizer's key chords: "+keyChordExample(tune, chord==="key_seventh")+". Tuned in pure intervals."
     : "Key chords need autotune set to Major or Minor, so they know which chord each note gets. Without that the mic uses C major."));
   else if (chord) body.append(h("p",{class:"small muted"}, "The synth plays this chord on the note you sing, so sing the chord's root. It's tuned in pure intervals, which ring a little smoother than a keyboard's."));
+  // squeeze_chord: a full squeeze switches to another chord (the handle can only do one job)
+  const keyJob = tune && (tune.squeeze_key!=null || tune.squeeze_scale!=null);
+  const sq = typeof fx.squeeze_chord==="string" ? fx.squeeze_chord : null;
+  const sqBusy = keyJob || fx.mix==="$handle";
+  body.append(h("div",{class:"field"}, h("label",{}, "Squeeze for"),
+    h("div",{class:"seg", role:"group", "aria-label":"Chord on a full squeeze"},
+      [[null,"Off"]].concat(VOCODER_CHORD_CHOICES.map(([v,l])=>[v||"none",l])).map(([v,l])=>h("button",{"aria-pressed":String(sq===v),
+        disabled:((sqBusy && v) || (VOCODER_KEY_CHORDS[v] && !keyed)) && sq!==v || null,
+        onclick:()=>{ if (v) fx.squeeze_chord=v; else delete fx.squeeze_chord; changed(); }}, l)))));
+  if (sq) body.append(h("p",{class:"small muted"}, "Squeeze the handle far in to switch to this chord, and ease off to go back. Pair it with autotune on Every note to pick major or minor on any note you sing."));
+  else if (sqBusy) body.append(h("p",{class:"small muted"}, keyJob ? "The squeeze already changes the autotune key, so it can't switch the chord too." : "The squeeze already brings in the vocoder, so it can't switch the chord too."));
   const oct = typeof fx.octave==="number" ? fx.octave : 0;
   body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
     h("div",{class:"seg", role:"group", "aria-label":"Carrier octave"},
@@ -1009,7 +1021,6 @@ function vocoderCard(p, fx){
   body.append(sliderEl({label:"Noise gate",min:-80,max:-20,step:1,unit:"dB",offAt:-80,ends:["Off","Only loud singing"]}, typeof fx.gate==="number"?fx.gate:-50, v=>{ if (v===-50) delete fx.gate; else fx.gate=v; changedQuiet(); }));
   body.append(h("p",{class:"small muted"}, "If the synth hums with no one singing, raise the gate until it stays quiet. If word ends get cut off, lower it."));
   // amount: fixed, or brought in by the squeeze
-  const keyJob = tune && (tune.squeeze_key!=null || tune.squeeze_scale!=null);
   if (fx.mix==="$handle") body.append(h("div",{class:"squeeze"},
     h("div",{class:"row spread"}, h("b",{class:"small"}, "The robot comes in as you squeeze"),
       h("button",{class:"btn small ghost", onclick:()=>{ fx.mix=1; changed(); }}, "Use a fixed amount")),
@@ -1018,8 +1029,8 @@ function vocoderCard(p, fx){
     body.append(sliderEl({label:"Amount",min:0,max:1,step:.01,ends:["Your voice","All vocoder"]}, typeof fx.mix==="number" ? fx.mix : 1, v=>{ if (v>=1) delete fx.mix; else fx.mix=v; changedQuiet(); }));
     const id = nid("vsq");
     body.append(h("label",{class:"switch small", for:id, style:"margin-left:2px"},
-      h("input",{type:"checkbox", id, disabled:keyJob||null, onchange:()=>{ fx.mix="$handle"; changed(); }}), h("span",{class:"track"}),
-      h("span",{class:"muted"}, keyJob ? "Squeeze for the vocoder (the squeeze already changes the key)" : "Squeeze to bring in the vocoder")));
+      h("input",{type:"checkbox", id, disabled:(keyJob||sq)||null, onchange:()=>{ fx.mix="$handle"; changed(); }}), h("span",{class:"track"}),
+      h("span",{class:"muted"}, keyJob ? "Squeeze for the vocoder (the squeeze already changes the key)" : sq ? "Squeeze for the vocoder (the squeeze already switches the chord)" : "Squeeze to bring in the vocoder")));
   }
   body.append(h("p",{class:"small muted"}, tune
     ? "The carrier plays the note autotune snaps you to, so the robot is always in key."
@@ -1616,6 +1627,8 @@ $("#try-squeeze-slot").append(sliderEl({label:"Squeeze",min:0,max:1,step:.01,}, 
 const squeezeInput = $("#try-squeeze-slot input");
 let sweepTimer = null, squeezeTried = new Set();
 function squeezeJob(p){
+  const sv = p && p.list.find(f=>f.effect==="vocoder" && f.enabled!==false && f.squeeze_chord!=null);
+  if (sv) return "the chord change";
   if (!p || !JSON.stringify(p).includes("$handle")) return null;
   const at = p.list.find(f=>f.effect==="autotune"), hz = p.list.find(f=>f.effect==="harmonizer");
   if (hz && hz.enabled!==false && JSON.stringify(hz).includes("$handle")) return "the backing vocals come in";

@@ -1302,6 +1302,15 @@ try:
                 data_context.tune.set_key_scale(key, scale)
                 print("autotune now {} {}".format(key, scale))
 
+        vocoder = data_context.tune.vocoder if data_context.tune is not None else None
+        if vocoder is not None and vocoder.squeezable:
+            position = handle_control.a
+            if (not vocoder.squeezed and position >= SQUEEZE_KEY_ON) or (
+                vocoder.squeezed and position <= SQUEEZE_KEY_OFF
+            ):
+                vocoder.squeeze(not vocoder.squeezed)
+                print("vocoder chord now {}".format(vocoder.chord or "one note"))
+
 
 
 

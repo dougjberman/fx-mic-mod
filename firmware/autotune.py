@@ -905,10 +905,12 @@ class Vocoder:
       breath    0..1, noise for the voice's highs (s, t, f), so words come through
       gate      noise gate in dB from full scale (see VOCODER_GATE), so room
                 noise (a fan, an air conditioner) doesn't play the carrier
+      squeeze_chord   None, or the chord squeeze(True) switches to: any chord
+                name above, or "none" for the plain carrier
     """
 
     def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0, chord=None,
-                 gate=VOCODER_GATE):
+                 gate=VOCODER_GATE, squeeze_chord=None):
         import synthio
 
         if np is None or not (_SPECTRUM is not None or hasattr(np, "fft")):
@@ -919,24 +921,26 @@ class Vocoder:
             raise ValueError("vocoder octave must be -2 to 2")
         self.breath = min(1.0, max(0.0, breath))
         self.waveform = waveform
-        self.key_steps = dict(VOCODER_KEY_CHORDS).get(chord)
-        if self.key_steps is not None:
-            # build every table the key can ask for now, not mid-song
-            names = {vocoder_key_chord(None, self.key_steps)}
-            for shape, name in VOCODER_SHAPES:
-                if len(shape) == len(self.key_steps):
-                    names.add(name)
-            for name in names:
-                chord_wave(waveform, name)
-            chord = vocoder_key_chord(None, self.key_steps)
-        self.chord = chord
-        if chord is None:
-            table, density = carrier_wave(waveform)
-            self._sub = 1.0
+        self.notes = []
+        self.key_steps = None
+        self.chord = ""  # none yet; None is the plain carrier
+        # squeeze_chord: the chord a full squeeze switches to ("none" is the
+        # plain carrier). Every table either side can ask for is built now.
+        self.squeezable = squeeze_chord is not None
+        if self.squeezable:
+            self._modes = (chord, None if squeeze_chord == "none" else squeeze_chord)
         else:
-            table, root, density = chord_wave(waveform, chord)
-            self._sub = 1.0 / root  # the table repeats at this share of the root
-        self._dk = 1.0 / math.sqrt(density)
+            self._modes = (chord,)
+        for mode in self._modes:
+            steps = dict(VOCODER_KEY_CHORDS).get(mode)
+            if steps is None:
+                self._wave(mode)
+            else:
+                for shape, name in VOCODER_SHAPES:
+                    if len(shape) == len(steps):
+                        chord_wave(waveform, name)
+        self.squeezed = False
+        self._use(chord)
         self.octave = 2.0 ** octave
         self.hz = 0.0
 
@@ -978,7 +982,7 @@ class Vocoder:
             self._k.append(VOCODER_GAIN * math.sqrt(psd / (0.5 * (1 / low - 1 / top))))
             self._floor.append(top)
             self.notes.append(synthio.Note(
-                frequency=110.0, waveform=table, amplitude=0.0,
+                frequency=110.0, waveform=self._table, amplitude=0.0,
                 filter=synthio.Biquad(mode, frequency=centre, Q=q)))
         self._levels = [0.0] * bands
 
@@ -1003,17 +1007,39 @@ class Vocoder:
     def start(self):
         self.synth.press(self.notes + ([self.noise] if self.noise else []))
 
+    def _wave(self, chord):
+        """(table, sub-note share, density) for a chord, or None's carrier."""
+        if chord is None:
+            table, density = carrier_wave(self.waveform)
+            return table, 1.0, density
+        table, root, density = chord_wave(self.waveform, chord)
+        return table, 1.0 / root, density  # the table repeats at the sub-note
+
+    def _use(self, mode):
+        """Play ``mode``: a chord, None, or a key chord (whose chord then
+        comes from set_chord on each pitch search)."""
+        self.key_steps = dict(VOCODER_KEY_CHORDS).get(mode)
+        if self.key_steps is None:
+            self.set_chord(mode)
+        elif self.chord not in [n for t, n in VOCODER_SHAPES if len(t) == len(self.key_steps)]:
+            self.set_chord(vocoder_key_chord(None, self.key_steps))
+
+    def squeeze(self, squeezed):
+        """Switch between the chord and the squeeze chord."""
+        if self.squeezable and squeezed != self.squeezed:
+            self.squeezed = squeezed
+            self._use(self._modes[1 if squeezed else 0])
+
     def set_chord(self, chord):
-        """Swap the carrier to another VOCODER_CHORDS chord (for key chords,
-        whose tables are built already)."""
+        """Swap the carrier to another chord (or None, the plain carrier),
+        one whose table is built already."""
         if chord == self.chord:
             return
-        table, root, density = chord_wave(self.waveform, chord)
+        self._table, self._sub, density = self._wave(chord)
         self.chord = chord
-        self._sub = 1.0 / root
         self._dk = 1.0 / math.sqrt(density)
         for note in self.notes:
-            note.waveform = table
+            note.waveform = self._table
             if self.hz:
                 note.frequency = self.hz * self._sub
 
@@ -1091,7 +1117,7 @@ class Autotune:
     and, from a "vocoder" effect (not with a harmonizer):
       vocoder    the carrier waveform (see Vocoder), or None for no vocoder
       vocoder_bands, vocoder_octave, vocoder_breath, vocoder_chord,
-      vocoder_gate     see Vocoder
+      vocoder_gate, vocoder_squeeze_chord   see Vocoder
       vocoder_mix      vocoder against the voice, 0..1 (number or block); a
                        plain 1 drops the voice and its shifter altogether
     fmt is the shared audio format dict (sample_rate, bits_per_sample,
@@ -1105,7 +1131,7 @@ class Autotune:
                  inversion=0, harmony_octave=0, harmony_level=0.7, correct=True,
                  harmony_double=None, vocoder=None, vocoder_bands=8, vocoder_octave=0,
                  vocoder_breath=0.0, vocoder_mix=1.0, vocoder_chord=None,
-                 vocoder_gate=VOCODER_GATE):
+                 vocoder_gate=VOCODER_GATE, vocoder_squeeze_chord=None):
         import audiocore
 
         if vocoder is not None and harmony is not None:
@@ -1247,7 +1273,8 @@ class Autotune:
         self._vocoder_level = None
         if vocoder is not None:
             self.vocoder = Vocoder(fmt["sample_rate"], vocoder, vocoder_bands,
-                                   vocoder_octave, vocoder_breath, vocoder_chord, vocoder_gate)
+                                   vocoder_octave, vocoder_breath, vocoder_chord, vocoder_gate,
+                                   vocoder_squeeze_chord)
             if voiceless:
                 self.output = self.vocoder.output
             else:

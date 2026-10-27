@@ -298,17 +298,18 @@ function dspFactory(){
   const highPass=(f,Q,sr)=>{ const w=2*Math.PI*f/sr, cs=Math.cos(w), al=Math.sin(w)/(2*Q), a0=1+al; return {b0:(1+cs)/2/a0, b1:-(1+cs)/a0, b2:(1+cs)/2/a0, a1:-2*cs/a0, a2:(1-al)/a0, x1:0,x2:0,y1:0,y2:0}; };
   const biq=(f,x)=>{ const y=f.b0*x+(f.b1||0)*f.x1+f.b2*f.x2-f.a1*f.y1-f.a2*f.y2; f.x2=f.x1; f.x1=x; f.y2=f.y1; f.y1=y; return y; };
   class Vocoder {
-    constructor(sr, buf, waveform, bands, octave, breath, chord, gate){
+    constructor(sr, buf, waveform, bands, octave, breath, chord, gate, squeezeChord){
       if(!Number.isInteger(bands)||bands<4||bands>VOC.MAX_BANDS) throw new Error("vocoder bands must be 4 to "+VOC.MAX_BANDS);
       if(!Number.isInteger(octave)||octave<-2||octave>2) throw new Error("vocoder octave must be -2 to 2");
       if(typeof breath!=="number") throw new Error("vocoder breath must be a number");
       if(typeof gate!=="number") throw new Error("vocoder gate must be a number");
-      this.keySteps=chord==null ? null : VOC_KEY_CHORDS[String(chord)]||null;
-      if(this.keySteps) chord=vocKeyChord(null, this.keySteps);
-      this.waveform=waveform; this.chord=chord==null ? null : String(chord);
-      const {table, density, root}= chord==null ? carrierWave(waveform) : chordWave(waveform, this.chord);
-      this.sub=chord==null ? 1 : 1/root; this.dk=1/Math.sqrt(density);
-      this.sr=sr; this.table=table; this.oct=Math.pow(2,octave); this.hz=0; this.ph=0; this.breath=clamp(breath,0,1);
+      // squeeze_chord: the chord a full squeeze switches to ("none" = one note) (firmware Vocoder.squeeze)
+      this.waveform=waveform; this.chord=""; this.keySteps=null; this.squeezed=false;
+      const mode=c=> c==null||c==="none" ? null : String(c);
+      this.squeezable=squeezeChord!=null; this.modes= this.squeezable ? [mode(chord), mode(squeezeChord)] : [mode(chord)];
+      for(const m of this.modes) if(!VOC_KEY_CHORDS[m]) this.wave(m);   // an unknown chord fails here, at load
+      this.use(this.modes[0]);
+      this.sr=sr; this.oct=Math.pow(2,octave); this.hz=0; this.ph=0; this.breath=clamp(breath,0,1);
       let n=1; while(n*2<=buf) n*=2; this.n=n;
       this.hann=new Float64Array(n); for(let i=0;i<n;i++) this.hann[i]=Math.sin(Math.PI*(i+0.5)/n)**2;
       const psd=2/(n*n*0.375);
@@ -328,10 +329,20 @@ function dspFactory(){
         this.noise={t, pos:0, a:Math.trunc(cut*n/sr+0.5), b:n/2, k:this.breath*VOC.GAIN*Math.sqrt(psd)/(17320*Math.sqrt(1-cut/(sr/2))), level:0, f:highPass(cut,0.7071,sr)};
       }
     }
+    wave(chord){
+      if(chord==null){ const {table, density}=carrierWave(this.waveform); return {table, sub:1, density}; }
+      const {table, root, density}=chordWave(this.waveform, chord); return {table, sub:1/root, density};
+    }
+    use(mode){
+      this.keySteps=VOC_KEY_CHORDS[mode]||null;
+      if(!this.keySteps) this.setChord(mode);
+      else if(!Object.entries(VOC_SHAPES).some(([t,nm])=>nm===this.chord&&t.split(",").length===this.keySteps.length)) this.setChord(vocKeyChord(null, this.keySteps));
+    }
+    squeeze(on){ if(this.squeezable&&on!==this.squeezed){ this.squeezed=on; this.use(this.modes[on?1:0]); } }
     setChord(chord){
       if(chord===this.chord) return;
-      const {table, root, density}=chordWave(this.waveform, chord);
-      this.chord=chord; this.table=table; this.sub=1/root; this.dk=1/Math.sqrt(density);
+      const {table, sub, density}=this.wave(chord);
+      this.chord=chord; this.table=table; this.sub=sub; this.dk=1/Math.sqrt(density);
     }
     update(win, hz){
       if(hz>0){ hz=clamp(hz*this.oct,30,2000); if(Math.abs(hz-this.hz)>0.002*hz) this.hz=hz; }
@@ -366,7 +377,7 @@ function dspFactory(){
   const PARAMS={
     autotune:["key","scale","speed","humanize","mix","grain_size","density","squeeze_key","squeeze_scale"],
     harmonizer:["chord","inversion","octave","level","double"],
-    vocoder:["waveform","bands","octave","breath","mix","chord","gate"],
+    vocoder:["waveform","bands","octave","breath","mix","chord","gate","squeeze_chord"],
     pitch_shift:["semitones","mix","window","overlap"],
     granular_pitch_shift:["semitones","mix","grain_size","density","spread"],
     distortion:["drive","pre_gain","post_gain","mode","soft_clip","mix"],
@@ -428,8 +439,10 @@ function dspFactory(){
           for(const k in vs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.vocoder.includes(k)) console.warn("vocoder has no parameter "+k+"; ignoring it");
           const usesH=v=> typeof v==="string" ? v==="$handle" : (v&&typeof v==="object" ? Object.values(v).some(usesH) : false);
           if(alt&&usesH(vs.mix)) throw new Error("vocoder: the handle can change the key or drive the mix, not both");
+          if(alt&&vs.squeeze_chord!=null) throw new Error("vocoder: the handle can change the key or the chord, not both");
+          if(vs.squeeze_chord!=null&&usesH(vs.mix)) throw new Error("vocoder: the handle can change the chord or drive the mix, not both");
           const intOf=(v,d,nm)=>{ v=v==null?d:v; if(typeof v!=="number") throw new Error("vocoder "+nm+" must be a number"); return Math.trunc(v); };
-          voc=new Vocoder(sr, det.BUF, vs.waveform==null?"saw":String(vs.waveform), intOf(vs.bands,8,"bands"), intOf(vs.octave,0,"octave"), vs.breath==null?0:vs.breath, vs.chord, vs.gate==null?VOC.GATE:vs.gate);
+          voc=new Vocoder(sr, det.BUF, vs.waveform==null?"saw":String(vs.waveform), intOf(vs.bands,8,"bands"), intOf(vs.octave,0,"octave"), vs.breath==null?0:vs.breath, vs.chord, vs.gate==null?VOC.GATE:vs.gate, vs.squeeze_chord);
           vocMixF=compile(vs.mix??1,"vocoder mix",ns);
         }
         else if(harm){
@@ -465,6 +478,10 @@ function dspFactory(){
             const h=env.handle||0;
             if(!squeezed&&h>=0.67){ squeezed=true; snap=alt; alt.target=null; }
             else if(squeezed&&h<=0.5){ squeezed=false; snap=rest; rest.target=null; }
+          }
+          if(voc&&voc.squeezable){
+            const h=env.handle||0;
+            if(!voc.squeezed&&h>=0.67) voc.squeeze(true); else if(voc.squeezed&&h<=0.5) voc.squeeze(false);
           }
           for(let i=0;i<buf.length;i++){
             const x=buf[i];

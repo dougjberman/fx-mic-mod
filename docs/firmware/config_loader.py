@@ -734,6 +734,7 @@ VOCODER_PARAMS = {
     "breath": (_float, "vocoder_breath"),
     "chord": (_str, "vocoder_chord"),
     "gate": (_float, "vocoder_gate"),
+    "squeeze_chord": (_str, "vocoder_squeeze_chord"),
     "mix": (_block, "vocoder_mix"),
 }
 
@@ -874,6 +875,14 @@ def create_preset(preset, blocks=None, **format_args):
                 raise ValueError(
                     "vocoder: the handle can change the key or drive the mix, not both"
                 )
+            if "squeeze_chord" in spec:
+                raise ValueError(
+                    "vocoder: the handle can change the key or the chord, not both"
+                )
+        if "squeeze_chord" in spec and _uses_handle(
+            spec.get("mix"), definitions if isinstance(definitions, dict) else {}
+        ):
+            raise ValueError("vocoder: the handle can change the chord or drive the mix, not both")
         tune["vocoder"] = "saw"
         for name, value in spec.items():
             if name in ("effect", "enabled") or name in FORMAT_ARGS:
