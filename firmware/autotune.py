@@ -78,17 +78,6 @@ FEED_PHASE = 1
 # picked to match.
 FEED_SYNC = True
 BLOCK_NS = 16000000     # one BLOCK_SIZE of audio, at any rate
-# Which half a burst reads first is not fixed by play(): a RawSample never
-# goes back to half 0, it flips halves on every pull. play() pulls once, and
-# so does every voice.play() and effect.play() while the chain is wired, and
-# each of those pulls leaves a block the chain uses up later without pulling
-# its source. If any of that is still pending when the feed starts, one
-# burst pulls the shifter once instead of twice and every burst after it
-# reads half 1 first: the crackle that came and went from load to load. So
-# start() lets the chain run this long on silence first, which uses all of
-# them up, and only then starts the feeds. Then each burst reads half 0 and
-# then half 1, every load.
-SETTLE_S = 0.2
 
 # Retune speed. `speed` 0..1 (0 = natural, 1 = hard snap) is mapped to the
 # fraction of the remaining correction applied per 16 ms block, from
@@ -1040,9 +1029,8 @@ class Autotune:
                 for index, voice in enumerate(self.voices):
                     self.mixer.voice[index + 1].play(voice, loop=True)
                 self._set_levels()
-            time.sleep(SETTLE_S)  # see SETTLE_S
-            for voice, feed in zip(self.voices, self._feeds):
-                voice.play(feed, loop=True)
+                for voice, feed in zip(self.voices, self._feeds):
+                    voice.play(feed, loop=True)
             self.shifter.play(self.feed, loop=True)
             if FEED_SYNC and FEED_PHASE is not None:
                 try:
