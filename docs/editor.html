@@ -603,10 +603,10 @@ STARTERS.push(
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]},
   {name:"Squeeze for minor", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"major",squeeze_chord:"minor",bands:10,octave:-1,breath:.3},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.5,damp:.5,mix:.25}]},
   {name:"Night drive", list:[{effect:"autotune",key:"A",scale:"minor",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"key_triad",bands:10,octave:-1,breath:.35},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.35},{effect:"freeverb",roomsize:.55,damp:.5,mix:.3}]},
-  {name:"Night call", list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:10,octave:0,breath:.7,mix:1,chord:"key_triad",gate:-60,squeeze_chord:"key_seventh"}]},
+  {name:"Night call", list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:11,octave:0,breath:.7,mix:.9,gate:-60,squeeze_chord:"key_triad"}]},
   // a hard-tuned one-note robot, after Daft Punk's "Harder, Better, Faster, Stronger"
   {name:"Harder better faster stronger", level:.45, list:[{effect:"autotune",key:"F#",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:11,octave:0,breath:.4,mix:1,gate:-55}]});
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[["Squeeze for backups",1],["Night call",.45],["Dream swirl",.4],["Squeeze monster",.25]].map(([n,lv])=>[STARTERS.find(s=>s.name===n),lv]).map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[["Squeeze for backups",1],["Night call",.7],["Dream swirl",.4],["Squeeze monster",.25]].map(([n,lv])=>[STARTERS.find(s=>s.name===n),lv]).map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"oneshot"},{file:"4.wav",playmode:"oneshot"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -1762,6 +1762,9 @@ for (const [i, json] of OLD_DEFAULTS)
 { const [a, b] = config.presets;
   if (a && b && canon(a)===canon(LEGACY_DEFAULTS[0]) && canon(b)===canon(LEGACY_DEFAULTS[1])){
     config.presets[0] = clone(DEFAULT_CONFIG.presets[0]); config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
+// Night call's first settings, for a day: key triads with 7ths on a squeeze, level 0.45.
+{ const p = config.presets[1], old = {name:"Night call", level:.45, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:10,octave:0,breath:.7,mix:1,chord:"key_triad",gate:-60,squeeze_chord:"key_seventh"}]};
+  if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
 // Slots 3 and 4 used to default to hold and start/stop. Untouched ones move to tap to play.
 [[2,"hold"],[3,"startstop"]].forEach(([i, mode]) => { const s = config.samples[i];
   if (s && s.playmode===mode && canon(Object.keys(s).filter(k=>k!=="playmode").reduce((o,k)=>(o[k]=s[k],o),{}))===canon({file:(i+1)+".wav"})){ s.playmode = "oneshot"; save(); } });
