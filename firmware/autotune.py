@@ -716,7 +716,7 @@ def key_by_name(name):
 # sets each band note's amplitude. That runs on the blocks the pitch search
 # skips (DETECT_EVERY), so the slowest block costs no more than autotune's.
 
-VOCODER_WAVEFORMS = ("saw", "square", "pulse")
+VOCODER_WAVEFORMS = ("saw", "square", "pulse", "saw_square")
 VOCODER_MAX_BANDS = 11          # synthio plays 12 notes; one is kept for breath
 VOCODER_LOW_HZ = 180.0          # centre of the lowest band
 VOCODER_HIGH_HZ = 5000.0        # centre of the highest band (at most 0.4 x the rate)
@@ -771,6 +771,9 @@ def carrier_wave(shape):
             terms.append((k, 1.0 / k, False))
         elif shape == "square":
             terms.append((k, 1.0 / k if k % 2 else 0.0, False))
+        elif shape == "saw_square":
+            # both at once, equal parts, in one table: no more notes to play
+            terms.append((k, 2.0 / k if k % 2 else 1.0 / k, False))
         else:  # pulse, 25% duty
             terms.append((k, math.sin(math.pi * k * 0.25) / k, True))
     wave = [0.0] * n
@@ -791,7 +794,7 @@ class Vocoder:
     that plays the vocoded voice; call update() with the latest analysis
     window and the carrier pitch.
 
-      waveform  "saw", "square" or "pulse"
+      waveform  "saw", "square", "pulse" or "saw_square" (the two summed)
       bands     4..VOCODER_MAX_BANDS band-pass channels
       octave    moves the carrier by whole octaves from the sung note
       breath    0..1, noise for the voice's highs (s, t, f), so words come through

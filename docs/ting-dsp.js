@@ -250,13 +250,13 @@ function dspFactory(){
   /* ---------- vocoder, as firmware/autotune.py (Vocoder) ----------
      A carrier at the sung (or tuned) note through one band-pass per band; the band levels come from
      an FFT of the newest power-of-two samples of the pitch window, every other block like the mic. */
-  const VOC={WAVEFORMS:["saw","square","pulse"], MAX_BANDS:11, LOW:180, HIGH:5000, BREATH:4000, HARMONICS:48, TABLE:256, NOISE:2048, GAIN:0.7, RELEASE:0.4};
+  const VOC={WAVEFORMS:["saw","square","pulse","saw_square"], MAX_BANDS:11, LOW:180, HIGH:5000, BREATH:4000, HARMONICS:48, TABLE:256, NOISE:2048, GAIN:0.7, RELEASE:0.4};
   const vocWaves={};
   function carrierWave(shape){
-    if(!VOC.WAVEFORMS.includes(shape)) throw new Error("vocoder waveform must be saw, square or pulse");
+    if(!VOC.WAVEFORMS.includes(shape)) throw new Error("vocoder waveform must be saw, square, pulse or saw_square");
     if(vocWaves[shape]) return vocWaves[shape];
     const n=VOC.TABLE, terms=[];
-    for(let k=1;k<=VOC.HARMONICS;k++) terms.push(shape==="saw"?[k,1/k,false]: shape==="square"?[k,k%2?1/k:0,false] : [k,Math.sin(Math.PI*k*0.25)/k,true]);
+    for(let k=1;k<=VOC.HARMONICS;k++) terms.push(shape==="saw"?[k,1/k,false]: shape==="square"?[k,k%2?1/k:0,false] : shape==="saw_square"?[k,k%2?2/k:1/k,false] : [k,Math.sin(Math.PI*k*0.25)/k,true]);
     const w=new Float64Array(n);
     for(const [k,a,cos] of terms) if(a) for(let i=0;i<n;i++){ const t=2*Math.PI*k*i/n; w[i]+=a*(cos?Math.cos(t):Math.sin(t)); }
     let pk=0; for(let i=0;i<n;i++) pk=Math.max(pk,Math.abs(w[i]));

@@ -25,7 +25,7 @@ chord needs the note).
 
 ## How the vocoder runs
 A `vocoder` effect also joins the autotune stage. Its carrier is a `synthio.Synthesizer` with one
-`Note` per band: a band-limited saw / square / pulse table through that note's own band-pass
+`Note` per band: a band-limited saw / square / pulse / saw+square table through that note's own band-pass
 `synthio.Biquad`, all at the tracked note (the corrected note when the preset has autotune).
 Python only measures the voice: on the blocks between pitch searches it takes the newest
 power-of-two samples of the pitch window (512 at 16 or 24 kHz), runs a ulab FFT, sums the bins of

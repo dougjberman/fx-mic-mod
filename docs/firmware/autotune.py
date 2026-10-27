@@ -716,7 +716,7 @@ def key_by_name(name):
 
 
 
-VOCODER_WAVEFORMS = ("saw", "square", "pulse")
+VOCODER_WAVEFORMS = ("saw", "square", "pulse", "saw_square")
 VOCODER_MAX_BANDS = 11
 VOCODER_LOW_HZ = 180.0
 VOCODER_HIGH_HZ = 5000.0
@@ -771,6 +771,9 @@ def carrier_wave(shape):
             terms.append((k, 1.0 / k, False))
         elif shape == "square":
             terms.append((k, 1.0 / k if k % 2 else 0.0, False))
+        elif shape == "saw_square":
+
+            terms.append((k, 2.0 / k if k % 2 else 1.0 / k, False))
         else:
             terms.append((k, math.sin(math.pi * k * 0.25) / k, True))
     wave = [0.0] * n
