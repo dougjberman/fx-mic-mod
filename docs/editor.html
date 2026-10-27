@@ -111,12 +111,12 @@ a{color:var(--accent-text)}
 .switch input:focus-visible + .track{outline:2px solid var(--accent);outline-offset:2px}
 
 /* slider */
-.slider{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr) 74px;gap:12px;align-items:center}
+.slider{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr) 88px;gap:12px;align-items:center}
 .slider label{font-size:14px;font-weight:600}
 .slider .ends{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;margin-top:-2px}
-.slider .val{font-family:var(--f-mono);font-size:13px;text-align:right;color:var(--muted)}
+.slider .val{font-family:var(--f-mono);font-size:13px;text-align:right;color:var(--muted);white-space:nowrap}
 input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;display:block}
-@media (max-width:560px){.slider{grid-template-columns:minmax(0,1fr) 64px}.slider label{grid-column:1/-1}}
+@media (max-width:560px){.slider{grid-template-columns:minmax(0,1fr) 80px}.slider label{grid-column:1/-1}}
 
 /* preset slots, styled after the red LEDs */
 .slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
@@ -130,8 +130,8 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .slot .led.lit{background:color-mix(in srgb,var(--led-r) 45%,var(--led-off))}
 .slot[aria-pressed="true"] .led.lit{background:var(--led-r);box-shadow:0 0 6px var(--led-r)}
 .slot .num{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
-.slot .name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.slot .chain{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot .name{font-weight:700;overflow-wrap:anywhere;text-wrap:balance;line-height:1.3}
+.slot .chain{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere;line-height:1.4}
 .slot.add{place-content:center;justify-items:center;color:var(--muted);border-style:dashed;background:transparent}
 
 /* effect cards */
@@ -184,6 +184,8 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 }
 .try-note{margin:4px 0 0}
 .levelrow{border-top:1px solid var(--line);padding-top:10px}
+/* Help text keeps a readable line length on wide screens. */
+.panel p,.panel li{max-width:75ch}
 .slot-player{gap:8px;margin-top:8px}
 .grey-key{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px 4px 6px;font-weight:600;font-size:13px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--ink)}
 .grey-key .dot{width:20px;height:20px;border-radius:50%;background:var(--btn-bot,#b5b6b8);border:1px solid rgba(0,0,0,.25);transition:transform .08s}
@@ -222,6 +224,9 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 
 /* samples */
 .samples{display:grid;gap:10px}
+#sample-fx{display:grid;gap:18px}
+.opt{display:grid;gap:6px}
+@media (min-width:561px){.opt > p{padding-left:162px}}
 .sample{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 14px;align-items:start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
 /* the slot's white lights, in a little window like the mic's: slot 3 lights three */
 .sample .wleds{display:grid;gap:3px;align-content:start;align-self:start;margin-top:10px;padding:4px;border-radius:8px;background:#3a3d41}
@@ -274,7 +279,7 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 @keyframes nudge{50%{box-shadow:inset 0 0 0 2px transparent}}
 @media (prefers-reduced-motion:reduce){#try-squeeze-slot.nudge{animation:none}}
 /* how-to strip */
-.howto{display:grid;gap:12px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;background:var(--panel);padding:16px 18px}
+.howto{display:grid;gap:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px 18px}
 .howto ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 @media (max-width:1100px){.howto ol{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:820px){.howto ol{grid-template-columns:1fr}}
@@ -456,7 +461,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
         <li>The audio you record takes a second to process and save to the mic, and a light runs down the mic from top to bottom while it does. Silence before and after your audio is trimmed, unless you turn that off below. Takes keep the volume you recorded them at, unless you choose Normalize below.</li>
       </ul>
     </div>
-    <div id="sample-fx" style="display:grid;gap:6px"></div>
+    <div id="sample-fx"></div>
     <div class="samples" id="samples"></div>
   </section>
   </div>
@@ -467,14 +472,16 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
     <pre class="out" id="json-out"></pre>
   </section>
 
-  <section class="panel group" id="onto-mic" style="display:grid;gap:10px">
-    <h2>Getting it onto the mic</h2>
+  <div class="group" id="onto-mic">
+  <div class="group-head"><h2>Getting it onto the mic</h2></div>
+  <section class="panel" style="display:grid;gap:10px">
     <ol class="steps small">
       <li>Turn the mic off. Plug it into your computer, then <b>hold the orange button while you squeeze the handle to turn it on</b>. That's edit mode, where your computer can save files to it. (No fx-mic-mod on it yet? Use the <a href="install.html">install guide</a>.)</li>
       <li>Click <b>Save to mic</b> and pick the <span class="mono">CIRCUITPY</span> drive. In browsers without folder access (Safari, Firefox), click <b>Download</b> and drag <span class="mono">config.json</span> onto the drive. Either way the mic's whole <span class="mono">config.json</span> is replaced, presets and sample settings both, so open the mic's file first (<b>Open a config.json</b>) if you want to keep anything on it.</li>
       <li>The mic restarts by itself and plays the new presets straight away. It stays in edit mode until you turn it off, so to record samples, turn it off and on again normally (just squeeze the handle).</li>
     </ol>
   </section>
+  </div>
 </main>
 <div class="toast" id="toast" hidden></div>
 
@@ -1066,26 +1073,26 @@ function renderSamples(){
   // "sample_fx": "preset" plays samples dry into the selected preset; "own" (or unset) gives each slot its own effects
   const through = String(config.sample_fx||"own").toLowerCase()==="preset";
   $("#sample-fx").replaceChildren(
-    h("div",{class:"field"}, h("label",{}, "Sample effects"),
+    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Sample effects"),
       h("div",{class:"seg", role:"group", "aria-label":"Sample effects"},
         [["preset","Through the mic's preset"],["own","Hardcode effects below"]].map(([v,l])=>h("button",{"aria-pressed":String((through?"preset":"own")===v), onclick:()=>{ if (v==="own") delete config.sample_fx; else config.sample_fx=v; changed(); }}, l)))),
     h("p",{class:"small muted"}, through
       ? "Samples play dry into whichever effect preset is selected on the mic right now (the one the orange button picked), the same chain your voice goes through, autotune included. On Clean and in Record mode they play dry."
-      : "Each slot gets its own effects below, whichever effect preset is selected on the mic. This is how Adafruit's packs work."),
+      : "Each slot gets its own effects below, whichever effect preset is selected on the mic. This is how Adafruit's packs work.")),
     // "trim_takes": false keeps the silence around takes recorded on the mic (firmware TRIM_TAKES)
-    h("div",{class:"field"}, h("label",{}, "Takes recorded on the mic"),
+    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Takes recorded on the mic"),
       h("div",{class:"seg", role:"group", "aria-label":"Takes recorded on the mic"},
         [[true,"Trim silence"],[false,"Keep whole"]].map(([v,l])=>h("button",{"aria-pressed":String((config.trim_takes!==false)===v), onclick:()=>{ if (v) delete config.trim_takes; else config.trim_takes=false; changed(); }}, l)))),
     h("p",{class:"small muted"}, config.trim_takes!==false
       ? "Silence before and after the sound is cut, so a take plays the moment you press and stops when the sound does. Either way, the handle's clicks are always cut: the first 50 ms (squeezing) and the last 100 ms (letting go), with a 5 ms fade at each end."
-      : "Takes keep everything from the squeeze to the release, apart from the handle's clicks: the first 50 ms (squeezing) and the last 100 ms (letting go) are always cut, with a 5 ms fade at each end."),
+      : "Takes keep everything from the squeeze to the release, apart from the handle's clicks: the first 50 ms (squeezing) and the last 100 ms (letting go) are always cut, with a 5 ms fade at each end.")),
     // "normalize_takes": true evens out the level of takes recorded on the mic (firmware NORMALIZE_TAKES)
-    h("div",{class:"field"}, h("label",{}, "Volume of takes"),
+    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Volume of takes"),
       h("div",{class:"seg", role:"group", "aria-label":"Volume of takes"},
         [[false,"As recorded"],[true,"Normalize"]].map(([v,l])=>h("button",{"aria-pressed":String((config.normalize_takes===true)===v), onclick:()=>{ if (v) config.normalize_takes=true; else delete config.normalize_takes; changed(); }}, l)))),
     h("p",{class:"small muted"}, config.normalize_takes===true
       ? "Each take is turned up or down so its loudest moment sits at -3 dB, so quiet and loud takes come out about the same. The boost stops at +12 dB, so a take with almost nothing in it doesn't turn into loud hiss."
-      : "Each take keeps the level it was recorded at, so a quiet take plays quietly. Choose Normalize to even them out."),
+      : "Each take keeps the level it was recorded at, so a quiet take plays quietly. Choose Normalize to even them out.")),
     // "sample_level": a trim on every sample, full by default (firmware SAMPLE_LEVEL)
     h("div",{class:"levelrow"}, sliderEl({label:"Sample volume", min:0, max:1, step:.05}, typeof config.sample_level==="number" ? config.sample_level : 1,
       v=>{ v=Math.round(v*100)/100; if (v===1) delete config.sample_level; else config.sample_level=v; trySend({g:tryG()}); changedQuiet(); })));
