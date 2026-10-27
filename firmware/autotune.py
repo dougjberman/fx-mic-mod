@@ -752,7 +752,56 @@ def _power(x):
     return re * re + im * im
 
 
+# Carrier chords, in just intonation: each chord note as a whole multiple of
+# a shared sub-note (major is 4:5:6, the 4th, 5th and 6th harmonics of two
+# octaves below the root). So the whole chord repeats at that sub-note and
+# fits in one waveform, played by each band's one note: no more CPU than a
+# single note. The sung note is the root.
+VOCODER_CHORDS = (
+    ("major", (4, 5, 6)),
+    ("minor", (10, 12, 15)),
+    ("7", (4, 5, 6, 7)),
+    ("maj7", (8, 10, 12, 15)),
+    ("m7", (10, 12, 15, 18)),
+    ("power", (2, 3, 4)),
+)
+VOCODER_CHORD_SAMPLES = 128     # chord table samples per cycle of the top note
+
 _WAVES = {}
+
+
+def chord_wave(shape, chord):
+    """``carrier_wave(shape)`` stacked into a just-intonation chord: one
+    cycle of the chord's sub-note, the multiple it is of the root's, and its
+    density measured against the root's frequency (as update() uses it)."""
+    key = (shape, chord)
+    if key in _WAVES:
+        return _WAVES[key]
+    ratios = None
+    for name, multiples in VOCODER_CHORDS:
+        if name == chord:
+            ratios = multiples
+    if ratios is None:
+        raise ValueError("vocoder chord must be one of {}".format(
+            tuple(name for name, _ in VOCODER_CHORDS)))
+    base, density = carrier_wave(shape)
+    size = len(base)
+    n = VOCODER_CHORD_SAMPLES * ratios[-1]
+    wave = [0.0] * n
+    for m in ratios:
+        step = m * size / n
+        for i in range(n):
+            p = i * step
+            j = int(p)
+            a = base[j % size]
+            wave[i] += a + (base[(j + 1) % size] - a) * (p - j)
+    scale = 30000.0 / max(abs(v) for v in wave)
+    table = array.array("h", [int(v * scale) for v in wave])
+    # each note's harmonics carry the base density, spread over every m-th
+    # harmonic of the sub-note; against the root (m0 of them) that is m / m0
+    density *= scale * scale * sum(ratios) / ratios[0]
+    _WAVES[key] = table, ratios[0], density
+    return _WAVES[key]
 
 
 def carrier_wave(shape):
@@ -797,10 +846,12 @@ class Vocoder:
       waveform  "saw", "square", "pulse" or "saw_square" (the two summed)
       bands     4..VOCODER_MAX_BANDS band-pass channels
       octave    moves the carrier by whole octaves from the sung note
+      chord     None, or a VOCODER_CHORDS name: the carrier plays that chord
+                on the sung note (in just intonation)
       breath    0..1, noise for the voice's highs (s, t, f), so words come through
     """
 
-    def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0):
+    def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0, chord=None):
         import synthio
 
         if np is None or not (_SPECTRUM is not None or hasattr(np, "fft")):
@@ -810,7 +861,12 @@ class Vocoder:
         if not -2 <= octave <= 2:
             raise ValueError("vocoder octave must be -2 to 2")
         self.breath = min(1.0, max(0.0, breath))
-        table, density = carrier_wave(waveform)
+        if chord is None:
+            table, density = carrier_wave(waveform)
+            self._sub = 1.0
+        else:
+            table, root, density = chord_wave(waveform, chord)
+            self._sub = 1.0 / root  # the table repeats at this share of the root
         self.octave = 2.0 ** octave
         self.hz = 0.0
 
@@ -888,7 +944,7 @@ class Vocoder:
             if abs(hz - self.hz) > 0.002 * hz:
                 self.hz = hz
                 for note in self.notes:
-                    note.frequency = hz
+                    note.frequency = hz * self._sub
         powers = self.measure(window)
         f0 = self.hz or 110.0
         root = 1.0 / math.sqrt(f0)
@@ -935,7 +991,7 @@ class Autotune:
       correct    False runs the harmonizer without retuning the voice
     and, from a "vocoder" effect (not with a harmonizer):
       vocoder    the carrier waveform (see Vocoder), or None for no vocoder
-      vocoder_bands, vocoder_octave, vocoder_breath   see Vocoder
+      vocoder_bands, vocoder_octave, vocoder_breath, vocoder_chord   see Vocoder
       vocoder_mix      vocoder against the voice, 0..1 (number or block); a
                        plain 1 drops the voice and its shifter altogether
     fmt is the shared audio format dict (sample_rate, bits_per_sample,
@@ -948,7 +1004,7 @@ class Autotune:
                  density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
                  inversion=0, harmony_octave=0, harmony_level=0.7, correct=True,
                  harmony_double=None, vocoder=None, vocoder_bands=8, vocoder_octave=0,
-                 vocoder_breath=0.0, vocoder_mix=1.0):
+                 vocoder_breath=0.0, vocoder_mix=1.0, vocoder_chord=None):
         import audiocore
 
         if vocoder is not None and harmony is not None:
@@ -1090,7 +1146,7 @@ class Autotune:
         self._vocoder_level = None
         if vocoder is not None:
             self.vocoder = Vocoder(fmt["sample_rate"], vocoder, vocoder_bands,
-                                   vocoder_octave, vocoder_breath)
+                                   vocoder_octave, vocoder_breath, vocoder_chord)
             if voiceless:
                 self.output = self.vocoder.output
             else:

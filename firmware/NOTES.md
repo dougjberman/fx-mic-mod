@@ -31,6 +31,9 @@ Python only measures the voice: on the blocks between pitch searches it takes th
 power-of-two samples of the pitch window (512 at 16 or 24 kHz), runs a ulab FFT, sums the bins of
 each band and sets each band note's amplitude. With `mix` 1 nothing plays the voice, so the stage
 builds no shifter and the synth heads the chain; otherwise a two-voice mixer sums voice and synth.
+A `chord` carrier costs nothing extra: the chord's notes are whole-number multiples of a lower
+note (minor is 10:12:15), so one longer table holds the whole chord and each band note plays it
+at the sung note divided by the root's multiple.
 
 ## Needs checking on the device
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
@@ -52,6 +55,9 @@ builds no shifter and the synth heads the chain; otherwise a two-voice mixer sum
 - **Vocoder level:** `VOCODER_GAIN` (0.7) puts the vocoder about level with the voice in the
   browser preview. Check it against the Clean spot on the mic, and that a loud voice doesn't hit
   the synth's soft clip. Band levels step every 32 ms; listen for zipper noise on held vowels.
+- **Chord tables:** a chord carrier's table is 128 samples per multiple of its top note, so up to
+  2304 samples for `m7`. Check synthio takes waveforms that long, and that low sung notes don't
+  alias (the sub-note can sit below 20 Hz, which synthio should play fine).
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.

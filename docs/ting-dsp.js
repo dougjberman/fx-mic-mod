@@ -265,6 +265,18 @@ function dspFactory(){
     let density=0; for(const [k,a] of terms) density+=(k*a*scale)**2; density/=terms.length;
     return vocWaves[shape]={table, density};
   }
+  // carrier chords in just intonation, as whole multiples of a sub-note (firmware VOCODER_CHORDS)
+  const VOC_CHORDS={major:[4,5,6], minor:[10,12,15], "7":[4,5,6,7], maj7:[8,10,12,15], m7:[10,12,15,18], power:[2,3,4]};
+  function chordWave(shape, chord){
+    const key=shape+"/"+chord; if(vocWaves[key]) return vocWaves[key];
+    const r=VOC_CHORDS[chord]; if(!r) throw new Error("vocoder chord must be one of "+Object.keys(VOC_CHORDS).join(", "));
+    const {table:base, density}=carrierWave(shape), size=base.length, n=128*r[r.length-1], w=new Float64Array(n);
+    for(const m of r){ const step=m*size/n; for(let i=0;i<n;i++){ const p=i*step, j=Math.floor(p), a=base[j%size]; w[i]+=a+(base[(j+1)%size]-a)*(p-j); } }
+    let pk=0; for(let i=0;i<n;i++) pk=Math.max(pk,Math.abs(w[i]));
+    const scale=(30000/32768)/pk, table=new Float32Array(n); for(let i=0;i<n;i++) table[i]=Math.trunc(w[i]*scale*32768)/32768;
+    // the base table is in -1..1 here; in int16 units the rescale is scale*32768 over the base's 32768
+    return vocWaves[key]={table, root:r[0], density:density*scale*scale*r.reduce((a,b)=>a+b,0)/r[0]};
+  }
   // power spectrum |FFT(x)|^2 of a power-of-two length, first half
   function powerSpectrum(x){
     const n=x.length, re=Float64Array.from(x), im=new Float64Array(n);
@@ -279,11 +291,12 @@ function dspFactory(){
   const highPass=(f,Q,sr)=>{ const w=2*Math.PI*f/sr, cs=Math.cos(w), al=Math.sin(w)/(2*Q), a0=1+al; return {b0:(1+cs)/2/a0, b1:-(1+cs)/a0, b2:(1+cs)/2/a0, a1:-2*cs/a0, a2:(1-al)/a0, x1:0,x2:0,y1:0,y2:0}; };
   const biq=(f,x)=>{ const y=f.b0*x+(f.b1||0)*f.x1+f.b2*f.x2-f.a1*f.y1-f.a2*f.y2; f.x2=f.x1; f.x1=x; f.y2=f.y1; f.y1=y; return y; };
   class Vocoder {
-    constructor(sr, buf, waveform, bands, octave, breath){
+    constructor(sr, buf, waveform, bands, octave, breath, chord){
       if(!Number.isInteger(bands)||bands<4||bands>VOC.MAX_BANDS) throw new Error("vocoder bands must be 4 to "+VOC.MAX_BANDS);
       if(!Number.isInteger(octave)||octave<-2||octave>2) throw new Error("vocoder octave must be -2 to 2");
       if(typeof breath!=="number") throw new Error("vocoder breath must be a number");
-      const {table, density}=carrierWave(waveform);
+      const {table, density, root}= chord==null ? carrierWave(waveform) : chordWave(waveform, String(chord));
+      this.sub=chord==null ? 1 : 1/root;
       this.sr=sr; this.table=table; this.oct=Math.pow(2,octave); this.hz=0; this.ph=0; this.breath=clamp(breath,0,1);
       let n=1; while(n*2<=buf) n*=2; this.n=n;
       this.hann=new Float64Array(n); for(let i=0;i<n;i++) this.hann[i]=Math.sin(Math.PI*(i+0.5)/n)**2;
@@ -317,7 +330,7 @@ function dspFactory(){
     tick(){
       const T=this.table, L=T.length, f0=this.hz||110;
       const p=this.ph*L, i=Math.floor(p), fr=p-i, c=T[i%L]+(T[(i+1)%L]-T[i%L])*fr;
-      this.ph+=f0/this.sr; if(this.ph>=1) this.ph-=1;
+      this.ph+=f0*this.sub/this.sr; if(this.ph>=1) this.ph-=1;
       let y=0; for(const bd of this.bands) y+=biq(bd.f, c*bd.level);
       const nz=this.noise; if(nz){ y+=biq(nz.f, nz.t[nz.pos]*nz.level); nz.pos=(nz.pos+1)%nz.t.length; }
       return mixDown(y,MIX_2);
@@ -328,7 +341,7 @@ function dspFactory(){
   const PARAMS={
     autotune:["key","scale","speed","humanize","mix","grain_size","density","squeeze_key","squeeze_scale"],
     harmonizer:["chord","inversion","octave","level","double"],
-    vocoder:["waveform","bands","octave","breath","mix"],
+    vocoder:["waveform","bands","octave","breath","mix","chord"],
     pitch_shift:["semitones","mix","window","overlap"],
     granular_pitch_shift:["semitones","mix","grain_size","density","spread"],
     distortion:["drive","pre_gain","post_gain","mode","soft_clip","mix"],
@@ -391,7 +404,7 @@ function dspFactory(){
           const usesH=v=> typeof v==="string" ? v==="$handle" : (v&&typeof v==="object" ? Object.values(v).some(usesH) : false);
           if(alt&&usesH(vs.mix)) throw new Error("vocoder: the handle can change the key or drive the mix, not both");
           const intOf=(v,d,nm)=>{ v=v==null?d:v; if(typeof v!=="number") throw new Error("vocoder "+nm+" must be a number"); return Math.trunc(v); };
-          voc=new Vocoder(sr, det.BUF, vs.waveform==null?"saw":String(vs.waveform), intOf(vs.bands,8,"bands"), intOf(vs.octave,0,"octave"), vs.breath==null?0:vs.breath);
+          voc=new Vocoder(sr, det.BUF, vs.waveform==null?"saw":String(vs.waveform), intOf(vs.bands,8,"bands"), intOf(vs.octave,0,"octave"), vs.breath==null?0:vs.breath, vs.chord);
           vocMixF=compile(vs.mix??1,"vocoder mix",ns);
         }
         else if(harm){

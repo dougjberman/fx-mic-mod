@@ -752,7 +752,56 @@ def _power(x):
     return re * re + im * im
 
 
+
+
+
+
+
+VOCODER_CHORDS = (
+    ("major", (4, 5, 6)),
+    ("minor", (10, 12, 15)),
+    ("7", (4, 5, 6, 7)),
+    ("maj7", (8, 10, 12, 15)),
+    ("m7", (10, 12, 15, 18)),
+    ("power", (2, 3, 4)),
+)
+VOCODER_CHORD_SAMPLES = 128
+
 _WAVES = {}
+
+
+def chord_wave(shape, chord):
+    0
+
+
+    key = (shape, chord)
+    if key in _WAVES:
+        return _WAVES[key]
+    ratios = None
+    for name, multiples in VOCODER_CHORDS:
+        if name == chord:
+            ratios = multiples
+    if ratios is None:
+        raise ValueError("vocoder chord must be one of {}".format(
+            tuple(name for name, _ in VOCODER_CHORDS)))
+    base, density = carrier_wave(shape)
+    size = len(base)
+    n = VOCODER_CHORD_SAMPLES * ratios[-1]
+    wave = [0.0] * n
+    for m in ratios:
+        step = m * size / n
+        for i in range(n):
+            p = i * step
+            j = int(p)
+            a = base[j % size]
+            wave[i] += a + (base[(j + 1) % size] - a) * (p - j)
+    scale = 30000.0 / max(abs(v) for v in wave)
+    table = array.array("h", [int(v * scale) for v in wave])
+
+
+    density *= scale * scale * sum(ratios) / ratios[0]
+    _WAVES[key] = table, ratios[0], density
+    return _WAVES[key]
 
 
 def carrier_wave(shape):
@@ -800,7 +849,9 @@ class Vocoder:
 
 
 
-    def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0):
+
+
+    def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0, chord=None):
         import synthio
 
         if np is None or not (_SPECTRUM is not None or hasattr(np, "fft")):
@@ -810,7 +861,12 @@ class Vocoder:
         if not -2 <= octave <= 2:
             raise ValueError("vocoder octave must be -2 to 2")
         self.breath = min(1.0, max(0.0, breath))
-        table, density = carrier_wave(waveform)
+        if chord is None:
+            table, density = carrier_wave(waveform)
+            self._sub = 1.0
+        else:
+            table, root, density = chord_wave(waveform, chord)
+            self._sub = 1.0 / root
         self.octave = 2.0 ** octave
         self.hz = 0.0
 
@@ -888,7 +944,7 @@ class Vocoder:
             if abs(hz - self.hz) > 0.002 * hz:
                 self.hz = hz
                 for note in self.notes:
-                    note.frequency = hz
+                    note.frequency = hz * self._sub
         powers = self.measure(window)
         f0 = self.hz or 110.0
         root = 1.0 / math.sqrt(f0)
@@ -948,7 +1004,7 @@ class Autotune:
                  density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
                  inversion=0, harmony_octave=0, harmony_level=0.7, correct=True,
                  harmony_double=None, vocoder=None, vocoder_bands=8, vocoder_octave=0,
-                 vocoder_breath=0.0, vocoder_mix=1.0):
+                 vocoder_breath=0.0, vocoder_mix=1.0, vocoder_chord=None):
         import audiocore
 
         if vocoder is not None and harmony is not None:
@@ -1090,7 +1146,7 @@ class Autotune:
         self._vocoder_level = None
         if vocoder is not None:
             self.vocoder = Vocoder(fmt["sample_rate"], vocoder, vocoder_bands,
-                                   vocoder_octave, vocoder_breath)
+                                   vocoder_octave, vocoder_breath, vocoder_chord)
             if voiceless:
                 self.output = self.vocoder.output
             else:

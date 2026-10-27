@@ -601,6 +601,7 @@ STARTERS.push(
   {name:"Slap-back", list:[{effect:"filter",filter:{mode:"high_pass",frequency:120,Q:.7071},mix:1},{effect:"echo",delay_ms:120,decay:{block:"math",operation:"constrained_lerp",a:.1,b:.5,c:"$handle"},mix:.35,freq_shift:false,max_delay_ms:200},{effect:"freeverb",roomsize:.2,damp:.6,mix:.12}]},
   {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"lfo",waveform:"sine",rate:{block:"math",operation:"constrained_lerp",a:0.25,b:0.8,c:"$handle"},scale:{block:"math",operation:"constrained_lerp",a:300,b:1150,c:"$handle"},offset:{block:"math",operation:"constrained_lerp",a:900,b:1850,c:"$handle"}},feedback:{block:"math",operation:"constrained_lerp",a:0.4,b:0.85,c:"$handle"},mix:{block:"math",operation:"constrained_lerp",a:0.25,b:0.5,c:"$handle"},stages:8},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.2}]},
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]},
+  {name:"Night drive", list:[{effect:"autotune",key:"A",scale:"minor",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"minor",bands:10,octave:-1,breath:.35},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.35},{effect:"freeverb",roomsize:.55,damp:.5,mix:.3}]},
   {name:"Robot in key", list:[{effect:"autotune",key:"C",scale:"major",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:9,octave:0,breath:.3,mix:"$handle"},{effect:"chorus",max_delay_ms:50,delay_ms:15,voices:2,mix:.3},{effect:"echo",max_delay_ms:400,delay_ms:250,decay:.25,mix:.12,freq_shift:false}]});
 const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.4],[STARTERS[1],1],[STARTERS[9],.4],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"oneshot"},{file:"4.wav",playmode:"oneshot"}]};
@@ -972,6 +973,11 @@ function vocoderCard(p, fx){
   body.append(h("div",{class:"field"}, h("label",{}, "Carrier"),
     h("div",{class:"seg", role:"group", "aria-label":"Carrier waveform"},
       VOCODER_WAVES.map(([v,l])=>h("button",{"aria-pressed":String(wave===v), onclick:()=>{ fx.waveform=v; changed(); }}, l)))));
+  const chord = typeof fx.chord==="string" ? fx.chord : "";
+  body.append(h("div",{class:"field"}, h("label",{}, "Chord"),
+    h("div",{class:"seg", role:"group", "aria-label":"Carrier chord"},
+      [["","One note"],["major","Major"],["minor","Minor"],["7","7"],["maj7","maj7"],["m7","m7"],["power","Power"]].map(([v,l])=>h("button",{"aria-pressed":String(chord===v), onclick:()=>{ if (v) fx.chord=v; else delete fx.chord; changed(); }}, l)))));
+  if (chord) body.append(h("p",{class:"small muted"}, "The synth plays this chord on the note you sing, so sing the chord's root. It's tuned in pure intervals, which ring a little smoother than a keyboard's."));
   const oct = typeof fx.octave==="number" ? fx.octave : 0;
   body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
     h("div",{class:"seg", role:"group", "aria-label":"Carrier octave"},

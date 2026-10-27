@@ -227,6 +227,23 @@ class LoaderTests(unittest.TestCase):
             self.assertGreater(density, 0)
         with self.assertRaises(ValueError):
             autotune.carrier_wave("sine")
+        # a chord carrier is one waveform: the chord's notes as whole
+        # multiples of a sub-note, and about as many times the power
+        for name, ratios in autotune.VOCODER_CHORDS:
+            table, root, density = autotune.chord_wave("saw", name)
+            self.assertEqual(root, ratios[0])
+            self.assertEqual(len(table), autotune.VOCODER_CHORD_SAMPLES * ratios[-1])
+            self.assertLessEqual(max(abs(v) for v in table), 30000)
+            # its spectrum: energy at each chord note, none at the root's 2nd harmonic's neighbours
+            import numpy
+            spec = abs(numpy.fft.rfft(numpy.array(table, dtype=float)))
+            for m in ratios:
+                self.assertGreater(spec[m], 0.1 * spec.max(), (name, m))
+        with self.assertRaises(ValueError):
+            autotune.chord_wave("saw", "dim")
+        voc = autotune.Vocoder(rate, chord="minor")
+        voc.update(array.array("h", [0] * autotune.BUFFER_SIZE), 220.0)
+        self.assertAlmostEqual(voc.notes[0].frequency, 22.0)  # 220 / 10, the minor chord's sub-note
         with self.assertRaises(ValueError):
             autotune.Vocoder(rate, bands=12)
         voc = autotune.Vocoder(rate, bands=8, breath=0.5)
