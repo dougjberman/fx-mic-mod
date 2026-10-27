@@ -603,8 +603,10 @@ STARTERS.push(
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]},
   {name:"Squeeze for minor", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"major",squeeze_chord:"minor",bands:10,octave:-1,breath:.3},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.5,damp:.5,mix:.25}]},
   {name:"Night drive", list:[{effect:"autotune",key:"A",scale:"minor",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"key_triad",bands:10,octave:-1,breath:.35},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.35},{effect:"freeverb",roomsize:.55,damp:.5,mix:.3}]},
-  {name:"Robot in key", list:[{effect:"autotune",key:"C",scale:"major",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:9,octave:0,breath:.3,mix:"$handle"},{effect:"chorus",max_delay_ms:50,delay_ms:15,voices:2,mix:.3},{effect:"echo",max_delay_ms:400,delay_ms:250,decay:.25,mix:.12,freq_shift:false}]});
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.4],[STARTERS[1],1],[STARTERS[9],.4],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
+  {name:"Night call", list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:10,octave:0,breath:.7,mix:1,chord:"key_triad",gate:-60,squeeze_chord:"key_seventh"}]},
+  // a hard-tuned one-note robot, after Daft Punk's "Harder, Better, Faster, Stronger"
+  {name:"Harder better faster stronger", level:.45, list:[{effect:"autotune",key:"F#",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:11,octave:0,breath:.4,mix:1,gate:-55}]});
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[["Squeeze for backups",1],["Night call",.45],["Dream swirl",.4],["Squeeze monster",.25]].map(([n,lv])=>[STARTERS.find(s=>s.name===n),lv]).map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"oneshot"},{file:"4.wav",playmode:"oneshot"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -1719,6 +1721,10 @@ const OLD_DEFAULTS = [
   [1, '{"name":"Squeeze for backups","list":[{"effect":"autotune","key":"C","scale":"chromatic","speed":0.7,"humanize":0.2,"mix":1},{"effect":"harmonizer","chord":"sus2","inversion":2,"octave":0,"level":"$handle"},{"effect":"echo","delay_ms":250,"decay":0.1,"mix":0.1,"freq_shift":false,"max_delay_ms":500}],"level":0.45}'],
   [1, '{"name":"Squeeze for backups","list":[{"effect":"autotune","key":"C","scale":"chromatic","speed":0.7,"humanize":0.2,"mix":1},{"effect":"harmonizer","chord":"sus2","inversion":2,"octave":0,"level":"$handle"},{"effect":"echo","delay_ms":250,"decay":0.1,"mix":0.1,"freq_shift":false,"max_delay_ms":500}],"level":0.6}'],
 ];
+// The defaults before Night call: the passes below bring old copies up to these, then the
+// last one moves an untouched pair to today's slots.
+const LEGACY_DEFAULTS = [["Snapped and crunched",.4],["Squeeze for backups",1],["Dream swirl",.4],["Squeeze monster",.25]]
+  .map(([n,lv])=>{ const p = clone(STARTERS.find(s=>s.name===n)); if (lv<1) p.level = lv; return p; });
 // Before the distortion matched the mic, these two defaults ran on less input gain.
 const OLD_DRIVE = [[0, 25, -16, [1, .6]], [3, 12, -8, [.2, .55]]];
 const canon = v => Array.isArray(v) ? "["+v.map(canon).join(",")+"]"
@@ -1727,30 +1733,35 @@ const canon = v => Array.isArray(v) ? "["+v.map(canon).join(",")+"]"
 const PREV_LEVELS = [[.8, .6, 1, .25], [.6, .45, 1, .2], [1, 1, .7, .55], [1, 1, .6, .5], [.4, 1, .6, .12], [.4, 1, 1, .25], [.4, 1, .5, .25], [.4, 1, .9, .25]];
 const withoutLevel = p => { const q = Object.assign({}, p); delete q.level; return canon(q); };
 for (const [i, pre, post, levels] of OLD_DRIVE){
-  const d = clone(DEFAULT_CONFIG.presets[i]), ds = d.list.find(f=>f.effect==="distortion"), p = config.presets[i];
+  const d = clone(LEGACY_DEFAULTS[i]), ds = d.list.find(f=>f.effect==="distortion"), p = config.presets[i];
   ds.pre_gain = pre; ds.post_gain = post;
-  if (p && withoutLevel(p)===withoutLevel(d) && levels.includes(p.level ?? 1)){ config.presets[i] = clone(DEFAULT_CONFIG.presets[i]); save(); }
+  if (p && withoutLevel(p)===withoutLevel(d) && levels.includes(p.level ?? 1)){ config.presets[i] = clone(LEGACY_DEFAULTS[i]); save(); }
 }
-config.presets.forEach((p, i) => { const d = DEFAULT_CONFIG.presets[i];
+config.presets.forEach((p, i) => { const d = LEGACY_DEFAULTS[i];
   if (d && withoutLevel(p)===withoutLevel(d) && PREV_LEVELS.some(l => (p.level ?? 1)===l[i])){ config.presets[i] = clone(d); save(); } });
 for (const [i, json] of OLD_DEFAULTS)
-  if (config.presets[i] && canon(config.presets[i])===canon(JSON.parse(json))){ config.presets[i] = clone(DEFAULT_CONFIG.presets[i]); save(); }
+  if (config.presets[i] && canon(config.presets[i])===canon(JSON.parse(json))){ config.presets[i] = clone(LEGACY_DEFAULTS[i]); save(); }
 // Squeeze for backups used to end in a faint echo. An untouched copy, at any of its past levels, loses it.
 { const p = config.presets[1], echo = '{"decay":0.1,"delay_ms":250,"effect":"echo","freq_shift":false,"max_delay_ms":500,"mix":0.06}';
   if (p && Array.isArray(p.list) && p.list.length && canon(p.list[p.list.length-1])===echo){
     const q = Object.assign({}, p, {list: p.list.slice(0, -1)});
-    if (withoutLevel(q)===withoutLevel(DEFAULT_CONFIG.presets[1]) && [1, .6, .45].includes(p.level ?? 1)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } } }
+    if (withoutLevel(q)===withoutLevel(LEGACY_DEFAULTS[1]) && [1, .6, .45].includes(p.level ?? 1)){ config.presets[1] = clone(LEGACY_DEFAULTS[1]); save(); } } }
 // Chipmunks in space before its last retune: full shift, a lighter chorus. Untouched copies move on.
 // Chipmunks then left slot 3. An untouched copy there, new or old, moves to the current default.
 { const p = config.presets[2], chip = STARTERS.find(s => s.name==="Chipmunks in space"), old = clone(chip);
   Object.assign(old.list[1], {mix: 1}); Object.assign(old.list[2], {delay_ms: 30, mix: .5});
-  if (p && [old, chip].some(c => withoutLevel(p)===withoutLevel(c)) && [.6, .8, 1, .7].includes(p.level ?? 1)){ config.presets[2] = clone(DEFAULT_CONFIG.presets[2]); save(); } }
+  if (p && [old, chip].some(c => withoutLevel(p)===withoutLevel(c)) && [.6, .8, 1, .7].includes(p.level ?? 1)){ config.presets[2] = clone(LEGACY_DEFAULTS[2]); save(); } }
 // Slot 3 was Slap-back for a day, then Dream swirl with the squeeze only placing the sweep, then with a sweep that dove to 200 Hz. Untouched copies move to today's Dream swirl.
 { const p = config.presets[2], gone = [STARTERS.find(s => s.name==="Slap-back"), {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"lfo",waveform:"sine",rate:{block:"math",operation:"constrained_lerp",a:0.25,b:0.8,c:"$handle"},scale:{block:"math",operation:"constrained_lerp",a:300,b:1400,c:"$handle"},offset:{block:"math",operation:"constrained_lerp",a:800,b:1600,c:"$handle"}},feedback:{block:"math",operation:"constrained_lerp",a:0.4,b:0.85,c:"$handle"},mix:{block:"math",operation:"constrained_lerp",a:0.25,b:0.5,c:"$handle"},stages:8},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.35}]}, {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"math",operation:"constrained_lerp",a:400,b:2400,c:"$handle"},feedback:.6,mix:.5,stages:6},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.35}]}];
-  if (p && gone.some(c => withoutLevel(p)===withoutLevel(c)) && [1, .5].includes(p.level ?? 1)){ config.presets[2] = clone(DEFAULT_CONFIG.presets[2]); save(); } }
+  if (p && gone.some(c => withoutLevel(p)===withoutLevel(c)) && [1, .5].includes(p.level ?? 1)){ config.presets[2] = clone(LEGACY_DEFAULTS[2]); save(); } }
 // Snapped and crunched before Doug's octave-down double and C major. Untouched copies move on.
 { const p = config.presets[0], old = {name:"Snapped and crunched", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"distortion",drive:.6,mode:"overdrive",pre_gain:43,post_gain:-19,soft_clip:true,mix:.4},{effect:"echo",delay_ms:250,decay:.25,mix:{block:"math",operation:"constrained_lerp",a:0,b:.2,c:"$handle"},freq_shift:false,max_delay_ms:400}]};
-  if (p && withoutLevel(p)===withoutLevel(old) && [.4, 1].includes(p.level ?? 1)){ config.presets[0] = clone(DEFAULT_CONFIG.presets[0]); save(); } }
+  if (p && withoutLevel(p)===withoutLevel(old) && [.4, 1].includes(p.level ?? 1)){ config.presets[0] = clone(LEGACY_DEFAULTS[0]); save(); } }
+// Slot 1 was Snapped and crunched and slot 2 Squeeze for backups, until backups moved to slot 1 and
+// Night call took slot 2. A visitor with both untouched moves to the new pair.
+{ const [a, b] = config.presets;
+  if (a && b && canon(a)===canon(LEGACY_DEFAULTS[0]) && canon(b)===canon(LEGACY_DEFAULTS[1])){
+    config.presets[0] = clone(DEFAULT_CONFIG.presets[0]); config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
 // Slots 3 and 4 used to default to hold and start/stop. Untouched ones move to tap to play.
 [[2,"hold"],[3,"startstop"]].forEach(([i, mode]) => { const s = config.samples[i];
   if (s && s.playmode===mode && canon(Object.keys(s).filter(k=>k!=="playmode").reduce((o,k)=>(o[k]=s[k],o),{}))===canon({file:(i+1)+".wav"})){ s.playmode = "oneshot"; save(); } });

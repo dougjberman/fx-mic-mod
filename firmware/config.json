@@ -3,22 +3,20 @@
   "sample_fx": "preset",
   "presets": [
     {
-      "name": "Snapped and crunched",
-      "level": 0.4,
-      "comment": "Hard autotune in C major with a faint octave-down double, through crunchy overdrive. Squeeze harder for more echo. No reverb: with it, this chain is more than a Ting can run.",
-      "list": [
-        {"effect": "autotune", "key": "C", "scale": "major", "speed": 1, "humanize": 0, "mix": 1},
-        {"effect": "pitch_shift", "semitones": -12, "mix": 0.08, "window": 1024, "overlap": 128},
-        {"effect": "distortion", "drive": 0.6, "mode": "overdrive", "pre_gain": 43, "post_gain": -19, "soft_clip": true, "mix": 0.4},
-        {"effect": "echo", "delay_ms": 250, "decay": 0.25, "mix": {"block": "math", "operation": "constrained_lerp", "a": 0, "b": 0.2, "c": "$handle"}, "freq_shift": false, "max_delay_ms": 400}
-      ]
-    },
-    {
       "name": "Squeeze for backups",
       "comment": "Light autotune in C major. Squeeze and the backing vocals come in: the key's own triad on each note, in 2nd inversion around your voice.",
       "list": [
         {"effect": "autotune", "key": "C", "scale": "major", "speed": 0.7, "humanize": 0.2, "mix": 1},
         {"effect": "harmonizer", "chord": "key_triad", "inversion": 2, "octave": 0, "level": "$handle"}
+      ]
+    },
+    {
+      "name": "Night call",
+      "level": 0.45,
+      "comment": "A synth that sings your words, in the style of Kavinsky's Nightcall: hard autotune in C minor and a vocoder playing each note's chord in the key. Squeeze for 7th chords. Needs firmware 1.1.",
+      "list": [
+        {"effect": "autotune", "key": "C", "scale": "minor", "speed": 1, "humanize": 0, "mix": 1},
+        {"effect": "vocoder", "waveform": "pulse", "bands": 10, "octave": 0, "breath": 0.7, "mix": 1, "chord": "key_triad", "gate": -60, "squeeze_chord": "key_seventh"}
       ]
     },
     {
