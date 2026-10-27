@@ -56,7 +56,7 @@ SCENARIOS = {
         paddle=[(1.0, 3.0)],
         end=2.0,
     ),
-    # "auto" playmode on the clean spot: a tap, a double tap, a hold, then
+    # The sample button on the clean spot: a tap, a double tap, a hold, then
     # two presses too far apart to be a double tap.
     "auto": dict(
         presses=tap(1.0, BOTTOM) + tap(2.0, BOTTOM) + tap(2.2, BOTTOM)
