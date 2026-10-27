@@ -1068,7 +1068,7 @@ function renderSamples(){
   $("#sample-fx").replaceChildren(
     h("div",{class:"field"}, h("label",{}, "Sample effects"),
       h("div",{class:"seg", role:"group", "aria-label":"Sample effects"},
-        [["preset","Through the mic's preset"],["own","Each slot's own effects"]].map(([v,l])=>h("button",{"aria-pressed":String((through?"preset":"own")===v), onclick:()=>{ if (v==="own") delete config.sample_fx; else config.sample_fx=v; changed(); }}, l)))),
+        [["preset","Through the mic's preset"],["own","Hardcode effects below"]].map(([v,l])=>h("button",{"aria-pressed":String((through?"preset":"own")===v), onclick:()=>{ if (v==="own") delete config.sample_fx; else config.sample_fx=v; changed(); }}, l)))),
     h("p",{class:"small muted"}, through
       ? "Samples play dry into whichever effect preset is selected on the mic right now (the one the orange button picked), the same chain your voice goes through, autotune included. On Clean and in Record mode they play dry."
       : "Each slot gets its own effects below, whichever effect preset is selected on the mic. This is how Adafruit's packs work."),
@@ -1099,7 +1099,7 @@ function renderSamples(){
         h("div",{class:"seg", role:"group", "aria-label":"Slot "+(i+1)+" playback"}, PLAYMODES.map(([v,l])=>h("button",{"aria-pressed":String((s.playmode||"oneshot")===v), onclick:()=>{ s.playmode=v; changed(); }}, l)))),
       slotPlayer(i));
     if (through){
-      if (s.effects.length) body.append(h("p",{class:"small muted"}, s.effects.length+" effect"+(s.effects.length>1?"s":"")+" kept for \u201cEach slot's own effects\u201d, unused now."));
+      if (s.effects.length) body.append(h("p",{class:"small muted"}, s.effects.length+" effect"+(s.effects.length>1?"s":"")+" kept for \u201cHardcode effects below\u201d, unused now."));
     } else {
       if (s.effects.length){
         const chain = h("div",{class:"chain"});
