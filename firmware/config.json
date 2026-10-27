@@ -41,9 +41,9 @@
     }
   ],
   "samples": [
-    {"file": "1.wav", "playmode": "oneshot"},
-    {"file": "2.wav", "playmode": "oneshot"},
-    {"file": "3.wav", "playmode": "oneshot"},
-    {"file": "4.wav", "playmode": "oneshot"}
+    {"file": "1.wav", "playmode": "auto"},
+    {"file": "2.wav", "playmode": "auto"},
+    {"file": "3.wav", "playmode": "auto"},
+    {"file": "4.wav", "playmode": "auto"}
   ]
 }

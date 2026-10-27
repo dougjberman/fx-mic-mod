@@ -583,10 +583,16 @@ class WaveReader:
 
 
 
-    def __init__(self, path, loop=False):
+
+
+
+
+    def __init__(self, path, loop=False, reverse=False, block=None):
         self.loop = loop
+        self.reverse = reverse
         self.done = False
-        self.buf = array.array("h", [0] * BLOCK_SIZE)
+        self.block = block or BLOCK_SIZE
+        self.buf = array.array("h", bytes(2 * self.block))
         self._view = memoryview(self.buf)
         self.file = open(path, "rb")
         try:
@@ -629,9 +635,13 @@ class WaveReader:
                 return 0
             self.file.seek(self.start)
             self.left = self.size
-        want = min(BLOCK_SIZE, self.left)
+        want = min(self.block, self.left)
+        if self.reverse:
+            self.file.seek(self.start + 2 * (self.left - want))
         got = (self.file.readinto(self._view[0:want]) or 0) // 2
         self.left = self.left - got if got else 0
+        if self.reverse and got:
+            _reverse(self.buf, got)
         if gain != 256 and got:
             _scale(self.buf, got, gain)
         return got
@@ -681,6 +691,43 @@ def _scale(buf, n, gain):
         return
     for i in range(n):
         buf[i] = (buf[i] * gain) >> 8
+
+
+def _reverse(buf, n):
+    0
+    if _NP_VIEWS:
+        out = np.frombuffer(buf, dtype=np.int16)
+        out[0:n] = np.array(out[0:n][::-1], dtype=np.int16)
+        return
+    i, j = 0, n - 1
+    while i < j:
+        buf[i], buf[j] = buf[j], buf[i]
+        i += 1
+        j -= 1
+
+
+def load_reversed(path):
+    0
+
+
+
+    reader = WaveReader(path, reverse=True, block=2048)
+    try:
+        n = reader.size
+        out = np.zeros(n, dtype=np.int16) if np is not None else array.array("h", bytes(2 * n))
+        done = 0
+        while True:
+            got = reader.read()
+            if not got:
+                break
+            if np is not None:
+                out[done:done + got] = np.frombuffer(reader.buf, dtype=np.int16)[0:got]
+            else:
+                out[done:done + got] = reader.buf[0:got]
+            done += got
+        return out
+    finally:
+        reader.close()
 
 
 def _value(param):
@@ -1303,12 +1350,12 @@ class Autotune:
     def set_key_scale(self, key="C", scale="chromatic"):
         self.snapper.set_scale(scale_by_name(scale), key_by_name(key))
 
-    def play_sample(self, path, loop=False):
+    def play_sample(self, path, loop=False, reverse=False):
         0
 
 
         self.stop_sample()
-        self.sample = WaveReader(path, loop)
+        self.sample = WaveReader(path, loop, reverse)
         self._sample_ready = self.sample.read(self.sample_gain)
 
     def stop_sample(self):

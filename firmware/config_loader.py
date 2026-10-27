@@ -905,7 +905,10 @@ def create_preset(preset, blocks=None, **format_args):
 # * "hold"      -- loops for as long as the button stays held down.
 # * "startstop" -- starts looping on press, keeps looping until the button is
 #                  pressed again to stop it.
-PLAYMODES = ("oneshot", "hold", "startstop")
+# * "auto"      -- (firmware 1.2) the press decides: a tap plays it through
+#                  once, a hold plays it until let go, a double tap plays it
+#                  backwards.
+PLAYMODES = ("oneshot", "hold", "startstop", "auto")
 
 
 def _playmode(value, name, blocks=None):

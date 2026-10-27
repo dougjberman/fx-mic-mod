@@ -388,6 +388,36 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(h._chord_intervals(57), h._key_intervals(57))
         self.assertEqual(h._chord_intervals(45), h._key_intervals(57))
 
+    def test_auto_playmode(self):
+        samples = self.cl.load_samples({"samples": [
+            {"file": "1.wav", "playmode": "auto"}, {"file": "2.wav", "playmode": "Hold"},
+            {"file": "3.wav"}]})
+        # explicit modes and the oneshot default are as they were
+        self.assertEqual([s["playmode"] for s in samples], ["auto", "hold", "oneshot"])
+
+    def test_wave_reader_plays_backwards(self):
+        import autotune
+        root = tempfile.mkdtemp()
+        path = os.path.join(root, "ramp.wav")
+        n = 3 * autotune.BLOCK_SIZE + 37
+        with wave.open(path, "wb") as out:
+            out.setnchannels(1)
+            out.setsampwidth(2)
+            out.setframerate(autotune.SAMPLE_RATE)
+            out.writeframes(b"".join(int(i - 500).to_bytes(2, "little", signed=True) for i in range(n)))
+        forwards = list(range(-500, n - 500))
+        for block in (None, 100):
+            reader = autotune.WaveReader(path, reverse=True, block=block)
+            got = []
+            while True:
+                count = reader.read()
+                if not count:
+                    break
+                got.extend(reader.buf[0:count])
+            reader.close()
+            self.assertEqual(got, forwards[::-1], block)
+        self.assertEqual(list(autotune.load_reversed(path)), forwards[::-1])
+
     def test_feed_window_holds_the_last_two_blocks_in_order(self):
         # feed_phase null: after every write the buffer reads oldest block first.
         import array
@@ -682,6 +712,35 @@ class DeviceScenarioTests(unittest.TestCase):
         # clean and the echo preset take the sample on an input mixer, mic gated off
         self.assertEqual(s["heads"][-1], {"mic_level": 0.0, "sample": "WaveFile", "sample_level": 1.0})
         self.assertEqual(s["out_level"], 1.0)
+
+    def test_auto_playmode_taps_holds_and_double_taps(self):
+        config = json.loads(json.dumps(TEST_CONFIG))
+        config["samples"] = [{"file": "1.wav", "playmode": "auto"}]
+        root, out, s = run("auto", config, tone=(340.0, 1.0))
+        lines = [l for l in out.splitlines() if l.startswith(("playing 1", "stopped 1"))]
+        self.assertEqual(lines, [
+            "playing 1 (auto)",                   # tap: plays on to the end
+            "playing 1 (auto)",
+            "playing 1 (double tap: backwards)",  # second press 200 ms after the first
+            "playing 1 (auto)",
+            "stopped 1 (held 600 ms)",            # held: let go stops it
+            "playing 1 (auto)",
+            "playing 1 (auto)",                   # 500 ms apart: two taps
+        ])
+        self.assertEqual(out.count("turned round"), 1)  # built once, then kept
+        # with the sample's own effects, the backwards copy feeds their chain
+        config["samples"][0]["effects"] = [{"effect": "freeverb", "mix": 0.4}]
+        root, out, s = run("auto", config, tone=(340.0, 1.0))
+        self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])
+        self.assertIn("playing 1 (double tap: backwards)", out)
+
+    def test_auto_playmode_backwards_through_autotune(self):
+        config = json.loads(json.dumps(THROUGH_CONFIG))
+        config["samples"] = [{"file": "1.wav", "playmode": "auto"}]
+        root, out, s = run("auto_through", config, tone=(340.0, 1.0))
+        self.assertIn("playing 1 (double tap: backwards)", out)
+        self.assertNotIn("can't", out)
+        self.assertNotIn("turned round", out)  # streamed from flash instead
 
     def test_a_sample_in_another_format_is_refused(self):
         # a 44.1 kHz file would stop code.py if it reached the mixer

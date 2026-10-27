@@ -105,6 +105,18 @@ band notes' `waveform` to the chord the scale gives the snapped note.
   `audiomixer.Mixer` at the chain input. Autotune presets stream the WAV from flash 512 bytes per
   block and mix it in Python before pitch detection. Check for crackle or `overflow` while a
   sample plays on an autotune preset, and that a 1024-byte effect chain accepts the mixer.
+- **Auto playmode timing:** `TAP_HOLD_SECONDS` (0.25) and `DOUBLE_TAP_SECONDS` (0.3) in code.py
+  are first guesses. The console prints `stopped 1 (held N ms)` on a hold, so try quick taps (they
+  must keep playing), short deliberate holds (they must stop), and relaxed double taps (they must
+  play backwards); move the numbers to whatever feels natural and the editor's `TAP_HOLD_MS` /
+  `DOUBLE_TAP_MS` to match. Timing uses keypad's own event timestamps, so a slow loop pass doesn't
+  skew it.
+- **Backwards samples:** off autotune, the first double tap loads the WAV backwards into RAM and
+  prints `turned round in N ms`; that delay is heard once per slot. A 4 s take is 192 KB at 24 kHz,
+  so check it fits next to a busy preset (`can't play backwards: memory` means it didn't, and it
+  plays forwards). Through autotune it streams backwards from flash, one seek per 16 ms block:
+  watch for `overflow` or crackle while a sample plays backwards on a harmonizer or vocoder preset,
+  where the pass is tightest.
 - **Squeeze key threshold:** check the handle really reaches 0.67 travel on a firm squeeze
   (`handle_control.a` on the serial console). Lower `SQUEEZE_KEY_ON` / `SQUEEZE_KEY_OFF` if not.
 - **LFO-driven speed/humanize:** only plain numbers and `"$handle"` are verified. A synthio LFO
