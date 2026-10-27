@@ -379,6 +379,14 @@ if not isinstance(TRIM_TAKES, bool):
     print("trim_takes must be true or false; using true")
     TRIM_TAKES = True
 
+# "normalize_takes": true scales each take recorded on the mic so its loudest
+# moment sits at -3 dBFS, boosting by at most +12 dB. Off by default (see
+# recorder.NORMALIZE_PEAK).
+NORMALIZE_TAKES = CONFIG.get("normalize_takes", False)
+if not isinstance(NORMALIZE_TAKES, bool):
+    print("normalize_takes must be true or false; using false")
+    NORMALIZE_TAKES = False
+
 # "sample_level": how loud samples play, 0..1. Full level by default, so a
 # take recorded on the mic plays back as loud as it was sung; the install
 # guide's converter brings imported files down to about the mic's level.
@@ -638,7 +646,7 @@ def enter_record_mode(ctx):
     ctx.chain = []
     if CAN_RECORD:
         ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE,
-                                trim=TRIM_TAKES)
+                                trim=TRIM_TAKES, normalize=NORMALIZE_TAKES)
         if ctx.recorder.seconds < RECORD_SECONDS:
             print("record mode: memory is short, takes stop at {:.1f} s".format(
                 ctx.recorder.seconds))

@@ -84,6 +84,9 @@ the mic scales them, so a grain keeps its length in time.
 A top-level `"trim_takes"` (default true) cuts the silence before and after the sound in a take
 recorded on the mic. Set it to false to keep everything between the squeeze and the release.
 
+A top-level `"normalize_takes"` (default false) scales each take recorded on the mic so its loudest
+moment sits at -3 dBFS, boosting by at most +12 dB so a near-silent take doesn't become loud hiss.
+
 A top-level `"sample_level"` (0..1, default 1) turns every sample down. A take recorded on the mic
 already sits at the voice's level; the install guide's converter brings imported files to about that
 level too.

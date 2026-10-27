@@ -60,6 +60,9 @@ chord needs the note).
   about -35 dBFS (`ONSET_LEVEL` in recorder.py) and 150 ms after the last. If quiet starts get
   clipped, lower it; if hum stops the trim, raise it. `"trim_takes": false` turns it off. A take
   ended by letting go always loses its last 100 ms (`RELEASE_MS`), the release click.
+- **Take normalize** (`"normalize_takes": true`, off by default): each take is scaled so its peak
+  sits at -3 dBFS (`NORMALIZE_PEAK`), boosting by at most +12 dB (`NORMALIZE_MAX_GAIN`). It runs
+  before saving, so check the save time on a 4 s take; it uses ulab when the build has it.
 - **Samples through the preset** (`"sample_fx": "preset"`): non-autotune presets get a second
   `audiomixer.Mixer` at the chain input. Autotune presets stream the WAV from flash 512 bytes per
   block and mix it in Python before pitch detection. Check for crackle or `overflow` while a

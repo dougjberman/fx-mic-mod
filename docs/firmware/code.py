@@ -382,6 +382,14 @@ if not isinstance(TRIM_TAKES, bool):
 
 
 
+NORMALIZE_TAKES = CONFIG.get("normalize_takes", False)
+if not isinstance(NORMALIZE_TAKES, bool):
+    print("normalize_takes must be true or false; using false")
+    NORMALIZE_TAKES = False
+
+
+
+
 SAMPLE_LEVEL = 1.0
 _sample_level = CONFIG.get("sample_level", SAMPLE_LEVEL)
 if isinstance(_sample_level, (int, float)) and not isinstance(_sample_level, bool) and 0 <= _sample_level <= 1:
@@ -638,7 +646,7 @@ def enter_record_mode(ctx):
     ctx.chain = []
     if CAN_RECORD:
         ctx.recorder = Recorder(mic, seconds=RECORD_SECONDS, sample_rate=RATE,
-                                trim=TRIM_TAKES)
+                                trim=TRIM_TAKES, normalize=NORMALIZE_TAKES)
         if ctx.recorder.seconds < RECORD_SECONDS:
             print("record mode: memory is short, takes stop at {:.1f} s".format(
                 ctx.recorder.seconds))

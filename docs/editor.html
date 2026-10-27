@@ -449,7 +449,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       <ul>
         <li>Press the orange button to step past preset 4 into Record mode, where all four red lights start blinking.</li>
         <li>Use the <span data-dw="mid">white</span> button to pick the slot, and hold the handle while you talk (up to 4 seconds).</li>
-        <li>The audio you record takes a second to process and save to the mic, and a light runs down the mic from top to bottom while it does. Silence before and after your audio is trimmed, unless you turn that off below.</li>
+        <li>The audio you record takes a second to process and save to the mic, and a light runs down the mic from top to bottom while it does. Silence before and after your audio is trimmed, unless you turn that off below. Takes keep the volume you recorded them at, unless you choose Normalize below.</li>
       </ul>
     </div>
     <div id="sample-fx" style="display:grid;gap:6px"></div>
@@ -1075,6 +1075,13 @@ function renderSamples(){
     h("p",{class:"small muted"}, config.trim_takes!==false
       ? "Silence before and after the sound is cut, so a take plays the moment you press and stops when the sound does. Either way, the handle's clicks are always cut: the first 50 ms (squeezing) and the last 100 ms (letting go), with a 5 ms fade at each end."
       : "Takes keep everything from the squeeze to the release, apart from the handle's clicks: the first 50 ms (squeezing) and the last 100 ms (letting go) are always cut, with a 5 ms fade at each end."),
+    // "normalize_takes": true evens out the level of takes recorded on the mic (firmware NORMALIZE_TAKES)
+    h("div",{class:"field"}, h("label",{}, "Volume of takes"),
+      h("div",{class:"seg", role:"group", "aria-label":"Volume of takes"},
+        [[false,"As recorded"],[true,"Normalize"]].map(([v,l])=>h("button",{"aria-pressed":String((config.normalize_takes===true)===v), onclick:()=>{ if (v) config.normalize_takes=true; else delete config.normalize_takes; changed(); }}, l)))),
+    h("p",{class:"small muted"}, config.normalize_takes===true
+      ? "Each take is turned up or down so its loudest moment sits at -3 dB, so quiet and loud takes come out about the same. The boost stops at +12 dB, so a take with almost nothing in it doesn't turn into loud hiss."
+      : "Each take keeps the level it was recorded at, so a quiet take plays quietly. Choose Normalize to even them out."),
     // "sample_level": a trim on every sample, full by default (firmware SAMPLE_LEVEL)
     h("div",{class:"levelrow"}, sliderEl({label:"Sample volume", min:0, max:1, step:.05}, typeof config.sample_level==="number" ? config.sample_level : 1,
       v=>{ v=Math.round(v*100)/100; if (v===1) delete config.sample_level; else config.sample_level=v; trySend({g:tryG()}); changedQuiet(); })));

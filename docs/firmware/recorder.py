@@ -32,6 +32,7 @@ except ImportError:
         import numpy as np
     except ImportError:
         np = None
+_FLOAT = getattr(np, "float", float)
 
 SAMPLE_RATE = 16000
 BLOCK_MS = 16
@@ -47,6 +48,12 @@ FADE_MS = 5
 ONSET_LEVEL = 600
 PRE_ROLL_MS = 10
 POST_ROLL_MS = 150
+
+
+
+
+NORMALIZE_PEAK = 23197
+NORMALIZE_MAX_GAIN = 4.0
 WRITE_SAMPLES = 2048
 CHUNK = 8192
 MIN_SECONDS = 1
@@ -96,9 +103,10 @@ class Recorder:
 
 
 
-    def __init__(self, mic, seconds=4, sample_rate=SAMPLE_RATE, trim=True):
+    def __init__(self, mic, seconds=4, sample_rate=SAMPLE_RATE, trim=True, normalize=False):
         self.mic = mic
         self.trim = trim
+        self.normalize = normalize
         self.sample_rate = sample_rate
         wanted = int(seconds * sample_rate)
 
@@ -218,6 +226,45 @@ class Recorder:
             at += hi - lo
         return None
 
+    def _parts(self, start, end):
+        0
+        at = start
+        while at < end:
+            chunk = self._chunks[at // CHUNK]
+            lo = at % CHUNK
+            hi = min(len(chunk), lo + end - at)
+            yield chunk, lo, hi
+            at += hi - lo
+
+    def peak(self, start, end):
+        0
+        peak = 0
+        for chunk, lo, hi in self._parts(start, end):
+            if np is not None:
+                part = chunk[lo:hi]
+                peak = max(peak, int(np.max(part)), -int(np.min(part)))
+            else:
+                for i in range(lo, hi):
+                    value = chunk[i]
+                    peak = max(peak, value, -value)
+        return peak
+
+    def _normalize(self, start, end, tick=None):
+        0
+        peak = self.peak(start, end)
+        if peak < ONSET_LEVEL:
+            return
+        gain = min(NORMALIZE_PEAK / peak, NORMALIZE_MAX_GAIN)
+        for chunk, lo, hi in self._parts(start, end):
+            if tick is not None:
+                tick()
+            if np is not None:
+                scaled = np.array(chunk[lo:hi], dtype=_FLOAT) * gain
+                chunk[lo:hi] = np.array(np.clip(scaled, -32768, 32767), dtype=np.int16)
+            else:
+                for i in range(lo, hi):
+                    chunk[i] = max(-32768, min(32767, int(chunk[i] * gain)))
+
     def save(self, path, tick=None):
         0
 
@@ -234,6 +281,8 @@ class Recorder:
             return 0
 
         chunks = self._chunks
+        if self.normalize:
+            self._normalize(start, end, tick)
         fade = min(frames, self.sample_rate * FADE_MS // 1000)
         if start > 0:
             for i in range(fade):
