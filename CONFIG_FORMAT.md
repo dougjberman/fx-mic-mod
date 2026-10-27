@@ -1,7 +1,7 @@
 # Shared preset format (proposal)
 
 One format for the firmware, the GUI and the browser preview: **Adafruit's `config.json`,
-plus two new effect types, `autotune` and `harmonizer`.** Adafruit's packs load unchanged.
+plus three new effect types, `autotune`, `harmonizer` and `vocoder`.** Adafruit's packs load unchanged.
 
 Reference copies of Adafruit's files (MIT, Tim Cocks / Adafruit) are in
 `fork/adafruit-reference/`: `code.py`, `config_loader.py` (the source of truth for
@@ -99,6 +99,7 @@ is written while the other plays. If an autotune preset crackles steadily and cl
 |---|---|
 | `autotune` **(new)** | `key` "C".."B" (sharps, e.g. "F#"), `scale` "chromatic" / "major" / "minor", `speed` (B) 0 = natural .. 1 = hard snap, `humanize` 0..1, `mix` (B), `grain_size` int (default 512), `density` int (default 2), `squeeze_key` / `squeeze_scale` (same values as key/scale: the key used while the handle is fully squeezed) |
 | `harmonizer` **(new)** | `chord` (see below, default "major"), `inversion` int (default 0), `octave` int (default 0, moves the harmony by octaves), `level` (B) harmony volume against the voice, 0..1 (default 0.7), `double` "above" or "below" (optional: one more voice on your note an octave up or down; chords of three notes or fewer) |
+| `vocoder` **(new)** | `waveform` "saw" / "square" / "pulse" / "saw_square" (default "saw"), `bands` int 4..11 (default 8; at most 8 when `mix` isn't a plain 1), `octave` int -2..2 (default 0), `breath` 0..1 (default 0), `chord` (optional: "key_triad", "key_seventh", "major", "minor", "7", "maj7", "m7", "power", "dim", "m7b5"), `gate` dB, -80..-20 (default -50; -80 = off), `squeeze_chord` (optional: a `chord` value, or "none" for one note), `mix` (B) vocoder against the voice, 0..1 (default 1 = vocoder only) |
 | `pitch_shift` | `semitones` (B), `window` int and `overlap` int, both in **bytes** of 16-bit audio (so samples = bytes / 2, at 16 kHz before the rate scaling), `mix` (B) |
 | `granular_pitch_shift` | `semitones` (B), `grain_size` int samples, `density` int 1..8, `spread` float 0..1 (fixed at load, not a block), `mix` (B) |
 | `distortion` | `drive` (B), `pre_gain` (B, dB), `post_gain` (B, dB), `mode` = an `audiofilters.DistortionMode` name, case-insensitive ("clip", "lofi", "overdrive", "waveshape"; "overdrive" ignores `drive`, `pre_gain` sets how hard it is pushed), `soft_clip` bool, `mix` (B) |
@@ -163,6 +164,51 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   voice, so they add up nearly in phase). `"$handle"` brings the
   harmony in with the squeeze, which can't be combined with `squeeze_key` / `squeeze_scale`.
   Source of truth: `firmware/autotune.py` (`CHORDS`, `voicing`, `Autotune`).
+
+### vocoder rules
+- Needs firmware 1.1. Older firmware doesn't know the effect and plays that preset clean, so the
+  editor's Save to mic won't write a config with a vocoder to a mic on 1.0 or earlier.
+- A channel vocoder whose carrier is a synth playing the note you sing (pitch tracking), so the mic
+  needs no second input: your words, played by the synth. With an `autotune` in the preset the
+  carrier plays the corrected note (it follows `key`, `scale` and `speed`); without one it follows
+  the voice as sung. Between words (no pitch found) it holds the last note.
+- At most one per preset, and not in the same preset as a `harmonizer`. Not allowed in sample
+  `effects`. Where it sits in `list` doesn't matter: it runs inside the autotune stage.
+- `bands` band-pass channels, spaced evenly in pitch from 180 Hz to 5 kHz (or 0.4 x the rate).
+  More bands make the words clearer and cost a little more CPU. Each band is a synthio note: the
+  carrier waveform (band-limited, 48 harmonics) through its own band-pass filter, its loudness set
+  from the voice's level in that band. The mic measures the voice with an FFT every 32 ms, on the
+  blocks between pitch searches, so the vocoder adds no work to the busiest block.
+- `saw_square` is a saw and a square at the same note, summed, as some vocoder players use for a
+  fuller carrier. It is one waveform, so it costs no more than either alone.
+- `chord` makes the carrier play a chord on the sung note (the root), as when a vocoder's carrier
+  is a synth chord. The notes are in just intonation, whole multiples of one sub-note (major
+  4:5:6, minor 10:12:15, 7 4:5:6:7, maj7 8:10:12:15, m7 10:12:15:18, power 2:3:4), so the whole
+  chord repeats at that sub-note and fits in one waveform: no more CPU than one note. Next to
+  equal temperament the major 3rd is 14 cents lower and the 5th 2 cents higher. `dim` and
+  `m7b5` are 5:6:7 and 5:6:7:9, the smooth "septimal" tuning.
+- `chord` `"key_triad"` or `"key_seventh"` follows the autotune key, like the harmonizer's key
+  chords: each snapped note gets the triad or 7th chord the scale builds on it (in C major, C gets
+  C major, D gets D minor, B gets B diminished; with 7ths, G gets G7). A note off the scale gets a
+  major chord (a dominant 7th). They need autotune in a major or minor key; otherwise C major.
+- `gate` is a noise gate, in dB from full scale, on the voice's level across the bands (180 Hz
+  up, so low hum barely counts). Below it the bands close, so a fan or air conditioner doesn't
+  play the synth; they close 6 dB under it after about 130 ms, so word ends ring out. Raise it
+  if the synth hums with no one singing; -80 or lower turns it off.
+- `squeeze_chord` is the chord a full squeeze switches to, and easing off switches back (at the
+  same points as autotune's `squeeze_key`: in at 0.67 of the handle's travel, back at 0.5). With
+  autotune on `"chromatic"` and `chord` `"major"`, `squeeze_chord` `"minor"` picks major or minor
+  on any note you sing. The handle does one job, so this can't go with `squeeze_key`,
+  `squeeze_scale` or a `"$handle"` mix. Both chords' tables are built when the preset loads, so
+  switching costs no CPU.
+- `octave` moves the carrier by whole octaves from the note. `breath` adds high-passed noise
+  (above 4 kHz) that follows the voice's highs, so s, t and f sounds come through.
+- `mix` m: the voice plays at `1 - m` and the vocoder at `m`. A plain `1` (the default) leaves the
+  voice out altogether, and then the mic doesn't run the voice's pitch shifter at all. `"$handle"`
+  brings the vocoder in with the squeeze, which can't be combined with `squeeze_key` / `squeeze_scale`.
+  With the voice in (any `mix` but a plain `1`), its shifter runs beside the synth and `bands` stops
+  at 8: on a Ting, 11 bands plus the voice overflowed, while 8 plus the voice, or 11 alone, ran clean.
+  Source of truth: `firmware/autotune.py` (`Vocoder`, `VOCODER_*`).
 
 ## Firmware behaviour the preview mirrors
 - TOP+MIDDLE power-off hold is **0.8 s** (`SHUTDOWN_HOLD_SECONDS` in Adafruit's code.py; its

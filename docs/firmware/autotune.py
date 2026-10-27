@@ -701,6 +701,401 @@ def key_by_name(name):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+VOCODER_WAVEFORMS = ("saw", "square", "pulse", "saw_square")
+VOCODER_MAX_BANDS = 11
+
+
+
+VOCODER_VOICE_MAX_BANDS = 8
+VOCODER_LOW_HZ = 180.0
+VOCODER_HIGH_HZ = 5000.0
+VOCODER_BREATH_HZ = 4000.0
+VOCODER_HARMONICS = 48
+VOCODER_TABLE = 256
+VOCODER_NOISE = 2048
+VOCODER_GAIN = 0.7
+VOCODER_RELEASE = 0.4
+
+
+
+VOCODER_GATE = -50.0
+VOCODER_GATE_OFF = -80.0
+VOCODER_GATE_CLOSE = 6.0
+VOCODER_GATE_HOLD = 4
+
+
+VOCODER_EVERY_BLOCK = False
+
+_SPECTRUM = None
+if np is not None:
+    try:
+        from ulab import utils as _ulab_utils
+        _SPECTRUM = getattr(_ulab_utils, "spectrogram", None)
+    except ImportError:
+        pass
+
+
+def _power(x):
+    0
+    if _SPECTRUM is not None:
+        mag = _SPECTRUM(x)
+        return mag * mag
+    spec = np.fft.fft(x)
+    if isinstance(spec, tuple):
+        re, im = spec
+    else:
+        re, im = np.real(spec), np.imag(spec)
+    return re * re + im * im
+
+
+
+
+
+
+
+VOCODER_CHORDS = (
+    ("major", (4, 5, 6)),
+    ("minor", (10, 12, 15)),
+    ("7", (4, 5, 6, 7)),
+    ("maj7", (8, 10, 12, 15)),
+    ("m7", (10, 12, 15, 18)),
+    ("power", (2, 3, 4)),
+
+
+    ("dim", (5, 6, 7)),
+    ("m7b5", (5, 6, 7, 9)),
+)
+
+
+
+
+VOCODER_KEY_CHORDS = (
+    ("key_triad", (0, 2, 4)),
+    ("key_seventh", (0, 2, 4, 6)),
+)
+VOCODER_SHAPES = (
+    ((0, 4, 7), "major"),
+    ((0, 3, 7), "minor"),
+    ((0, 3, 6), "dim"),
+    ((0, 4, 7, 11), "maj7"),
+    ((0, 3, 7, 10), "m7"),
+    ((0, 4, 7, 10), "7"),
+    ((0, 3, 6, 10), "m7b5"),
+)
+VOCODER_CHORD_SAMPLES = 128
+
+_WAVES = {}
+
+
+def chord_wave(shape, chord):
+    0
+
+
+    key = (shape, chord)
+    if key in _WAVES:
+        return _WAVES[key]
+    ratios = None
+    for name, multiples in VOCODER_CHORDS:
+        if name == chord:
+            ratios = multiples
+    if ratios is None:
+        raise ValueError("vocoder chord must be one of {}".format(
+            tuple(name for name, _ in VOCODER_CHORDS + VOCODER_KEY_CHORDS)))
+    base, density = carrier_wave(shape)
+    size = len(base)
+    n = VOCODER_CHORD_SAMPLES * ratios[-1]
+    wave = [0.0] * n
+    for m in ratios:
+        step = m * size / n
+        for i in range(n):
+            p = i * step
+            j = int(p)
+            a = base[j % size]
+            wave[i] += a + (base[(j + 1) % size] - a) * (p - j)
+    scale = 30000.0 / max(abs(v) for v in wave)
+    table = array.array("h", [int(v * scale) for v in wave])
+
+
+    density *= scale * scale * sum(ratios) / ratios[0]
+    _WAVES[key] = table, ratios[0], density
+    return _WAVES[key]
+
+
+def key_tones(snapper, note, steps):
+    0
+
+
+    allowed = snapper.allowed
+    if len(allowed) == 12:
+        allowed = SCALES[1][1]
+    pcs = sorted((pc + snapper.root) % 12 for pc in allowed)
+    pc = note % 12
+    if pc not in pcs:
+        return None
+    i, n = pcs.index(pc), len(pcs)
+    return [pcs[(i + s) % n] - pc + 12 * ((i + s) // n) for s in steps]
+
+
+def vocoder_key_chord(tones, steps):
+    0
+    if tones is not None:
+        tones = tuple(tones)
+        for shape, name in VOCODER_SHAPES:
+            if shape == tones:
+                return name
+    return "7" if len(steps) > 3 else "major"
+
+
+def carrier_wave(shape):
+    0
+
+
+
+    if shape not in VOCODER_WAVEFORMS:
+        raise ValueError("vocoder waveform must be one of {}".format(VOCODER_WAVEFORMS))
+    if shape in _WAVES:
+        return _WAVES[shape]
+    n = VOCODER_TABLE
+    terms = []
+    for k in range(1, VOCODER_HARMONICS + 1):
+        if shape == "saw":
+            terms.append((k, 1.0 / k, False))
+        elif shape == "square":
+            terms.append((k, 1.0 / k if k % 2 else 0.0, False))
+        elif shape == "saw_square":
+
+            terms.append((k, 2.0 / k if k % 2 else 1.0 / k, False))
+        else:
+            terms.append((k, math.sin(math.pi * k * 0.25) / k, True))
+    wave = [0.0] * n
+    for k, amp, cos in terms:
+        if amp:
+            step = 2 * math.pi * k / n
+            for i in range(n):
+                wave[i] += amp * (math.cos(step * i) if cos else math.sin(step * i))
+    scale = 30000.0 / max(abs(v) for v in wave)
+    table = array.array("h", [int(v * scale) for v in wave])
+    density = sum((k * amp * scale) ** 2 for k, amp, _ in terms) / len(terms)
+    _WAVES[shape] = table, density
+    return table, density
+
+
+class Vocoder:
+    0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0, chord=None,
+                 gate=VOCODER_GATE, squeeze_chord=None):
+        import synthio
+
+        if np is None or not (_SPECTRUM is not None or hasattr(np, "fft")):
+            raise ValueError("the vocoder needs ulab with fft")
+        if not 4 <= bands <= VOCODER_MAX_BANDS:
+            raise ValueError("vocoder bands must be 4 to {}".format(VOCODER_MAX_BANDS))
+        if not -2 <= octave <= 2:
+            raise ValueError("vocoder octave must be -2 to 2")
+        self.breath = min(1.0, max(0.0, breath))
+        self.waveform = waveform
+        self.notes = []
+        self.key_steps = None
+        self.chord = ""
+
+
+        self.squeezable = squeeze_chord is not None
+        if self.squeezable:
+            self._modes = (chord, None if squeeze_chord == "none" else squeeze_chord)
+        else:
+            self._modes = (chord,)
+        for mode in self._modes:
+            steps = dict(VOCODER_KEY_CHORDS).get(mode)
+            if steps is None:
+                self._wave(mode)
+            else:
+                for shape, name in VOCODER_SHAPES:
+                    if len(shape) == len(steps):
+                        chord_wave(waveform, name)
+        self.squeezed = False
+        self._use(chord)
+        self.octave = 2.0 ** octave
+        self.hz = 0.0
+
+
+        n = 1
+        while n * 2 <= BUFFER_SIZE:
+            n *= 2
+        self._start = BUFFER_SIZE - n
+        self._hann = np.array([math.sin(math.pi * (i + 0.5) / n) ** 2 for i in range(n)])
+
+        psd = 2.0 / (n * n * 0.375)
+
+        self._gate = None
+        if gate > VOCODER_GATE_OFF:
+            self._gate = 32768.0 ** 2 * 10.0 ** (gate / 10.0) / psd
+            self._gate_close = self._gate * 10.0 ** (-VOCODER_GATE_CLOSE / 10.0)
+        self._held = 0
+
+
+
+        high = min(VOCODER_HIGH_HZ, 0.4 * rate)
+        ratio = (high / VOCODER_LOW_HZ) ** (1.0 / (bands - 1))
+        half = math.sqrt(ratio)
+        q = 1.0 / (half - 1.0 / half)
+        self._bins = []
+        self._k = []
+        self._floor = []
+        self.notes = []
+        mode = synthio.FilterMode.BAND_PASS
+        for i in range(bands):
+            centre = VOCODER_LOW_HZ * ratio ** i
+            low, top = centre / half, centre * half
+            a = max(1, int(low * n / rate + 0.5))
+            b = max(a + 1, int(top * n / rate + 0.5))
+            self._bins.append((a, b))
+
+
+
+            self._k.append(VOCODER_GAIN * math.sqrt(psd / (0.5 * (1 / low - 1 / top))))
+            self._floor.append(top)
+            self.notes.append(synthio.Note(
+                frequency=110.0, waveform=self._table, amplitude=0.0,
+                filter=synthio.Biquad(mode, frequency=centre, Q=q)))
+        self._levels = [0.0] * bands
+
+        self.noise = None
+        if self.breath > 0:
+            cut = min(VOCODER_BREATH_HZ, 0.35 * rate)
+            seed = 12345
+            noise = array.array("h", [0] * VOCODER_NOISE)
+            for i in range(VOCODER_NOISE):
+                seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
+                noise[i] = (seed >> 15) % 60001 - 30000
+
+            level = 17320.0 * math.sqrt(1.0 - cut / (rate / 2.0))
+            self._noise_bins = (int(cut * n / rate + 0.5), n // 2)
+            self._noise_k = self.breath * VOCODER_GAIN * math.sqrt(psd) / level
+            self.noise = synthio.Note(
+                frequency=rate / VOCODER_NOISE, waveform=noise, amplitude=0.0,
+                filter=synthio.Biquad(synthio.FilterMode.HIGH_PASS, frequency=cut, Q=0.7071))
+        self.synth = synthio.Synthesizer(sample_rate=rate, channel_count=1)
+        self.output = self.synth
+
+    def start(self):
+        self.synth.press(self.notes + ([self.noise] if self.noise else []))
+
+    def _wave(self, chord):
+        0
+        if chord is None:
+            table, density = carrier_wave(self.waveform)
+            return table, 1.0, density
+        table, root, density = chord_wave(self.waveform, chord)
+        return table, 1.0 / root, density
+
+    def _use(self, mode):
+        0
+
+        self.key_steps = dict(VOCODER_KEY_CHORDS).get(mode)
+        if self.key_steps is None:
+            self.set_chord(mode)
+        elif self.chord not in [n for t, n in VOCODER_SHAPES if len(t) == len(self.key_steps)]:
+            self.set_chord(vocoder_key_chord(None, self.key_steps))
+
+    def squeeze(self, squeezed):
+        0
+        if self.squeezable and squeezed != self.squeezed:
+            self.squeezed = squeezed
+            self._use(self._modes[1 if squeezed else 0])
+
+    def set_chord(self, chord):
+        0
+
+        if chord == self.chord:
+            return
+        self._table, self._sub, density = self._wave(chord)
+        self.chord = chord
+        self._dk = 1.0 / math.sqrt(density)
+        for note in self.notes:
+            note.waveform = self._table
+            if self.hz:
+                note.frequency = self.hz * self._sub
+
+    def measure(self, window):
+        0
+        x = np.frombuffer(window, dtype=np.int16)[self._start:] * self._hann
+        p = _power(x)
+        out = [float(np.sum(p[a:b])) for a, b in self._bins]
+        if self.noise is not None:
+            a, b = self._noise_bins
+            out.append(float(np.sum(p[a:b])))
+        return out
+
+    def update(self, window, hz):
+        0
+
+        if hz > 0:
+            hz = min(2000.0, max(30.0, hz * self.octave))
+            if abs(hz - self.hz) > 0.002 * hz:
+                self.hz = hz
+                for note in self.notes:
+                    note.frequency = hz * self._sub
+        powers = self.measure(window)
+        f0 = self.hz or 110.0
+        root = self._dk / math.sqrt(f0)
+        if self._gate is not None:
+            total = sum(powers)
+            if total >= self._gate:
+                self._held = VOCODER_GATE_HOLD
+            elif total < self._gate_close and self._held:
+                self._held -= 1
+            if not self._held:
+                root = 0.0
+        levels = self._levels
+        for i, note in enumerate(self.notes):
+            if self._floor[i] < f0:
+
+                levels[i] = note.amplitude = 0.0
+                continue
+            level = min(1.0, self._k[i] * math.sqrt(powers[i]) * root)
+            if level < levels[i]:
+                level += (levels[i] - level) * VOCODER_RELEASE
+            levels[i] = level
+            note.amplitude = level
+        if self.noise is not None:
+            self.noise.amplitude = min(1.0, self._noise_k * math.sqrt(powers[-1])) if root else 0.0
+
+    def deinit(self):
+        self.synth.release_all()
+        self.synth.deinit()
+
+
 def _feed_sample(buffer, fmt):
     0
     import audiocore
@@ -728,12 +1123,25 @@ class Autotune:
 
 
 
+
+
+
+
+
+
     def __init__(self, mic, fmt, key="C", scale="chromatic", speed=1.0,
                  humanize=0.0, mix=1.0, grain_size=None,
                  density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
                  inversion=0, harmony_octave=0, harmony_level=0.7, correct=True,
-                 harmony_double=None):
+                 harmony_double=None, vocoder=None, vocoder_bands=8, vocoder_octave=0,
+                 vocoder_breath=0.0, vocoder_mix=1.0, vocoder_chord=None,
+                 vocoder_gate=VOCODER_GATE, vocoder_squeeze_chord=None):
         import audiocore
+
+        if vocoder is not None and harmony is not None:
+            raise ValueError("a preset can have a harmonizer or a vocoder, not both")
+
+        voiceless = vocoder is not None and not hasattr(vocoder_mix, "value") and vocoder_mix >= 1
 
         if grain_size is None:
             grain_size = GRAIN_SIZE
@@ -789,12 +1197,14 @@ class Autotune:
 
         self.shifter = None
         self.shifter_name = None
-        if engine == "native":
+        self.ola = None
+        if voiceless:
+            self.shifter_name = "no shifter"
+        elif engine == "native":
             import audiodelays
             self.shifter, self.shifter_name = _make_native_shifter(
                 audiodelays, fmt, mix, grain_size, density)
-        self.ola = None
-        if self.shifter is None:
+        if self.shifter is None and not voiceless:
             self.ola = OLAPitchShifter(grain=grain_size)
             self.shifter_name = "python OLA"
             self.output = self.feed
@@ -859,6 +1269,28 @@ class Autotune:
                 print("render counter off: {}".format(error))
                 self._probe = None
 
+
+
+        self.vocoder = None
+        self._vmixer = None
+        self.vocoder_mix = vocoder_mix
+        self._vocoder_level = None
+        if vocoder is not None:
+            if not voiceless and vocoder_bands > VOCODER_VOICE_MAX_BANDS:
+                print("vocoder: {} bands with the voice in is more than the mic can run; "
+                      "using {}".format(vocoder_bands, VOCODER_VOICE_MAX_BANDS))
+                vocoder_bands = VOCODER_VOICE_MAX_BANDS
+            self.vocoder = Vocoder(fmt["sample_rate"], vocoder, vocoder_bands,
+                                   vocoder_octave, vocoder_breath, vocoder_chord, vocoder_gate,
+                                   vocoder_squeeze_chord)
+            if voiceless:
+                self.output = self.vocoder.output
+            else:
+                import audiomixer
+                self._voice_out = self.output
+                self._vmixer = audiomixer.Mixer(voice_count=2, **fmt)
+                self.output = self._vmixer
+
     @property
     def mix(self):
         return self.shifter.mix if self.shifter is not None else 1.0
@@ -887,6 +1319,12 @@ class Autotune:
     def start(self):
         0
 
+        if self.vocoder is not None and not self._started:
+            self.vocoder.start()
+            if self._vmixer is not None:
+                self._vmixer.voice[0].play(self._voice_out, loop=True)
+                self._vmixer.voice[1].play(self.vocoder.output, loop=True)
+                self._set_vocoder_levels()
         if self.shifter is not None and not self._started:
             if self.mixer is not None:
                 self.mixer.voice[0].play(self.shifter, loop=True)
@@ -1104,9 +1542,19 @@ class Autotune:
 
     def deinit(self):
         self.stop_sample()
-        for part in [self.mixer, self.shifter] + self.voices + self._feeds + [self.feed]:
+        for part in [self._vmixer, self.mixer, self.shifter] + self.voices + self._feeds + [self.feed]:
             if part is not None:
                 part.deinit()
+        if self.vocoder is not None:
+            self.vocoder.deinit()
+
+    def _set_vocoder_levels(self):
+        level = min(1.0, max(0.0, _value(self.vocoder_mix)))
+        if level == self._vocoder_level:
+            return
+        self._vocoder_level = level
+        self._vmixer.voice[0].level = 1.0 - level
+        self._vmixer.voice[1].level = level
 
     def _set_levels(self):
         level = min(1.0, max(0.0, _value(self.harmony_level)))
@@ -1166,16 +1614,9 @@ class Autotune:
 
     def _key_intervals(self, note):
         0
-        allowed = self.snapper.allowed
-        if len(allowed) == 12:
-            allowed = SCALES[1][1]
-        pcs = sorted((pc + self.snapper.root) % 12 for pc in allowed)
-        pc = note % 12
         steps = self._tones
-        if pc in pcs:
-            i, n = pcs.index(pc), len(pcs)
-            tones = [pcs[(i + s) % n] - pc + 12 * ((i + s) // n) for s in steps]
-        else:
+        tones = key_tones(self.snapper, note, steps)
+        if tones is None:
             tones = OFF_KEY_SHAPE[:len(steps)]
         return voicing(tones, self._inversion, self._octave)
 
@@ -1251,7 +1692,7 @@ class Autotune:
 
         self._noise_gate(block)
         waited = 0
-        if self.ola is None:
+        if self.shifter is not None:
 
 
 
@@ -1286,9 +1727,10 @@ class Autotune:
 
 
 
+
         every = DETECT_EVERY + (1 if self.sample is not None and self.gate else 0)
         self._turn = (self._turn + 1) % every
-        if not (self.enabled and (self.correct or self._key_chord)):
+        if not (self.enabled and (self.correct or self._key_chord or self.vocoder is not None)):
             self.cents = None
             self.hz = 0.0
             self._target = 0.0
@@ -1324,7 +1766,7 @@ class Autotune:
                 self.ola.lock_to_period(SAMPLE_RATE / self.hz)
             self.ola.process(block, BLOCK_SIZE, 2.0 ** (self.correction / 12.0))
             self._feed_block(block)
-        else:
+        elif self.shifter is not None:
             self.shifter.semitones = self.correction
         if self.voices:
             if self._key_chord and self.snapper.target is not None and self._turn == 0:
@@ -1332,6 +1774,20 @@ class Autotune:
             for voice, interval in zip(self.voices, self._intervals):
                 voice.semitones = self.correction + interval
             self._set_levels()
+        if self.vocoder is not None:
+            steps = self.vocoder.key_steps
+            if steps and self._turn == 0 and self.snapper.target is not None:
+
+
+                self.vocoder.set_chord(vocoder_key_chord(
+                    key_tones(self.snapper, self.snapper.target, steps), steps))
+
+
+            if VOCODER_EVERY_BLOCK or DETECT_EVERY == 1 or self._turn != 0:
+                hz = self.hz * 2.0 ** (self.correction / 12.0) if self.hz > 0 else 0.0
+                self.vocoder.update(window, hz)
+            if self._vmixer is not None:
+                self._set_vocoder_levels()
         cost = time.monotonic_ns() - began
 
 
@@ -1351,3 +1807,18 @@ def bench(hz=150.0, runs=5):
         ms = (time.monotonic_ns() - t) / 1e6
         best = ms if best is None or ms < best else best
     print("ulab: {}  detection: {:.2f} ms  found {:.1f} Hz for {:.1f}".format(np is not None, best, found, hz))
+
+
+def bench_vocoder(bands=8, runs=5):
+    0
+
+    voc = Vocoder(SAMPLE_RATE, bands=bands, breath=0.3)
+    buf = array.array("h", [int(6000 * math.sin(2 * math.pi * 150.0 * i / SAMPLE_RATE)) for i in range(BUFFER_SIZE)])
+    best = None
+    for _ in range(runs):
+        t = time.monotonic_ns()
+        voc.update(buf, 150.0)
+        ms = (time.monotonic_ns() - t) / 1e6
+        best = ms if best is None or ms < best else best
+    voc.deinit()
+    print("vocoder, {} bands: {:.2f} ms a block".format(bands, best))

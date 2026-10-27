@@ -701,6 +701,401 @@ def key_by_name(name):
 
 
 
+# ---------------------------------------------------------------------------
+# Vocoder
+# ---------------------------------------------------------------------------
+#
+# A channel vocoder needs a carrier to impose the voice on. The mic has no
+# second input, so the carrier is an oscillator that plays the note the voice
+# is singing (tuned by autotune when the preset has it), as in software
+# vocoders' "pitch tracking" carrier.
+#
+# All the per-sample work is native: one synthio Note per band, each the
+# carrier waveform through its own band-pass Biquad. Python only measures the
+# voice: an FFT of the latest window (ulab, in C), summed into the same bands,
+# sets each band note's amplitude. That runs on the blocks the pitch search
+# skips (DETECT_EVERY), so the slowest block costs no more than autotune's.
+
+VOCODER_WAVEFORMS = ("saw", "square", "pulse", "saw_square")
+VOCODER_MAX_BANDS = 11          # synthio plays 12 notes; one is kept for breath
+# With the voice in the mix its pitch shifter runs too, and on a Ting 11 bands
+# plus the shifter overflowed while 8 plus the shifter ran clean (and 11
+# alone ran clean); so with the voice in, bands stop here.
+VOCODER_VOICE_MAX_BANDS = 8
+VOCODER_LOW_HZ = 180.0          # centre of the lowest band
+VOCODER_HIGH_HZ = 5000.0        # centre of the highest band (at most 0.4 x the rate)
+VOCODER_BREATH_HZ = 4000.0      # breath noise covers the voice above this
+VOCODER_HARMONICS = 48          # carrier waveform harmonics (band-limited: no aliasing hiss)
+VOCODER_TABLE = 256             # carrier waveform samples
+VOCODER_NOISE = 2048            # breath noise waveform samples
+VOCODER_GAIN = 0.7              # carrier band level against the voice's, by ear
+VOCODER_RELEASE = 0.4           # share of a band's level kept when the voice falls
+# Noise gate: the bands open when the voice's level across them (dB from
+# full scale) reaches the gate, and close again once it has been GATE_CLOSE
+# dB under it for GATE_HOLD measurements (~130 ms), so word ends aren't cut.
+VOCODER_GATE = -50.0            # default gate; at VOCODER_GATE_OFF or below, no gate
+VOCODER_GATE_OFF = -80.0
+VOCODER_GATE_CLOSE = 6.0
+VOCODER_GATE_HOLD = 4
+# True measures the voice every block (smoother, but the pitch-search blocks
+# then carry both); False only on the blocks between pitch searches.
+VOCODER_EVERY_BLOCK = False
+
+_SPECTRUM = None
+if np is not None:
+    try:
+        from ulab import utils as _ulab_utils
+        _SPECTRUM = getattr(_ulab_utils, "spectrogram", None)
+    except ImportError:
+        pass
+
+
+def _power(x):
+    """|FFT(x)|^2, from ulab's spectrogram, ulab's fft or numpy's."""
+    if _SPECTRUM is not None:
+        mag = _SPECTRUM(x)
+        return mag * mag
+    spec = np.fft.fft(x)
+    if isinstance(spec, tuple):  # ulab without complex numbers
+        re, im = spec
+    else:
+        re, im = np.real(spec), np.imag(spec)
+    return re * re + im * im
+
+
+# Carrier chords, in just intonation: each chord note as a whole multiple of
+# a shared sub-note (major is 4:5:6, the 4th, 5th and 6th harmonics of two
+# octaves below the root). So the whole chord repeats at that sub-note and
+# fits in one waveform, played by each band's one note: no more CPU than a
+# single note. The sung note is the root.
+VOCODER_CHORDS = (
+    ("major", (4, 5, 6)),
+    ("minor", (10, 12, 15)),
+    ("7", (4, 5, 6, 7)),
+    ("maj7", (8, 10, 12, 15)),
+    ("m7", (10, 12, 15, 18)),
+    ("power", (2, 3, 4)),
+    # the diminished chords as harmonic 5:6:7(:9), the smooth septimal
+    # tuning, rather than 25:30:36, whose table would be five times longer
+    ("dim", (5, 6, 7)),
+    ("m7b5", (5, 6, 7, 9)),
+)
+# Carrier chords from the autotune key, like the harmonizer's key chords:
+# scale steps on the note autotune snapped to pick the chord above (in C
+# major, E gets minor, F major, B diminished), and the carrier swaps to that
+# chord's table. A note outside the scale gets a major (or dominant 7) chord.
+VOCODER_KEY_CHORDS = (
+    ("key_triad", (0, 2, 4)),
+    ("key_seventh", (0, 2, 4, 6)),
+)
+VOCODER_SHAPES = (
+    ((0, 4, 7), "major"),
+    ((0, 3, 7), "minor"),
+    ((0, 3, 6), "dim"),
+    ((0, 4, 7, 11), "maj7"),
+    ((0, 3, 7, 10), "m7"),
+    ((0, 4, 7, 10), "7"),
+    ((0, 3, 6, 10), "m7b5"),
+)
+VOCODER_CHORD_SAMPLES = 128     # chord table samples per cycle of the top note
+
+_WAVES = {}
+
+
+def chord_wave(shape, chord):
+    """``carrier_wave(shape)`` stacked into a just-intonation chord: one
+    cycle of the chord's sub-note, the multiple it is of the root's, and its
+    density measured against the root's frequency (as update() uses it)."""
+    key = (shape, chord)
+    if key in _WAVES:
+        return _WAVES[key]
+    ratios = None
+    for name, multiples in VOCODER_CHORDS:
+        if name == chord:
+            ratios = multiples
+    if ratios is None:
+        raise ValueError("vocoder chord must be one of {}".format(
+            tuple(name for name, _ in VOCODER_CHORDS + VOCODER_KEY_CHORDS)))
+    base, density = carrier_wave(shape)
+    size = len(base)
+    n = VOCODER_CHORD_SAMPLES * ratios[-1]
+    wave = [0.0] * n
+    for m in ratios:
+        step = m * size / n
+        for i in range(n):
+            p = i * step
+            j = int(p)
+            a = base[j % size]
+            wave[i] += a + (base[(j + 1) % size] - a) * (p - j)
+    scale = 30000.0 / max(abs(v) for v in wave)
+    table = array.array("h", [int(v * scale) for v in wave])
+    # each note's harmonics carry the base density, spread over every m-th
+    # harmonic of the sub-note; against the root (m0 of them) that is m / m0
+    density *= scale * scale * sum(ratios) / ratios[0]
+    _WAVES[key] = table, ratios[0], density
+    return _WAVES[key]
+
+
+def key_tones(snapper, note, steps):
+    """Semitones above the snapped MIDI ``note`` of the chord built in scale
+    ``steps`` on it, in the snapper's key; None for a note off the scale.
+    "Every note" (chromatic) counts as the key's major scale."""
+    allowed = snapper.allowed
+    if len(allowed) == 12:
+        allowed = SCALES[1][1]
+    pcs = sorted((pc + snapper.root) % 12 for pc in allowed)
+    pc = note % 12
+    if pc not in pcs:
+        return None
+    i, n = pcs.index(pc), len(pcs)
+    return [pcs[(i + s) % n] - pc + 12 * ((i + s) // n) for s in steps]
+
+
+def vocoder_key_chord(tones, steps):
+    """The VOCODER_CHORDS name for key chord ``tones`` (from key_tones)."""
+    if tones is not None:
+        tones = tuple(tones)
+        for shape, name in VOCODER_SHAPES:
+            if shape == tones:
+                return name
+    return "7" if len(steps) > 3 else "major"
+
+
+def carrier_wave(shape):
+    """One cycle of a band-limited carrier, and its harmonic density: the
+    mean of (k * a_k)^2 over its harmonics, a_k being harmonic k's amplitude
+    in int16 units. A band an octave wide of a saw at f0 then carries about
+    density / 2 * f0 * (1 / low - 1 / high) of power."""
+    if shape not in VOCODER_WAVEFORMS:
+        raise ValueError("vocoder waveform must be one of {}".format(VOCODER_WAVEFORMS))
+    if shape in _WAVES:
+        return _WAVES[shape]
+    n = VOCODER_TABLE
+    terms = []  # (k, amplitude, cosine?)
+    for k in range(1, VOCODER_HARMONICS + 1):
+        if shape == "saw":
+            terms.append((k, 1.0 / k, False))
+        elif shape == "square":
+            terms.append((k, 1.0 / k if k % 2 else 0.0, False))
+        elif shape == "saw_square":
+            # both at once, equal parts, in one table: no more notes to play
+            terms.append((k, 2.0 / k if k % 2 else 1.0 / k, False))
+        else:  # pulse, 25% duty
+            terms.append((k, math.sin(math.pi * k * 0.25) / k, True))
+    wave = [0.0] * n
+    for k, amp, cos in terms:
+        if amp:
+            step = 2 * math.pi * k / n
+            for i in range(n):
+                wave[i] += amp * (math.cos(step * i) if cos else math.sin(step * i))
+    scale = 30000.0 / max(abs(v) for v in wave)
+    table = array.array("h", [int(v * scale) for v in wave])
+    density = sum((k * amp * scale) ** 2 for k, amp, _ in terms) / len(terms)
+    _WAVES[shape] = table, density
+    return table, density
+
+
+class Vocoder:
+    """The vocoder's carrier and bands. ``output`` is a synthio Synthesizer
+    that plays the vocoded voice; call update() with the latest analysis
+    window and the carrier pitch.
+
+      waveform  "saw", "square", "pulse" or "saw_square" (the two summed)
+      bands     4..VOCODER_MAX_BANDS band-pass channels
+      octave    moves the carrier by whole octaves from the sung note
+      chord     None, or a VOCODER_CHORDS name: the carrier plays that chord
+                on the sung note (in just intonation); or a VOCODER_KEY_CHORDS
+                name, and set_chord() picks the chord as the key gives it
+      breath    0..1, noise for the voice's highs (s, t, f), so words come through
+      gate      noise gate in dB from full scale (see VOCODER_GATE), so room
+                noise (a fan, an air conditioner) doesn't play the carrier
+      squeeze_chord   None, or the chord squeeze(True) switches to: any chord
+                name above, or "none" for the plain carrier
+    """
+
+    def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0, chord=None,
+                 gate=VOCODER_GATE, squeeze_chord=None):
+        import synthio
+
+        if np is None or not (_SPECTRUM is not None or hasattr(np, "fft")):
+            raise ValueError("the vocoder needs ulab with fft")
+        if not 4 <= bands <= VOCODER_MAX_BANDS:
+            raise ValueError("vocoder bands must be 4 to {}".format(VOCODER_MAX_BANDS))
+        if not -2 <= octave <= 2:
+            raise ValueError("vocoder octave must be -2 to 2")
+        self.breath = min(1.0, max(0.0, breath))
+        self.waveform = waveform
+        self.notes = []
+        self.key_steps = None
+        self.chord = ""  # none yet; None is the plain carrier
+        # squeeze_chord: the chord a full squeeze switches to ("none" is the
+        # plain carrier). Every table either side can ask for is built now.
+        self.squeezable = squeeze_chord is not None
+        if self.squeezable:
+            self._modes = (chord, None if squeeze_chord == "none" else squeeze_chord)
+        else:
+            self._modes = (chord,)
+        for mode in self._modes:
+            steps = dict(VOCODER_KEY_CHORDS).get(mode)
+            if steps is None:
+                self._wave(mode)
+            else:
+                for shape, name in VOCODER_SHAPES:
+                    if len(shape) == len(steps):
+                        chord_wave(waveform, name)
+        self.squeezed = False
+        self._use(chord)
+        self.octave = 2.0 ** octave
+        self.hz = 0.0
+
+        # FFT over the newest power-of-two samples of the analysis window
+        n = 1
+        while n * 2 <= BUFFER_SIZE:
+            n *= 2
+        self._start = BUFFER_SIZE - n
+        self._hann = np.array([math.sin(math.pi * (i + 0.5) / n) ** 2 for i in range(n)])
+        # one-sided band power -> RMS^2 in int16 units, for a Hann window
+        psd = 2.0 / (n * n * 0.375)
+        # the gate as summed band power: 10^(dB/10) of full scale's 32768^2
+        self._gate = None
+        if gate > VOCODER_GATE_OFF:
+            self._gate = 32768.0 ** 2 * 10.0 ** (gate / 10.0) / psd
+            self._gate_close = self._gate * 10.0 ** (-VOCODER_GATE_CLOSE / 10.0)
+        self._held = 0  # measurements the gate stays open for
+
+        # Bands spaced evenly in pitch, each one band wide (edges at the
+        # geometric means), and the FFT bins that make them up.
+        high = min(VOCODER_HIGH_HZ, 0.4 * rate)
+        ratio = (high / VOCODER_LOW_HZ) ** (1.0 / (bands - 1))
+        half = math.sqrt(ratio)
+        q = 1.0 / (half - 1.0 / half)
+        self._bins = []
+        self._k = []
+        self._floor = []
+        self.notes = []
+        mode = synthio.FilterMode.BAND_PASS
+        for i in range(bands):
+            centre = VOCODER_LOW_HZ * ratio ** i
+            low, top = centre / half, centre * half
+            a = max(1, int(low * n / rate + 0.5))
+            b = max(a + 1, int(top * n / rate + 0.5))
+            self._bins.append((a, b))
+            # amplitude = k * sqrt(band power) / sqrt(f0): the voice's band
+            # level over a full-amplitude carrier's level in the band
+            # (over sqrt(density), the carrier's part, kept apart in _dk)
+            self._k.append(VOCODER_GAIN * math.sqrt(psd / (0.5 * (1 / low - 1 / top))))
+            self._floor.append(top)
+            self.notes.append(synthio.Note(
+                frequency=110.0, waveform=self._table, amplitude=0.0,
+                filter=synthio.Biquad(mode, frequency=centre, Q=q)))
+        self._levels = [0.0] * bands
+
+        self.noise = None
+        if self.breath > 0:
+            cut = min(VOCODER_BREATH_HZ, 0.35 * rate)
+            seed = 12345
+            noise = array.array("h", [0] * VOCODER_NOISE)
+            for i in range(VOCODER_NOISE):
+                seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
+                noise[i] = (seed >> 15) % 60001 - 30000
+            # uniform +-30000 is 17320 RMS; the high-pass keeps the top share
+            level = 17320.0 * math.sqrt(1.0 - cut / (rate / 2.0))
+            self._noise_bins = (int(cut * n / rate + 0.5), n // 2)
+            self._noise_k = self.breath * VOCODER_GAIN * math.sqrt(psd) / level
+            self.noise = synthio.Note(
+                frequency=rate / VOCODER_NOISE, waveform=noise, amplitude=0.0,
+                filter=synthio.Biquad(synthio.FilterMode.HIGH_PASS, frequency=cut, Q=0.7071))
+        self.synth = synthio.Synthesizer(sample_rate=rate, channel_count=1)
+        self.output = self.synth
+
+    def start(self):
+        self.synth.press(self.notes + ([self.noise] if self.noise else []))
+
+    def _wave(self, chord):
+        """(table, sub-note share, density) for a chord, or None's carrier."""
+        if chord is None:
+            table, density = carrier_wave(self.waveform)
+            return table, 1.0, density
+        table, root, density = chord_wave(self.waveform, chord)
+        return table, 1.0 / root, density  # the table repeats at the sub-note
+
+    def _use(self, mode):
+        """Play ``mode``: a chord, None, or a key chord (whose chord then
+        comes from set_chord on each pitch search)."""
+        self.key_steps = dict(VOCODER_KEY_CHORDS).get(mode)
+        if self.key_steps is None:
+            self.set_chord(mode)
+        elif self.chord not in [n for t, n in VOCODER_SHAPES if len(t) == len(self.key_steps)]:
+            self.set_chord(vocoder_key_chord(None, self.key_steps))
+
+    def squeeze(self, squeezed):
+        """Switch between the chord and the squeeze chord."""
+        if self.squeezable and squeezed != self.squeezed:
+            self.squeezed = squeezed
+            self._use(self._modes[1 if squeezed else 0])
+
+    def set_chord(self, chord):
+        """Swap the carrier to another chord (or None, the plain carrier),
+        one whose table is built already."""
+        if chord == self.chord:
+            return
+        self._table, self._sub, density = self._wave(chord)
+        self.chord = chord
+        self._dk = 1.0 / math.sqrt(density)
+        for note in self.notes:
+            note.waveform = self._table
+            if self.hz:
+                note.frequency = self.hz * self._sub
+
+    def measure(self, window):
+        """Power in each band (and the breath band) of the analysis window."""
+        x = np.frombuffer(window, dtype=np.int16)[self._start:] * self._hann
+        p = _power(x)
+        out = [float(np.sum(p[a:b])) for a, b in self._bins]
+        if self.noise is not None:
+            a, b = self._noise_bins
+            out.append(float(np.sum(p[a:b])))
+        return out
+
+    def update(self, window, hz):
+        """Measure the voice and set the bands. ``hz`` is the carrier's
+        note (0 keeps the last one, as between words)."""
+        if hz > 0:
+            hz = min(2000.0, max(30.0, hz * self.octave))
+            if abs(hz - self.hz) > 0.002 * hz:
+                self.hz = hz
+                for note in self.notes:
+                    note.frequency = hz * self._sub
+        powers = self.measure(window)
+        f0 = self.hz or 110.0
+        root = self._dk / math.sqrt(f0)
+        if self._gate is not None:
+            total = sum(powers)
+            if total >= self._gate:
+                self._held = VOCODER_GATE_HOLD
+            elif total < self._gate_close and self._held:
+                self._held -= 1
+            if not self._held:
+                root = 0.0  # gate shut: every band falls away
+        levels = self._levels
+        for i, note in enumerate(self.notes):
+            if self._floor[i] < f0:
+                # a band under the note: the carrier has nothing there
+                levels[i] = note.amplitude = 0.0
+                continue
+            level = min(1.0, self._k[i] * math.sqrt(powers[i]) * root)
+            if level < levels[i]:
+                level += (levels[i] - level) * VOCODER_RELEASE
+            levels[i] = level
+            note.amplitude = level
+        if self.noise is not None:
+            self.noise.amplitude = min(1.0, self._noise_k * math.sqrt(powers[-1])) if root else 0.0
+
+    def deinit(self):
+        self.synth.release_all()
+        self.synth.deinit()
+
+
 def _feed_sample(buffer, fmt):
     """The RawSample the shifters read processed blocks from (see FEED_PHASE)."""
     import audiocore
@@ -723,6 +1118,12 @@ class Autotune:
       harmony_octave   moves the harmony voices by whole octaves
       harmony_level    harmony volume against the voice (number or block)
       correct    False runs the harmonizer without retuning the voice
+    and, from a "vocoder" effect (not with a harmonizer):
+      vocoder    the carrier waveform (see Vocoder), or None for no vocoder
+      vocoder_bands, vocoder_octave, vocoder_breath, vocoder_chord,
+      vocoder_gate, vocoder_squeeze_chord   see Vocoder
+      vocoder_mix      vocoder against the voice, 0..1 (number or block); a
+                       plain 1 drops the voice and its shifter altogether
     fmt is the shared audio format dict (sample_rate, bits_per_sample,
     samples_signed, channel_count, buffer_size). All but grain_size, density
     and engine can be changed later through the attributes / set_key_scale().
@@ -732,8 +1133,15 @@ class Autotune:
                  humanize=0.0, mix=1.0, grain_size=None,
                  density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
                  inversion=0, harmony_octave=0, harmony_level=0.7, correct=True,
-                 harmony_double=None):
+                 harmony_double=None, vocoder=None, vocoder_bands=8, vocoder_octave=0,
+                 vocoder_breath=0.0, vocoder_mix=1.0, vocoder_chord=None,
+                 vocoder_gate=VOCODER_GATE, vocoder_squeeze_chord=None):
         import audiocore
+
+        if vocoder is not None and harmony is not None:
+            raise ValueError("a preset can have a harmonizer or a vocoder, not both")
+        # Vocoder alone: nothing plays the voice, so it needs no shifter.
+        voiceless = vocoder is not None and not hasattr(vocoder_mix, "value") and vocoder_mix >= 1
 
         if grain_size is None:
             grain_size = GRAIN_SIZE
@@ -789,12 +1197,14 @@ class Autotune:
 
         self.shifter = None
         self.shifter_name = None
-        if engine == "native":
+        self.ola = None
+        if voiceless:
+            self.shifter_name = "no shifter"
+        elif engine == "native":
             import audiodelays
             self.shifter, self.shifter_name = _make_native_shifter(
                 audiodelays, fmt, mix, grain_size, density)
-        self.ola = None
-        if self.shifter is None:
+        if self.shifter is None and not voiceless:
             self.ola = OLAPitchShifter(grain=grain_size)
             self.shifter_name = "python OLA"
             self.output = self.feed
@@ -859,6 +1269,28 @@ class Autotune:
                 print("render counter off: {}".format(error))
                 self._probe = None
 
+        # Vocoder: a synthio carrier, on a mixer with the voice unless the
+        # voice is left out.
+        self.vocoder = None
+        self._vmixer = None     # vocoder and voice, when the voice stays in
+        self.vocoder_mix = vocoder_mix
+        self._vocoder_level = None
+        if vocoder is not None:
+            if not voiceless and vocoder_bands > VOCODER_VOICE_MAX_BANDS:
+                print("vocoder: {} bands with the voice in is more than the mic can run; "
+                      "using {}".format(vocoder_bands, VOCODER_VOICE_MAX_BANDS))
+                vocoder_bands = VOCODER_VOICE_MAX_BANDS
+            self.vocoder = Vocoder(fmt["sample_rate"], vocoder, vocoder_bands,
+                                   vocoder_octave, vocoder_breath, vocoder_chord, vocoder_gate,
+                                   vocoder_squeeze_chord)
+            if voiceless:
+                self.output = self.vocoder.output
+            else:
+                import audiomixer
+                self._voice_out = self.output
+                self._vmixer = audiomixer.Mixer(voice_count=2, **fmt)
+                self.output = self._vmixer
+
     @property
     def mix(self):
         return self.shifter.mix if self.shifter is not None else 1.0
@@ -887,6 +1319,12 @@ class Autotune:
     def start(self):
         """Wire the feed into the shifter. Call after the downstream chain is
         wired, mirroring Adafruit's demo where the mic is connected last."""
+        if self.vocoder is not None and not self._started:
+            self.vocoder.start()
+            if self._vmixer is not None:
+                self._vmixer.voice[0].play(self._voice_out, loop=True)
+                self._vmixer.voice[1].play(self.vocoder.output, loop=True)
+                self._set_vocoder_levels()
         if self.shifter is not None and not self._started:
             if self.mixer is not None:
                 self.mixer.voice[0].play(self.shifter, loop=True)
@@ -1104,9 +1542,19 @@ class Autotune:
 
     def deinit(self):
         self.stop_sample()
-        for part in [self.mixer, self.shifter] + self.voices + self._feeds + [self.feed]:
+        for part in [self._vmixer, self.mixer, self.shifter] + self.voices + self._feeds + [self.feed]:
             if part is not None:
                 part.deinit()
+        if self.vocoder is not None:
+            self.vocoder.deinit()
+
+    def _set_vocoder_levels(self):
+        level = min(1.0, max(0.0, _value(self.vocoder_mix)))
+        if level == self._vocoder_level:
+            return
+        self._vocoder_level = level
+        self._vmixer.voice[0].level = 1.0 - level
+        self._vmixer.voice[1].level = level
 
     def _set_levels(self):
         level = min(1.0, max(0.0, _value(self.harmony_level)))
@@ -1166,16 +1614,9 @@ class Autotune:
 
     def _key_intervals(self, note):
         """Harmony intervals for a key chord on the snapped MIDI note."""
-        allowed = self.snapper.allowed
-        if len(allowed) == 12:
-            allowed = SCALES[1][1]
-        pcs = sorted((pc + self.snapper.root) % 12 for pc in allowed)
-        pc = note % 12
         steps = self._tones
-        if pc in pcs:
-            i, n = pcs.index(pc), len(pcs)
-            tones = [pcs[(i + s) % n] - pc + 12 * ((i + s) // n) for s in steps]
-        else:
+        tones = key_tones(self.snapper, note, steps)
+        if tones is None:
             tones = OFF_KEY_SHAPE[:len(steps)]
         return voicing(tones, self._inversion, self._octave)
 
@@ -1251,7 +1692,7 @@ class Autotune:
         # OLA fallback shifts the block itself, so it still writes at the end.)
         self._noise_gate(block)
         waited = 0
-        if self.ola is None:
+        if self.shifter is not None:
             # A write due just before a render waits for it, up to half a
             # block. On a busy preset with a sample in, that wait plus the
             # pitch work after the write ran past the next mic block (an
@@ -1282,13 +1723,14 @@ class Autotune:
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]
         window[BLOCK_SIZE:BUFFER_SIZE] = block
 
-        # Without retuning, only a key chord needs to know the note. Pitch
-        # is found every DETECT_EVERY blocks; between, the last target holds.
+        # Without retuning, only a key chord or the vocoder needs to know the
+        # note. Pitch is found every DETECT_EVERY blocks; between, the last
+        # target holds.
         # With a sample in and the mic open the chain has the most to do, so
         # the pitch is found one block less often (48 ms rather than 32).
         every = DETECT_EVERY + (1 if self.sample is not None and self.gate else 0)
         self._turn = (self._turn + 1) % every
-        if not (self.enabled and (self.correct or self._key_chord)):
+        if not (self.enabled and (self.correct or self._key_chord or self.vocoder is not None)):
             self.cents = None
             self.hz = 0.0
             self._target = 0.0
@@ -1324,7 +1766,7 @@ class Autotune:
                 self.ola.lock_to_period(SAMPLE_RATE / self.hz)
             self.ola.process(block, BLOCK_SIZE, 2.0 ** (self.correction / 12.0))
             self._feed_block(block)
-        else:
+        elif self.shifter is not None:
             self.shifter.semitones = self.correction
         if self.voices:
             if self._key_chord and self.snapper.target is not None and self._turn == 0:
@@ -1332,6 +1774,20 @@ class Autotune:
             for voice, interval in zip(self.voices, self._intervals):
                 voice.semitones = self.correction + interval
             self._set_levels()
+        if self.vocoder is not None:
+            steps = self.vocoder.key_steps
+            if steps and self._turn == 0 and self.snapper.target is not None:
+                # a key chord follows the note autotune snapped to; the
+                # carrier moves with the note, so the chord needn't settle
+                self.vocoder.set_chord(vocoder_key_chord(
+                    key_tones(self.snapper, self.snapper.target, steps), steps))
+            # On the blocks between pitch searches (see VOCODER_EVERY_BLOCK);
+            # the carrier plays the sung note plus autotune's correction.
+            if VOCODER_EVERY_BLOCK or DETECT_EVERY == 1 or self._turn != 0:
+                hz = self.hz * 2.0 ** (self.correction / 12.0) if self.hz > 0 else 0.0
+                self.vocoder.update(window, hz)
+            if self._vmixer is not None:
+                self._set_vocoder_levels()
         cost = time.monotonic_ns() - began
         # An average, not a max: a slow pass (a garbage collection) would
         # keep the work out of the wait for seconds. Should it overrun the
@@ -1351,3 +1807,18 @@ def bench(hz=150.0, runs=5):
         ms = (time.monotonic_ns() - t) / 1e6
         best = ms if best is None or ms < best else best
     print("ulab: {}  detection: {:.2f} ms  found {:.1f} Hz for {:.1f}".format(np is not None, best, found, hz))
+
+
+def bench_vocoder(bands=8, runs=5):
+    """Time the vocoder's measurement of one window, for the serial console:
+    >>> import autotune; autotune.bench_vocoder()"""
+    voc = Vocoder(SAMPLE_RATE, bands=bands, breath=0.3)
+    buf = array.array("h", [int(6000 * math.sin(2 * math.pi * 150.0 * i / SAMPLE_RATE)) for i in range(BUFFER_SIZE)])
+    best = None
+    for _ in range(runs):
+        t = time.monotonic_ns()
+        voc.update(buf, 150.0)
+        ms = (time.monotonic_ns() - t) / 1e6
+        best = ms if best is None or ms < best else best
+    voc.deinit()
+    print("vocoder, {} bands: {:.2f} ms a block".format(bands, best))

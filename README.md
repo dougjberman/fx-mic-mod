@@ -1,13 +1,13 @@
 # fx-mic-mod
 
 Custom CircuitPython firmware for the Teenage Engineering EP-2350 "Ting" / FX Mic: stackable effects
-(autotune, a chord harmonizer, distortion, reverb, delay, chorus, phaser, pitch shift, filters) plus on-device
+(autotune, a chord harmonizer, a pitch-tracking vocoder, distortion, reverb, delay, chorus, phaser, pitch shift, filters) plus on-device
 sample recording, with a friendly web editor for the presets.
 
 It is a fork of Adafruit's [EP-2350 CircuitPython demo](https://github.com/adafruit/Adafruit_Learning_System_Guides/tree/main/Teenage_Engineering_EP2350_Demo)
 by Tim Cocks (MIT), from the guide
 [Hacking the Teenage Engineering EP-2350 Ting](https://learn.adafruit.com/hacking-the-teenage-engineering-ep-2350-ting).
-Presets use Adafruit's `config.json` format, plus `autotune` and `harmonizer` effects, so Adafruit's packs load unchanged.
+Presets use Adafruit's `config.json` format, plus `autotune`, `harmonizer` and `vocoder` effects, so Adafruit's packs load unchanged.
 
 > **Status:** tested on desktop Python with stand-in hardware modules only. Not yet run on a real ting.
 > See [firmware/NOTES.md](firmware/NOTES.md) for what still needs checking on the device.

@@ -720,6 +720,25 @@ HARMONIZER_PARAMS = {
 }
 
 
+# The vocoder also runs inside the autotune stage: Python measures the voice
+# block by block, and a synthio carrier plays it. A preset may have one, but
+# not with a harmonizer; without autotune, the carrier follows the voice as
+# sung.
+VOCODER_NAMES = ("vocoder",)
+
+# parameter -> (converter, autotune.Autotune keyword)
+VOCODER_PARAMS = {
+    "waveform": (_str, "vocoder"),
+    "bands": (_int, "vocoder_bands"),
+    "octave": (_int, "vocoder_octave"),
+    "breath": (_float, "vocoder_breath"),
+    "chord": (_str, "vocoder_chord"),
+    "gate": (_float, "vocoder_gate"),
+    "squeeze_chord": (_str, "vocoder_squeeze_chord"),
+    "mix": (_block, "vocoder_mix"),
+}
+
+
 def _effect_key(spec):
     if not isinstance(spec, dict) or not isinstance(spec.get("effect"), str):
         return None
@@ -730,9 +749,14 @@ def is_harmonizer(spec):
     return _effect_key(spec) in HARMONIZER_NAMES
 
 
+def is_vocoder(spec):
+    return _effect_key(spec) in VOCODER_NAMES
+
+
 def uses_tune_stage(spec):
-    """Whether a spec runs in the Python autotune stage (autotune or harmonizer)."""
-    return is_autotune(spec) or is_harmonizer(spec)
+    """Whether a spec runs in the Python autotune stage (autotune, harmonizer
+    or vocoder)."""
+    return is_autotune(spec) or is_harmonizer(spec) or is_vocoder(spec)
 
 
 def is_autotune(spec):
@@ -780,6 +804,7 @@ def create_preset(preset, blocks=None, **format_args):
 
     tune_specs = []
     harmony_specs = []
+    vocoder_specs = []
     rest = []
     for index, spec in enumerate(specs):
         if not _is_enabled(spec, "specs[{}]".format(index)):
@@ -788,12 +813,18 @@ def create_preset(preset, blocks=None, **format_args):
             tune_specs.append(spec)
         elif is_harmonizer(spec):
             harmony_specs.append(spec)
+        elif is_vocoder(spec):
+            vocoder_specs.append(spec)
         else:
             rest.append(spec)
     if len(tune_specs) > 1:
         raise ValueError("a preset can have only one autotune")
     if len(harmony_specs) > 1:
         raise ValueError("a preset can have only one harmonizer")
+    if len(vocoder_specs) > 1:
+        raise ValueError("a preset can have only one vocoder")
+    if harmony_specs and vocoder_specs:
+        raise ValueError("a preset can have a harmonizer or a vocoder, not both")
 
     tune = None
     if tune_specs:
@@ -832,6 +863,34 @@ def create_preset(preset, blocks=None, **format_args):
                 _skip("harmonizer", name)
                 continue
             convert, keyword = HARMONIZER_PARAMS[name]
+            tune[keyword] = convert(value, name, namespace)
+
+    if vocoder_specs:
+        spec = vocoder_specs[0]
+        if tune is None:
+            tune = {"correct": False}
+        elif "squeeze_key" in tune or "squeeze_scale" in tune:
+            defs = definitions if isinstance(definitions, dict) else {}
+            if _uses_handle(spec.get("mix"), defs):
+                raise ValueError(
+                    "vocoder: the handle can change the key or drive the mix, not both"
+                )
+            if "squeeze_chord" in spec:
+                raise ValueError(
+                    "vocoder: the handle can change the key or the chord, not both"
+                )
+        if "squeeze_chord" in spec and _uses_handle(
+            spec.get("mix"), definitions if isinstance(definitions, dict) else {}
+        ):
+            raise ValueError("vocoder: the handle can change the chord or drive the mix, not both")
+        tune["vocoder"] = "saw"
+        for name, value in spec.items():
+            if name in ("effect", "enabled") or name in FORMAT_ARGS:
+                continue
+            if name not in VOCODER_PARAMS:
+                _skip("vocoder", name)
+                continue
+            convert, keyword = VOCODER_PARAMS[name]
             tune[keyword] = convert(value, name, namespace)
 
     effects = [create_effect(spec, blocks=namespace, **format_args) for spec in rest]

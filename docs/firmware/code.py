@@ -97,7 +97,7 @@ from recorder import Recorder, drive_free
 
 
 
-FIRMWARE_VERSION = "1.0"
+FIRMWARE_VERSION = "1.1"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 
@@ -529,7 +529,7 @@ def build(ctx, preset):
 
 
 
-        for name in ("speed", "humanize", "harmony_level"):
+        for name in ("speed", "humanize", "harmony_level", "vocoder_mix"):
             if tune_args.get(name) is handle_control:
                 tune_args[name] = handle_value
 
@@ -631,6 +631,8 @@ def select_preset(ctx, index):
                     "autotune" if ctx.tune.correct else "voice",
                     ctx.tune.shifter_name,
                     ", harmonizer {} voices".format(len(ctx.tune.voices)) if ctx.tune.voices else "",
+                ) + (
+                    ", vocoder {} bands".format(len(ctx.tune.vocoder.notes)) if ctx.tune.vocoder else ""
                 ) if ctx.tune else "",
                 gc.mem_free(),
             )
@@ -1299,6 +1301,15 @@ try:
                 key, scale = data_context.tune_keys[1 if not squeezed else 0]
                 data_context.tune.set_key_scale(key, scale)
                 print("autotune now {} {}".format(key, scale))
+
+        vocoder = data_context.tune.vocoder if data_context.tune is not None else None
+        if vocoder is not None and vocoder.squeezable:
+            position = handle_control.a
+            if (not vocoder.squeezed and position >= SQUEEZE_KEY_ON) or (
+                vocoder.squeezed and position <= SQUEEZE_KEY_OFF
+            ):
+                vocoder.squeeze(not vocoder.squeezed)
+                print("vocoder chord now {}".format(vocoder.chord or "one note"))
 
 
 

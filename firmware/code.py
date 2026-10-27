@@ -97,7 +97,7 @@ from recorder import Recorder, drive_free
 # firmware knows, so keep it on one line in this form. Raise it with every
 # release that adds a config setting, and add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number.
-FIRMWARE_VERSION = "1.0"
+FIRMWARE_VERSION = "1.1"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -213,7 +213,7 @@ RECORD_SECONDS = 4
 RECORD_BLINK_SECONDS = 0.25
 
 # Handle travel (0 out .. 1 in) at which an autotune preset's "squeeze_key"
-# takes over, and below which it lets go again.
+# (or a vocoder's "squeeze_chord") takes over, and below which it lets go again.
 SQUEEZE_KEY_ON = 0.67
 SQUEEZE_KEY_OFF = 0.5
 
@@ -529,7 +529,7 @@ def build(ctx, preset):
         # Python reads speed / humanize each block; "$handle" is offered to
         # them as the raw handle position, since a synthio Math block only
         # updates while an effect ticks it.
-        for name in ("speed", "humanize", "harmony_level"):
+        for name in ("speed", "humanize", "harmony_level", "vocoder_mix"):
             if tune_args.get(name) is handle_control:
                 tune_args[name] = handle_value
         # "squeeze_key" / "squeeze_scale": a second key and scale that take
@@ -631,6 +631,8 @@ def select_preset(ctx, index):
                     "autotune" if ctx.tune.correct else "voice",
                     ctx.tune.shifter_name,
                     ", harmonizer {} voices".format(len(ctx.tune.voices)) if ctx.tune.voices else "",
+                ) + (
+                    ", vocoder {} bands".format(len(ctx.tune.vocoder.notes)) if ctx.tune.vocoder else ""
                 ) if ctx.tune else "",
                 gc.mem_free(),
             )
@@ -1299,6 +1301,15 @@ try:
                 key, scale = data_context.tune_keys[1 if not squeezed else 0]
                 data_context.tune.set_key_scale(key, scale)
                 print("autotune now {} {}".format(key, scale))
+        # A vocoder's "squeeze_chord" switches chord the same way.
+        vocoder = data_context.tune.vocoder if data_context.tune is not None else None
+        if vocoder is not None and vocoder.squeezable:
+            position = handle_control.a
+            if (not vocoder.squeezed and position >= SQUEEZE_KEY_ON) or (
+                vocoder.squeezed and position <= SQUEEZE_KEY_OFF
+            ):
+                vocoder.squeeze(not vocoder.squeezed)
+                print("vocoder chord now {}".format(vocoder.chord or "one note"))
 
         # Reading .overflow clears it. It trips if the playback side falls
         # behind the mic, which should not happen here. Both run off the

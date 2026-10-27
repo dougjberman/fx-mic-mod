@@ -37,6 +37,8 @@ class Script:
         self.led_log = []
         self.shifters = []
         self.mixers = []
+        self.synths = []
+        self.plays = []
         self.mic_reads = 0
 
     def paddle_held(self):
@@ -57,6 +59,7 @@ class _Obj:
 
     def play(self, source, loop=False):
         self.playing = source
+        SCRIPT.plays.append((type(self).__name__, type(source).__name__))
 
     def stop(self):
         self.playing = None
@@ -266,6 +269,30 @@ class Math(_Obj):
         self.operation, self.a, self.b, self.c = operation, a, b, c
 
 
+class Note(_Obj):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.amplitude_log = []
+
+    def __setattr__(self, name, value):
+        if name == "amplitude" and "amplitude_log" in self.__dict__:
+            self.amplitude_log.append(value)
+        object.__setattr__(self, name, value)
+
+
+class Synthesizer(_Obj):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.pressed = []
+        SCRIPT.synths.append(self)
+
+    def press(self, notes):
+        self.pressed.extend(notes)
+
+    def release_all(self):
+        self.released = True
+
+
 class _Mount:
     def __init__(self, readonly):
         self.readonly = readonly
@@ -320,7 +347,7 @@ def install(script, root):
     _module("audiofilters", Distortion=_Obj, Filter=_Obj, Phaser=_Obj,
             DistortionMode=_Enum())
     _module("audiofreeverb", Freeverb=_Obj)
-    _module("synthio", Math=Math, LFO=_Obj, Biquad=_Obj,
+    _module("synthio", Math=Math, LFO=_Obj, Biquad=_Obj, Note=Note, Synthesizer=Synthesizer,
             MathOperation=_Enum(), FilterMode=_Enum())
     _module("storage", getmount=lambda path: _Mount(script.readonly),
             remount=lambda *a, **k: None)

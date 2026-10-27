@@ -579,6 +579,11 @@ const CHORD_NOTES = {
   "7b9":"Dark dominant, leaves out the 5th.", "7#9":"The Hendrix chord.", "maj7#11":"Bright and floaty, Lydian.", "11":"7th, 9th and 11th over you.", m11:"Minor 3rd, 7th and 11th.",
   "13":"3rd, 7th and 13th over you.", maj13:"3rd, maj7th and 13th.", m13:"Minor 3rd, 7th and 13th.", quartal:"Stacked 4ths. Modern and open."};
 const HARMONY_VOICE_COST = 17;
+// Effects that run inside the autotune stage, so they sit at the top of the chain.
+const STAGE_FX = ["autotune", "harmonizer", "vocoder"];
+// Guessed, not yet measured on a Ting: the bands are synthio notes, each a waveform and a biquad.
+const VOCODER_COST = 12, VOCODER_BAND_COST = 2.5;
+const VOCODER_WAVES = [["saw","Saw (buzzy)"],["square","Square (hollow)"],["saw_square","Saw + square (full)"],["pulse","Pulse (nasal)"]];
 const FILTER_MODES = [["high_pass","Thin (cut lows)"],["low_pass","Muffle (cut highs)"],["band_pass","Telephone (band)"],["notch","Notch"]];
 const PLAYMODES = [["oneshot","Tap to play"],["hold","Hold to play"],["startstop","Tap start / stop"]];
 
@@ -595,8 +600,12 @@ const STARTERS = [
 STARTERS.push(
   {name:"Slap-back", list:[{effect:"filter",filter:{mode:"high_pass",frequency:120,Q:.7071},mix:1},{effect:"echo",delay_ms:120,decay:{block:"math",operation:"constrained_lerp",a:.1,b:.5,c:"$handle"},mix:.35,freq_shift:false,max_delay_ms:200},{effect:"freeverb",roomsize:.2,damp:.6,mix:.12}]},
   {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"lfo",waveform:"sine",rate:{block:"math",operation:"constrained_lerp",a:0.25,b:0.8,c:"$handle"},scale:{block:"math",operation:"constrained_lerp",a:300,b:1150,c:"$handle"},offset:{block:"math",operation:"constrained_lerp",a:900,b:1850,c:"$handle"}},feedback:{block:"math",operation:"constrained_lerp",a:0.4,b:0.85,c:"$handle"},mix:{block:"math",operation:"constrained_lerp",a:0.25,b:0.5,c:"$handle"},stages:8},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.2}]},
-  {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]});
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.4],[STARTERS[1],1],[STARTERS[9],.4],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
+  {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]},
+  {name:"Squeeze for minor", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"major",squeeze_chord:"minor",bands:10,octave:-1,breath:.3},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.5,damp:.5,mix:.25}]},
+  {name:"Night call", list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:8,octave:0,breath:.7,mix:.85,gate:-60,squeeze_chord:"key_triad"}]},
+  // a hard-tuned one-note robot, after Daft Punk's "Harder, Better, Faster, Stronger"
+  {name:"Harder better faster stronger", level:.45, list:[{effect:"autotune",key:"F#",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:11,octave:0,breath:.4,mix:1,gate:-55}]});
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[["Squeeze for backups",1],["Night call",.7],["Dream swirl",.4],["Squeeze monster",.25]].map(([n,lv])=>[STARTERS.find(s=>s.name===n),lv]).map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"oneshot"},{file:"4.wav",playmode:"oneshot"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -618,9 +627,9 @@ function normalizeConfig(c){
   (Array.isArray(c.presets) ? c.presets : []).slice(0,4).forEach(p => {
     const list = Array.isArray(p && p.list) ? p.list.map(fx => Object.assign({}, fx, {effect: normName(fx.effect) || fx.effect})) : [];
     // autotune always heads the chain
-    // autotune always heads the chain, and the harmonizer runs alongside it
-    const tunes = list.filter(fx => fx.effect === "autotune"), harms = list.filter(fx => fx.effect === "harmonizer");
-    const rest = list.filter(fx => fx.effect !== "autotune" && fx.effect !== "harmonizer");
+    // autotune always heads the chain, and the harmonizer or vocoder runs alongside it
+    const tunes = list.filter(fx => fx.effect === "autotune"), harms = list.filter(fx => fx.effect === "harmonizer" || fx.effect === "vocoder");
+    const rest = list.filter(fx => !STAGE_FX.includes(fx.effect));
     out.presets.push(Object.assign({}, p, {list: tunes.slice(0,1).concat(harms.slice(0,1), rest)}));
   });
   (Array.isArray(c.samples) ? c.samples : []).slice(0,4).forEach(s => out.samples.push(Object.assign({playmode:"oneshot"}, s)));
@@ -670,6 +679,7 @@ function h(tag, attrs, ...kids){
 let uid = 0; const nid = (p) => p + "-" + (++uid);
 function fmtVal(v, meta){
   if (typeof v !== "number") return "";
+  if (meta.offAt != null && v <= meta.offAt) return "Off";
   const u = meta.unit ? " " + meta.unit : "";
   if (meta.unit === "st") return (v>0?"+":"") + v + " st";
   if (meta.max <= 1 && !meta.unit) return Math.round(v*100) + "%";
@@ -692,7 +702,7 @@ function sliderEl(meta, value, onInput){
 
 /* --------------------------- rendering ----------------------------- */
 function chainSummary(p){
-  const names = p.list.filter(fx=>fx.enabled!==false).map(fx => fx.effect==="autotune" ? "Autotune" : fx.effect==="harmonizer" ? "Harmonizer" : (EFFECTS[fx.effect]?EFFECTS[fx.effect].label:fx.effect));
+  const names = p.list.filter(fx=>fx.enabled!==false).map(fx => fx.effect==="autotune" ? "Autotune" : fx.effect==="harmonizer" ? "Harmonizer" : fx.effect==="vocoder" ? "Vocoder" : (EFFECTS[fx.effect]?EFFECTS[fx.effect].label:fx.effect));
   return names.length ? names.join(" → ") : "No effects";
 }
 function renderSlots(){
@@ -732,7 +742,9 @@ function renderEditor(){
       h("button",{class:"btn small primary", onclick:()=>{ p.list.unshift({effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1}); changed(); }}, "Add autotune"))));
   const harm = p.list.find(fx=>fx.effect==="harmonizer");
   if (harm) chain.append(harmonizerCard(p, harm));
-  p.list.forEach((fx,i) => { if (fx.effect!=="autotune" && fx.effect!=="harmonizer") chain.append(effectCard(p.list, i, p)); });
+  const voc = p.list.find(fx=>fx.effect==="vocoder");
+  if (voc) chain.append(vocoderCard(p, voc));
+  p.list.forEach((fx,i) => { if (!STAGE_FX.includes(fx.effect)) chain.append(effectCard(p.list, i, p)); });
   root.append(chain);
   root.append(addEffectBlock(p.list, false));
 
@@ -749,6 +761,7 @@ function loadMeter(p){
   const tuned = p.list.some(fx=>fx.effect==="autotune" && fx.enabled!==false);
   p.list.forEach(fx => { if (fx.enabled===false) return; if (fx.effect==="autotune"){ cost+=AUTOTUNE_COST; return; }
     if (fx.effect==="harmonizer"){ cost += harmonyVoices(fx).length*HARMONY_VOICE_COST + (tuned ? 0 : AUTOTUNE_COST-10); return; }
+    if (fx.effect==="vocoder"){ cost += vocoderCost(fx) + (tuned ? 0 : AUTOTUNE_COST-10); return; }
     const e=EFFECTS[fx.effect]; if(!e) return; cost+=e.cost; if (e.ram){ const ms = typeof fx.max_delay_ms==="number"?fx.max_delay_ms:e.params.max_delay_ms.def; ramKB += ms*2*(typeof config.sample_rate==="number" ? config.sample_rate : 24000)/1e6; } });
   // Costs are for 24 kHz; the built-in effects' work grows with the rate.
   cost = Math.round(cost * (typeof config.sample_rate==="number" ? config.sample_rate : 24000) / 24000);
@@ -764,7 +777,7 @@ function loadMeter(p){
 function fxHead(title, what, list, i, fx, extra){
   const id = nid("en");
   const n = list.length;
-  const isFirstMovable = i===0 || (list[i-1] && (list[i-1].effect==="autotune" || list[i-1].effect==="harmonizer"));
+  const isFirstMovable = i===0 || (list[i-1] && STAGE_FX.includes(list[i-1].effect));
   return h("div",{class:"fx-head"},
     h("label",{class:"switch", for:id, title:"Turn this effect on or off"},
       h("input",{type:"checkbox", id, "aria-label":"Turn "+title+" on or off", checked:fx.enabled!==false||null, onchange:(e)=>{ if(e.target.checked) delete fx.enabled; else fx.enabled=false; changed(); }}),
@@ -950,6 +963,98 @@ function harmonizerCard(p, fx){
     fxHead("Harmonizer", "Sings a chord with you, built on every note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
 }
 
+function vocoderCost(fx){
+  const bands = typeof fx.bands==="number" ? fx.bands : 8;
+  // with no voice in the mix (a fixed Amount of 1) the mic drops the voice's pitch shifter
+  const voiceless = fx.mix===undefined || (typeof fx.mix==="number" && fx.mix>=1);
+  return Math.round(VOCODER_COST + VOCODER_BAND_COST*(bands + ((fx.breath||0)>0 ? 1 : 0)) - (voiceless ? 10 : 0));
+}
+const VOCODER_CHORD_CHOICES = [["","One note"],["key_triad","In key"],["key_seventh","In key 7th"],["major","Major"],["minor","Minor"],["7","7"],["maj7","maj7"],["m7","m7"],["power","Power"]];
+const VOCODER_KEY_CHORDS = {key_triad:"Your note's chord in the autotune key: major, minor or diminished as the scale makes it.", key_seventh:"Your note's 7th chord in the autotune key."};
+// "in A minor, A gets A minor, C gets C major and B gets B diminished"
+function keyChordExample(tune, seventh){
+  const minor = tune.scale==="minor", root = NOTES.indexOf(normKey(tune.key||"C"));
+  const steps = minor ? [0,2,3,5,7,8,10] : [0,2,4,5,7,9,11];
+  const kinds = seventh
+    ? (minor ? ["minor 7th","half-diminished 7th","major 7th"] : ["major 7th","minor 7th","half-diminished 7th"])
+    : (minor ? ["minor","diminished","major"] : ["major","minor","diminished"]);
+  const degrees = minor ? [0,1,2] : [0,1,6];
+  const name = d => NOTES[(root+steps[d])%12];
+  const parts = degrees.map((d,i)=>name(d)+" gets "+name(d)+" "+kinds[i]);
+  return "in "+name(0)+" "+(minor?"minor":"major")+", "+parts[0]+", "+parts[1]+" and "+parts[2];
+}
+function vocoderCard(p, fx){
+  const body = h("div",{class:"fx-body"});
+  const tune = p.list.find(f=>f.effect==="autotune" && f.enabled!==false);
+  const wave = fx.waveform || "saw";
+  // key chords need a major or minor key, as the harmonizer's do
+  const keyed = !!(tune && (tune.scale==="major" || tune.scale==="minor"));
+  body.append(h("div",{class:"field"}, h("label",{}, "Carrier"),
+    h("div",{class:"seg", role:"group", "aria-label":"Carrier waveform"},
+      VOCODER_WAVES.map(([v,l])=>h("button",{"aria-pressed":String(wave===v), onclick:()=>{ fx.waveform=v; changed(); }}, l)))));
+  const chord = typeof fx.chord==="string" ? fx.chord : "";
+  body.append(h("div",{class:"field"}, h("label",{}, "Chord"),
+    h("div",{class:"seg", role:"group", "aria-label":"Carrier chord"},
+      VOCODER_CHORD_CHOICES.map(([v,l])=>h("button",{"aria-pressed":String(chord===v), disabled:(VOCODER_KEY_CHORDS[v] && !keyed && chord!==v)||null, title:VOCODER_KEY_CHORDS[v]||null,
+        onclick:()=>{ if (v) fx.chord=v; else delete fx.chord; changed(); }}, l)))));
+  if (VOCODER_KEY_CHORDS[chord]) body.append(h("p",{class:"small", style:keyed?null:"color:var(--warn)"}, keyed
+    ? "The chord follows the autotune key, like the harmonizer's key chords: "+keyChordExample(tune, chord==="key_seventh")+". Tuned in pure intervals."
+    : "Key chords need autotune set to Major or Minor, so they know which chord each note gets. Without that the mic uses C major."));
+  else if (chord) body.append(h("p",{class:"small muted"}, "The synth plays this chord on the note you sing, so sing the chord's root. It's tuned in pure intervals, which ring a little smoother than a keyboard's."));
+  // squeeze_chord: a full squeeze switches to another chord (the handle can only do one job)
+  const keyJob = tune && (tune.squeeze_key!=null || tune.squeeze_scale!=null);
+  const sq = typeof fx.squeeze_chord==="string" ? fx.squeeze_chord : null;
+  const sqBusy = keyJob || fx.mix==="$handle";
+  const sqId = nid("vsc");
+  body.append(h("label",{class:"switch", for:sqId},
+    h("input",{type:"checkbox", id:sqId, checked:sq?true:null, disabled:(sqBusy && !sq)||null,
+      onchange:(e)=>{ if (e.target.checked) fx.squeeze_chord = chord==="minor" ? "major" : "minor"; else delete fx.squeeze_chord; changed(); }}),
+    h("span",{class:"track"}), h("span",{}, "Squeeze for a different chord")));
+  if (sq){
+    const box = h("div",{class:"squeeze"});
+    box.append(h("div",{class:"field"}, h("label",{}, "Squeezed chord"),
+      h("div",{class:"seg", role:"group", "aria-label":"Chord on a full squeeze"},
+        VOCODER_CHORD_CHOICES.map(([v,l])=>[v||"none",l]).map(([v,l])=>h("button",{"aria-pressed":String(sq===v),
+          disabled:(VOCODER_KEY_CHORDS[v] && !keyed && sq!==v)||null,
+          onclick:()=>{ fx.squeeze_chord=v; changed(); }}, l)))));
+    const name = v => (VOCODER_CHORD_CHOICES.find(([c])=>(c||"none")===v)||[0,v])[1];
+    box.append(h("p",{class:"small muted"}, "Sing with a light squeeze for "+name(chord||"none")+". Squeeze past about two-thirds for "+name(sq)+". Ease off to halfway to go back."));
+    body.append(box);
+  }
+  else if (sqBusy) body.append(h("p",{class:"small muted"}, keyJob ? "The squeeze already changes the autotune key, so it can't switch the chord too." : "The squeeze already brings in the vocoder, so it can't switch the chord too."));
+  const oct = typeof fx.octave==="number" ? fx.octave : 0;
+  body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
+    h("div",{class:"seg", role:"group", "aria-label":"Carrier octave"},
+      [[-2,"−2"],[-1,"−1"],[0,"As sung"],[1,"+1"],[2,"+2"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
+  // with your voice in the mix its pitch shifter runs too, and the mic can only run 8 bands beside it
+  const voiced = !(typeof (fx.mix ?? 1)==="number" && (fx.mix ?? 1) >= 1);
+  const maxBands = voiced ? 8 : 11;
+  if (typeof fx.bands==="number" && fx.bands > maxBands) fx.bands = maxBands;
+  body.append(sliderEl({label:"Bands",min:4,max:maxBands,step:1,ends:["Smooth, lo-fi","Clear words"]}, typeof fx.bands==="number"?fx.bands:8, v=>{ fx.bands=v; changed(); }));
+  if (voiced) body.append(h("p",{class:"small muted"}, "Up to 8 bands while your voice is in the mix. Set Amount to 100% for up to 11."));
+  body.append(sliderEl({label:"Breath",min:0,max:1,step:.01,ends:["Off","Hissy s and t"]}, typeof fx.breath==="number"?fx.breath:0, v=>{ fx.breath=v; changedQuiet(); }));
+  // noise gate: room noise (a fan, an air conditioner) shouldn't play the synth
+  body.append(sliderEl({label:"Noise gate",min:-80,max:-20,step:1,unit:"dB",offAt:-80,ends:["Off","Only loud singing"]}, typeof fx.gate==="number"?fx.gate:-50, v=>{ if (v===-50) delete fx.gate; else fx.gate=v; changedQuiet(); }));
+  body.append(h("p",{class:"small muted"}, "If the synth hums with no one singing, raise the gate until it stays quiet. If word ends get cut off, lower it."));
+  // amount: fixed, or brought in by the squeeze
+  if (fx.mix==="$handle") body.append(h("div",{class:"squeeze"},
+    h("div",{class:"row spread"}, h("b",{class:"small"}, "The robot comes in as you squeeze"),
+      h("button",{class:"btn small ghost", onclick:()=>{ fx.mix=1; changed(); }}, "Use a fixed amount")),
+    h("p",{class:"small muted"}, "A light squeeze is your own voice, a full squeeze is all vocoder.")));
+  else {
+    body.append(sliderEl({label:"Amount",min:0,max:1,step:.01,ends:["Your voice","All vocoder"]}, typeof fx.mix==="number" ? fx.mix : 1, v=>{ if (v>=1) delete fx.mix; else fx.mix=v; if ((v<1) !== voiced) changed(); else changedQuiet(); }));
+    const id = nid("vsq");
+    body.append(h("label",{class:"switch small", for:id, style:"margin-left:2px"},
+      h("input",{type:"checkbox", id, disabled:(keyJob||sq)||null, onchange:()=>{ fx.mix="$handle"; changed(); }}), h("span",{class:"track"}),
+      h("span",{class:"muted"}, keyJob ? "Squeeze for the vocoder (the squeeze already changes the key)" : sq ? "Squeeze for the vocoder (the squeeze already switches the chord)" : "Squeeze to bring in the vocoder")));
+  }
+  body.append(h("p",{class:"small muted"}, tune
+    ? "The carrier plays the note autotune snaps you to, so the robot is always in key."
+    : "The carrier plays the note you sing. Add autotune to keep it in key."));
+  return h("div",{class:"fx tune"+(fx.enabled===false?" off":"")},
+    fxHead("Vocoder", "Your words on a synth that follows your note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
+}
+
 function effectCard(list, i, owner){
   const fx = list[i];
   const def = EFFECTS[fx.effect];
@@ -1061,7 +1166,13 @@ function addEffectBlock(list, forSample){
   wrap.append(h("button",{class:"btn", style:"justify-self:start", "aria-expanded":String(addOpen===list), onclick:()=>{ addOpen = addOpen===list?false:list; render(); }}, addOpen===list ? "Close" : "+ Add effect"));
   if (addOpen===list){
     const menu = h("div",{class:"addmenu"});
-    if (!forSample && !list.some(fx=>fx.effect==="harmonizer"))
+    if (!forSample && !list.some(fx=>fx.effect==="harmonizer" || fx.effect==="vocoder"))
+      menu.append(h("button",{onclick:()=>{
+        const at = list.findIndex(fx=>fx.effect==="autotune");
+        list.splice(at+1, 0, {effect:"vocoder", waveform:"saw", bands:8, octave:0, breath:.3}); addOpen=false; changed(); }},
+        h("b",{}, "Vocoder"), h("span",{}, "Robot voice: your words played by a synth that follows the note you sing."),
+        cpuCost(vocoderCost({bands:8, breath:.3}))));
+    if (!forSample && !list.some(fx=>fx.effect==="harmonizer" || fx.effect==="vocoder"))
       menu.append(h("button",{onclick:()=>{
         const at = list.findIndex(fx=>fx.effect==="autotune");
         list.splice(at+1, 0, {effect:"harmonizer", chord:"major", inversion:0, level:.7}); addOpen=false; changed(); }},
@@ -1244,6 +1355,8 @@ const FIRMWARE_NEEDS = [
   {version:"1.0", what:"Double your voice on a harmonizer",
    uses: c => (c.presets||[]).some(p => (p.list||[]).some(fx => fx.effect==="harmonizer" && fx.double && fx.enabled!==false))},
   {version:"1.0", what:"Normalize recording levels", uses: c => c.normalize_takes === true},
+  {version:"1.1", what:"The vocoder",
+   uses: c => (c.presets||[]).some(p => (p.list||[]).some(fx => fx.effect==="vocoder" && fx.enabled!==false))},
 ];
 const versionParts = v => String(v).split(".").map(n => parseInt(n,10)||0);
 function versionBelow(a, b){
@@ -1530,9 +1643,13 @@ $("#try-squeeze-slot").append(sliderEl({label:"Squeeze",min:0,max:1,step:.01,}, 
 const squeezeInput = $("#try-squeeze-slot input");
 let sweepTimer = null, squeezeTried = new Set();
 function squeezeJob(p){
+  const sv = p && p.list.find(f=>f.effect==="vocoder" && f.enabled!==false && f.squeeze_chord!=null);
+  if (sv) return "the chord change";
   if (!p || !JSON.stringify(p).includes("$handle")) return null;
   const at = p.list.find(f=>f.effect==="autotune"), hz = p.list.find(f=>f.effect==="harmonizer");
   if (hz && hz.enabled!==false && JSON.stringify(hz).includes("$handle")) return "the backing vocals come in";
+  const vo = p.list.find(f=>f.effect==="vocoder");
+  if (vo && vo.enabled!==false && JSON.stringify(vo).includes("$handle")) return "the robot voice come in";
   if (at && at.speed==="$handle") return "the tuning tighten up";
   if (at && (at.squeeze_key!=null || at.squeeze_scale!=null)) return "the key change";
   const moved = p.list.find(f=>f.enabled!==false && f.effect!=="autotune" && JSON.stringify(f).includes("$handle"));
@@ -1608,6 +1725,10 @@ const OLD_DEFAULTS = [
   [1, '{"name":"Squeeze for backups","list":[{"effect":"autotune","key":"C","scale":"chromatic","speed":0.7,"humanize":0.2,"mix":1},{"effect":"harmonizer","chord":"sus2","inversion":2,"octave":0,"level":"$handle"},{"effect":"echo","delay_ms":250,"decay":0.1,"mix":0.1,"freq_shift":false,"max_delay_ms":500}],"level":0.45}'],
   [1, '{"name":"Squeeze for backups","list":[{"effect":"autotune","key":"C","scale":"chromatic","speed":0.7,"humanize":0.2,"mix":1},{"effect":"harmonizer","chord":"sus2","inversion":2,"octave":0,"level":"$handle"},{"effect":"echo","delay_ms":250,"decay":0.1,"mix":0.1,"freq_shift":false,"max_delay_ms":500}],"level":0.6}'],
 ];
+// The defaults before Night call: the passes below bring old copies up to these, then the
+// last one moves an untouched pair to today's slots.
+const LEGACY_DEFAULTS = [["Snapped and crunched",.4],["Squeeze for backups",1],["Dream swirl",.4],["Squeeze monster",.25]]
+  .map(([n,lv])=>{ const p = clone(STARTERS.find(s=>s.name===n)); if (lv<1) p.level = lv; return p; });
 // Before the distortion matched the mic, these two defaults ran on less input gain.
 const OLD_DRIVE = [[0, 25, -16, [1, .6]], [3, 12, -8, [.2, .55]]];
 const canon = v => Array.isArray(v) ? "["+v.map(canon).join(",")+"]"
@@ -1616,30 +1737,44 @@ const canon = v => Array.isArray(v) ? "["+v.map(canon).join(",")+"]"
 const PREV_LEVELS = [[.8, .6, 1, .25], [.6, .45, 1, .2], [1, 1, .7, .55], [1, 1, .6, .5], [.4, 1, .6, .12], [.4, 1, 1, .25], [.4, 1, .5, .25], [.4, 1, .9, .25]];
 const withoutLevel = p => { const q = Object.assign({}, p); delete q.level; return canon(q); };
 for (const [i, pre, post, levels] of OLD_DRIVE){
-  const d = clone(DEFAULT_CONFIG.presets[i]), ds = d.list.find(f=>f.effect==="distortion"), p = config.presets[i];
+  const d = clone(LEGACY_DEFAULTS[i]), ds = d.list.find(f=>f.effect==="distortion"), p = config.presets[i];
   ds.pre_gain = pre; ds.post_gain = post;
-  if (p && withoutLevel(p)===withoutLevel(d) && levels.includes(p.level ?? 1)){ config.presets[i] = clone(DEFAULT_CONFIG.presets[i]); save(); }
+  if (p && withoutLevel(p)===withoutLevel(d) && levels.includes(p.level ?? 1)){ config.presets[i] = clone(LEGACY_DEFAULTS[i]); save(); }
 }
-config.presets.forEach((p, i) => { const d = DEFAULT_CONFIG.presets[i];
+config.presets.forEach((p, i) => { const d = LEGACY_DEFAULTS[i];
   if (d && withoutLevel(p)===withoutLevel(d) && PREV_LEVELS.some(l => (p.level ?? 1)===l[i])){ config.presets[i] = clone(d); save(); } });
 for (const [i, json] of OLD_DEFAULTS)
-  if (config.presets[i] && canon(config.presets[i])===canon(JSON.parse(json))){ config.presets[i] = clone(DEFAULT_CONFIG.presets[i]); save(); }
+  if (config.presets[i] && canon(config.presets[i])===canon(JSON.parse(json))){ config.presets[i] = clone(LEGACY_DEFAULTS[i]); save(); }
 // Squeeze for backups used to end in a faint echo. An untouched copy, at any of its past levels, loses it.
 { const p = config.presets[1], echo = '{"decay":0.1,"delay_ms":250,"effect":"echo","freq_shift":false,"max_delay_ms":500,"mix":0.06}';
   if (p && Array.isArray(p.list) && p.list.length && canon(p.list[p.list.length-1])===echo){
     const q = Object.assign({}, p, {list: p.list.slice(0, -1)});
-    if (withoutLevel(q)===withoutLevel(DEFAULT_CONFIG.presets[1]) && [1, .6, .45].includes(p.level ?? 1)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } } }
+    if (withoutLevel(q)===withoutLevel(LEGACY_DEFAULTS[1]) && [1, .6, .45].includes(p.level ?? 1)){ config.presets[1] = clone(LEGACY_DEFAULTS[1]); save(); } } }
 // Chipmunks in space before its last retune: full shift, a lighter chorus. Untouched copies move on.
 // Chipmunks then left slot 3. An untouched copy there, new or old, moves to the current default.
 { const p = config.presets[2], chip = STARTERS.find(s => s.name==="Chipmunks in space"), old = clone(chip);
   Object.assign(old.list[1], {mix: 1}); Object.assign(old.list[2], {delay_ms: 30, mix: .5});
-  if (p && [old, chip].some(c => withoutLevel(p)===withoutLevel(c)) && [.6, .8, 1, .7].includes(p.level ?? 1)){ config.presets[2] = clone(DEFAULT_CONFIG.presets[2]); save(); } }
+  if (p && [old, chip].some(c => withoutLevel(p)===withoutLevel(c)) && [.6, .8, 1, .7].includes(p.level ?? 1)){ config.presets[2] = clone(LEGACY_DEFAULTS[2]); save(); } }
 // Slot 3 was Slap-back for a day, then Dream swirl with the squeeze only placing the sweep, then with a sweep that dove to 200 Hz. Untouched copies move to today's Dream swirl.
 { const p = config.presets[2], gone = [STARTERS.find(s => s.name==="Slap-back"), {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"lfo",waveform:"sine",rate:{block:"math",operation:"constrained_lerp",a:0.25,b:0.8,c:"$handle"},scale:{block:"math",operation:"constrained_lerp",a:300,b:1400,c:"$handle"},offset:{block:"math",operation:"constrained_lerp",a:800,b:1600,c:"$handle"}},feedback:{block:"math",operation:"constrained_lerp",a:0.4,b:0.85,c:"$handle"},mix:{block:"math",operation:"constrained_lerp",a:0.25,b:0.5,c:"$handle"},stages:8},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.35}]}, {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"math",operation:"constrained_lerp",a:400,b:2400,c:"$handle"},feedback:.6,mix:.5,stages:6},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.35}]}];
-  if (p && gone.some(c => withoutLevel(p)===withoutLevel(c)) && [1, .5].includes(p.level ?? 1)){ config.presets[2] = clone(DEFAULT_CONFIG.presets[2]); save(); } }
+  if (p && gone.some(c => withoutLevel(p)===withoutLevel(c)) && [1, .5].includes(p.level ?? 1)){ config.presets[2] = clone(LEGACY_DEFAULTS[2]); save(); } }
 // Snapped and crunched before Doug's octave-down double and C major. Untouched copies move on.
 { const p = config.presets[0], old = {name:"Snapped and crunched", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1},{effect:"distortion",drive:.6,mode:"overdrive",pre_gain:43,post_gain:-19,soft_clip:true,mix:.4},{effect:"echo",delay_ms:250,decay:.25,mix:{block:"math",operation:"constrained_lerp",a:0,b:.2,c:"$handle"},freq_shift:false,max_delay_ms:400}]};
-  if (p && withoutLevel(p)===withoutLevel(old) && [.4, 1].includes(p.level ?? 1)){ config.presets[0] = clone(DEFAULT_CONFIG.presets[0]); save(); } }
+  if (p && withoutLevel(p)===withoutLevel(old) && [.4, 1].includes(p.level ?? 1)){ config.presets[0] = clone(LEGACY_DEFAULTS[0]); save(); } }
+// Slot 1 was Snapped and crunched and slot 2 Squeeze for backups, until backups moved to slot 1 and
+// Night call took slot 2. A visitor with both untouched moves to the new pair.
+{ const [a, b] = config.presets;
+  if (a && b && canon(a)===canon(LEGACY_DEFAULTS[0]) && canon(b)===canon(LEGACY_DEFAULTS[1])){
+    config.presets[0] = clone(DEFAULT_CONFIG.presets[0]); config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
+// Night call's first settings, for a day: key triads with 7ths on a squeeze, level 0.45.
+{ const p = config.presets[1], old = {name:"Night call", level:.45, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:10,octave:0,breath:.7,mix:1,chord:"key_triad",gate:-60,squeeze_chord:"key_seventh"}]};
+  if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
+// Then 11 bands, which with the voice in overflowed on a Ting; untouched copies take 8.
+{ const p = config.presets[1], old = {name:"Night call", level:.7, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:11,octave:0,breath:.7,mix:.9,gate:-60,squeeze_chord:"key_triad"}]};
+  if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
+// Then 8 bands at 90%, before the voice came down to 85%.
+{ const p = config.presets[1], old = {name:"Night call", level:.7, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:8,octave:0,breath:.7,mix:.9,gate:-60,squeeze_chord:"key_triad"}]};
+  if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
 // Slots 3 and 4 used to default to hold and start/stop. Untouched ones move to tap to play.
 [[2,"hold"],[3,"startstop"]].forEach(([i, mode]) => { const s = config.samples[i];
   if (s && s.playmode===mode && canon(Object.keys(s).filter(k=>k!=="playmode").reduce((o,k)=>(o[k]=s[k],o),{}))===canon({file:(i+1)+".wav"})){ s.playmode = "oneshot"; save(); } });
