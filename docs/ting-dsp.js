@@ -247,10 +247,88 @@ function dspFactory(){
     }
   }
 
+  /* ---------- vocoder, as firmware/autotune.py (Vocoder) ----------
+     A carrier at the sung (or tuned) note through one band-pass per band; the band levels come from
+     an FFT of the newest power-of-two samples of the pitch window, every other block like the mic. */
+  const VOC={WAVEFORMS:["saw","square","pulse"], MAX_BANDS:11, LOW:180, HIGH:5000, BREATH:4000, HARMONICS:48, TABLE:256, NOISE:2048, GAIN:0.7, RELEASE:0.4};
+  const vocWaves={};
+  function carrierWave(shape){
+    if(!VOC.WAVEFORMS.includes(shape)) throw new Error("vocoder waveform must be saw, square or pulse");
+    if(vocWaves[shape]) return vocWaves[shape];
+    const n=VOC.TABLE, terms=[];
+    for(let k=1;k<=VOC.HARMONICS;k++) terms.push(shape==="saw"?[k,1/k,false]: shape==="square"?[k,k%2?1/k:0,false] : [k,Math.sin(Math.PI*k*0.25)/k,true]);
+    const w=new Float64Array(n);
+    for(const [k,a,cos] of terms) if(a) for(let i=0;i<n;i++){ const t=2*Math.PI*k*i/n; w[i]+=a*(cos?Math.cos(t):Math.sin(t)); }
+    let pk=0; for(let i=0;i<n;i++) pk=Math.max(pk,Math.abs(w[i]));
+    const scale=30000/pk, table=new Float32Array(n);
+    for(let i=0;i<n;i++) table[i]=Math.trunc(w[i]*scale)/32768;
+    let density=0; for(const [k,a] of terms) density+=(k*a*scale)**2; density/=terms.length;
+    return vocWaves[shape]={table, density};
+  }
+  // power spectrum |FFT(x)|^2 of a power-of-two length, first half
+  function powerSpectrum(x){
+    const n=x.length, re=Float64Array.from(x), im=new Float64Array(n);
+    for(let i=1,j=0;i<n;i++){ let b=n>>1; for(;j&b;b>>=1) j^=b; j|=b; if(i<j){ const t=re[i]; re[i]=re[j]; re[j]=t; } }
+    for(let len=2;len<=n;len<<=1){ const a=-2*Math.PI/len, wr=Math.cos(a), wi=Math.sin(a);
+      for(let i=0;i<n;i+=len){ let cr=1, ci=0;
+        for(let k=0;k<len/2;k++){ const u=i+k, v=u+len/2, tr=re[v]*cr-im[v]*ci, ti=re[v]*ci+im[v]*cr;
+          re[v]=re[u]-tr; im[v]=im[u]-ti; re[u]+=tr; im[u]+=ti; const nr=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=nr; } } }
+    const p=new Float64Array(n/2); for(let i=0;i<n/2;i++) p[i]=re[i]*re[i]+im[i]*im[i]; return p;
+  }
+  const bandPass=(f,Q,sr)=>{ const w=2*Math.PI*f/sr, cs=Math.cos(w), al=Math.sin(w)/(2*Q), a0=1+al; return {b0:al/a0, b2:-al/a0, a1:-2*cs/a0, a2:(1-al)/a0, x1:0,x2:0,y1:0,y2:0}; };
+  const highPass=(f,Q,sr)=>{ const w=2*Math.PI*f/sr, cs=Math.cos(w), al=Math.sin(w)/(2*Q), a0=1+al; return {b0:(1+cs)/2/a0, b1:-(1+cs)/a0, b2:(1+cs)/2/a0, a1:-2*cs/a0, a2:(1-al)/a0, x1:0,x2:0,y1:0,y2:0}; };
+  const biq=(f,x)=>{ const y=f.b0*x+(f.b1||0)*f.x1+f.b2*f.x2-f.a1*f.y1-f.a2*f.y2; f.x2=f.x1; f.x1=x; f.y2=f.y1; f.y1=y; return y; };
+  class Vocoder {
+    constructor(sr, buf, waveform, bands, octave, breath){
+      if(!Number.isInteger(bands)||bands<4||bands>VOC.MAX_BANDS) throw new Error("vocoder bands must be 4 to "+VOC.MAX_BANDS);
+      if(!Number.isInteger(octave)||octave<-2||octave>2) throw new Error("vocoder octave must be -2 to 2");
+      if(typeof breath!=="number") throw new Error("vocoder breath must be a number");
+      const {table, density}=carrierWave(waveform);
+      this.sr=sr; this.table=table; this.oct=Math.pow(2,octave); this.hz=0; this.ph=0; this.breath=clamp(breath,0,1);
+      let n=1; while(n*2<=buf) n*=2; this.n=n;
+      this.hann=new Float64Array(n); for(let i=0;i<n;i++) this.hann[i]=Math.sin(Math.PI*(i+0.5)/n)**2;
+      const psd=2/(n*n*0.375), high=Math.min(VOC.HIGH,0.4*sr), ratio=Math.pow(high/VOC.LOW,1/(bands-1)), half=Math.sqrt(ratio), Q=1/(half-1/half);
+      this.bands=[];
+      for(let i=0;i<bands;i++){
+        const c=VOC.LOW*Math.pow(ratio,i), lo=c/half, hi=c*half, a=Math.max(1,Math.trunc(lo*n/sr+0.5)), b=Math.max(a+1,Math.trunc(hi*n/sr+0.5));
+        this.bands.push({a, b, k:VOC.GAIN*Math.sqrt(psd/(density/2*(1/lo-1/hi))), floor:hi, level:0, f:bandPass(c,Q,sr)});
+      }
+      this.noise=null;
+      if(this.breath>0){
+        const cut=Math.min(VOC.BREATH,0.35*sr); let seed=12345; const t=new Float32Array(VOC.NOISE);
+        for(let i=0;i<VOC.NOISE;i++){ seed=(Math.imul(seed,1103515245)+12345)&0x7fffffff; t[i]=((seed>>>15)%60001-30000)/32768; }
+        this.noise={t, pos:0, a:Math.trunc(cut*n/sr+0.5), b:n/2, k:this.breath*VOC.GAIN*Math.sqrt(psd)/(17320*Math.sqrt(1-cut/(sr/2))), level:0, f:highPass(cut,0.7071,sr)};
+      }
+    }
+    update(win, hz){
+      if(hz>0){ hz=clamp(hz*this.oct,30,2000); if(Math.abs(hz-this.hz)>0.002*hz) this.hz=hz; }
+      const n=this.n, off=win.length-n, x=new Float64Array(n);
+      for(let i=0;i<n;i++) x[i]=win[off+i]*32768*this.hann[i];
+      const p=powerSpectrum(x), sum=(a,b)=>{ let t=0; for(let i=a;i<b;i++) t+=p[i]; return t; };
+      const f0=this.hz||110, root=1/Math.sqrt(f0);
+      for(const bd of this.bands){
+        if(bd.floor<f0){ bd.level=0; continue; }
+        let lv=Math.min(1,bd.k*Math.sqrt(sum(bd.a,bd.b))*root);
+        if(lv<bd.level) lv+=(bd.level-lv)*VOC.RELEASE;
+        bd.level=lv;
+      }
+      if(this.noise) this.noise.level=Math.min(1,this.noise.k*Math.sqrt(sum(this.noise.a,this.noise.b)));
+    }
+    tick(){
+      const T=this.table, L=T.length, f0=this.hz||110;
+      const p=this.ph*L, i=Math.floor(p), fr=p-i, c=T[i%L]+(T[(i+1)%L]-T[i%L])*fr;
+      this.ph+=f0/this.sr; if(this.ph>=1) this.ph-=1;
+      let y=0; for(const bd of this.bands) y+=biq(bd.f, c*bd.level);
+      const nz=this.noise; if(nz){ y+=biq(nz.f, nz.t[nz.pos]*nz.level); nz.pos=(nz.pos+1)%nz.t.length; }
+      return mixDown(y,MIX_2);
+    }
+  }
+
   /* ---------- effects ---------- */
   const PARAMS={
     autotune:["key","scale","speed","humanize","mix","grain_size","density","squeeze_key","squeeze_scale"],
     harmonizer:["chord","inversion","octave","level"],
+    vocoder:["waveform","bands","octave","breath","mix"],
     pitch_shift:["semitones","mix","window","overlap"],
     granular_pitch_shift:["semitones","mix","grain_size","density","spread"],
     distortion:["drive","pre_gain","post_gain","mode","soft_clip","mix"],
@@ -266,7 +344,7 @@ function dspFactory(){
   const dbToGain=d=>Math.pow(10,d/20);
   const MIX_DEFAULT={autotune:1,pitch_shift:1,granular_pitch_shift:1,distortion:1,filter:1,phaser:1,chorus:0.5,echo:0.25,multi_tap_delay:0.25,freeverb:0.5}; // CircuitPython 10.3 defaults
 
-  // harm: the preset's harmonizer, which runs inside the autotune stage, {spec, correct}
+  // harm: the preset's harmonizer or vocoder, which runs inside the autotune stage, {spec, correct, vocoder}
   function makeEffect(spec, ns, host, harm){
     if(!spec||typeof spec!=="object") throw new Error("effect config must be a dict");
     if(!("effect" in spec)) throw new Error('effect config is missing the "effect" key');
@@ -304,7 +382,18 @@ function dspFactory(){
         // harmonizer: one more grain shifter per harmony voice, summed with the corrected voice
         const correct=!harm||harm.correct;
         let voices=[], ivs=[], keyChord=null, inv=0, oct=0, levelF=null;
-        if(harm){
+        // vocoder: a carrier at the tuned note, with the voice (vocMix 0) or instead of it (1)
+        let voc=null, vocMixF=null, vocTurn=0;
+        if(harm&&harm.vocoder){
+          const vs=harm.spec;
+          for(const k in vs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.vocoder.includes(k)) throw new Error("vocoder has no parameter "+k);
+          const usesH=v=> typeof v==="string" ? v==="$handle" : (v&&typeof v==="object" ? Object.values(v).some(usesH) : false);
+          if(alt&&usesH(vs.mix)) throw new Error("vocoder: the handle can change the key or drive the mix, not both");
+          const intOf=(v,d,nm)=>{ v=v==null?d:v; if(typeof v!=="number") throw new Error("vocoder "+nm+" must be a number"); return Math.trunc(v); };
+          voc=new Vocoder(sr, det.BUF, vs.waveform==null?"saw":String(vs.waveform), intOf(vs.bands,8,"bands"), intOf(vs.octave,0,"octave"), vs.breath==null?0:vs.breath);
+          vocMixF=compile(vs.mix??1,"vocoder mix",ns);
+        }
+        else if(harm){
           const hs=harm.spec;
           for(const k in hs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.harmonizer.includes(k)) throw new Error("harmonizer has no parameter "+k);
           const chord=hs.chord==null?"major":String(hs.chord);
@@ -353,6 +442,8 @@ function dspFactory(){
               }
               vRatios=ivs.map(iv=>Math.pow(2,(corr+iv)/12));
               if(py&&hz>0) lsh.lock(sr/hz); lsh.begin(det.BLOCK);
+              // the mic measures the voice on the blocks between its pitch searches, every other block
+              if(voc&&(vocTurn^=1)===0) voc.update(det.win, hz>0 ? hz*ratio : 0);
               host.report({hz, cents: correct?cents:null, correction:corr, target: correct?snap.target:null, midi: hz>0?12*log2(hz/440)+69:null, autotune:correct, squeezed, harmony: voices.length?ivs.slice():null});
             }
             let out= py ? x*(1-mix)+lsh.tick(x,ratio)*mix : shiftMix(x,gsh.tick(x,ratio),mix);
@@ -360,6 +451,7 @@ function dspFactory(){
               let hsum=0; for(let k=0;k<voices.length;k++) hsum+=shiftMix(x,voices[k].tick(x,vRatios[k]),1);
               out=(out+hsum*hl)*hg;
             }
+            if(voc){ const vm=clamp(vocMixF(env),0,1); out=vm>=1 ? voc.tick() : mixDown(out*(1-vm)+voc.tick()*vm,MIX_2); }
             buf[i]=out;
           }
         };
@@ -524,7 +616,7 @@ function dspFactory(){
     const notes=[];
     let enabled=specs.filter((s,i)=>{ if(s&&"enabled" in s&&typeof s.enabled!=="boolean") throw new Error("specs["+i+"] enabled must be true or false"); return !(s&&s.enabled===false); });
     const isType=t=>s=>s&&typeof s.effect==="string"&&(()=>{ try{ return effectKey(s.effect)===t; }catch(e){ return false; } })();
-    const at=enabled.filter(isType("autotune")), hz=enabled.filter(isType("harmonizer"));
+    const at=enabled.filter(isType("autotune")), hz=enabled.filter(isType("harmonizer")), vo=enabled.filter(isType("vocoder"));
     if(at.length){
       if(isSample) throw new Error("autotune is not allowed in sample effects");
       if(at.length>1) throw new Error("only one autotune per preset");
@@ -537,6 +629,15 @@ function dspFactory(){
       // the harmonizer runs inside the autotune stage; without autotune the voice stays untuned
       harm={spec:hz[0], correct:at.length>0};
       enabled=enabled.filter(s=>s!==hz[0]);
+      if(!at.length) enabled=[{effect:"autotune"}].concat(enabled);
+    }
+    if(vo.length){
+      if(isSample) throw new Error("the vocoder is not allowed in sample effects");
+      if(vo.length>1) throw new Error("only one vocoder per preset");
+      if(hz.length) throw new Error("a preset can have a harmonizer or a vocoder, not both");
+      // the vocoder runs inside the autotune stage too; without autotune the carrier follows the voice as sung
+      harm={spec:vo[0], correct:at.length>0, vocoder:true};
+      enabled=enabled.filter(s=>s!==vo[0]);
       if(!at.length) enabled=[{effect:"autotune"}].concat(enabled);
     }
     const ns=new NS(defs, host.blocks);

@@ -533,6 +533,11 @@ const CHORD_NOTES = {
   "7b9":"Dark dominant, leaves out the 5th.", "7#9":"The Hendrix chord.", "maj7#11":"Bright and floaty, Lydian.", "11":"7th, 9th and 11th over you.", m11:"Minor 3rd, 7th and 11th.",
   "13":"3rd, 7th and 13th over you.", maj13:"3rd, maj7th and 13th.", m13:"Minor 3rd, 7th and 13th.", quartal:"Stacked 4ths. Modern and open."};
 const HARMONY_VOICE_COST = 17;
+// Effects that run inside the autotune stage, so they sit at the top of the chain.
+const STAGE_FX = ["autotune", "harmonizer", "vocoder"];
+// Guessed, not yet measured on a Ting: the bands are synthio notes, each a waveform and a biquad.
+const VOCODER_COST = 12, VOCODER_BAND_COST = 2.5;
+const VOCODER_WAVES = [["saw","Saw (buzzy)"],["square","Square (hollow)"],["pulse","Pulse (nasal)"]];
 const FILTER_MODES = [["high_pass","Thin (cut lows)"],["low_pass","Muffle (cut highs)"],["band_pass","Telephone (band)"],["notch","Notch"]];
 const PLAYMODES = [["oneshot","Tap to play"],["hold","Hold to play"],["startstop","Tap start / stop"]];
 
@@ -549,7 +554,8 @@ const STARTERS = [
 STARTERS.push(
   {name:"Slap-back", list:[{effect:"filter",filter:{mode:"high_pass",frequency:120,Q:.7071},mix:1},{effect:"echo",delay_ms:120,decay:{block:"math",operation:"constrained_lerp",a:.1,b:.5,c:"$handle"},mix:.35,freq_shift:false,max_delay_ms:200},{effect:"freeverb",roomsize:.2,damp:.6,mix:.12}]},
   {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"lfo",waveform:"sine",rate:{block:"math",operation:"constrained_lerp",a:0.25,b:0.8,c:"$handle"},scale:{block:"math",operation:"constrained_lerp",a:300,b:1150,c:"$handle"},offset:{block:"math",operation:"constrained_lerp",a:900,b:1850,c:"$handle"}},feedback:{block:"math",operation:"constrained_lerp",a:0.4,b:0.85,c:"$handle"},mix:{block:"math",operation:"constrained_lerp",a:0.25,b:0.5,c:"$handle"},stages:8},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.2}]},
-  {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]});
+  {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]},
+  {name:"Robot in key", list:[{effect:"autotune",key:"C",scale:"major",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:9,octave:0,breath:.3,mix:"$handle"},{effect:"chorus",max_delay_ms:50,delay_ms:15,voices:2,mix:.3},{effect:"echo",max_delay_ms:400,delay_ms:250,decay:.25,mix:.12,freq_shift:false}]});
 const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[[STARTERS[7],.4],[STARTERS[1],1],[STARTERS[9],.4],[STARTERS[5],.25]].map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
   samples:[{file:"1.wav",playmode:"oneshot"},{file:"2.wav",playmode:"oneshot"},{file:"3.wav",playmode:"oneshot"},{file:"4.wav",playmode:"oneshot"}]};
 
@@ -572,9 +578,9 @@ function normalizeConfig(c){
   (Array.isArray(c.presets) ? c.presets : []).slice(0,4).forEach(p => {
     const list = Array.isArray(p && p.list) ? p.list.map(fx => Object.assign({}, fx, {effect: normName(fx.effect) || fx.effect})) : [];
     // autotune always heads the chain
-    // autotune always heads the chain, and the harmonizer runs alongside it
-    const tunes = list.filter(fx => fx.effect === "autotune"), harms = list.filter(fx => fx.effect === "harmonizer");
-    const rest = list.filter(fx => fx.effect !== "autotune" && fx.effect !== "harmonizer");
+    // autotune always heads the chain, and the harmonizer or vocoder runs alongside it
+    const tunes = list.filter(fx => fx.effect === "autotune"), harms = list.filter(fx => fx.effect === "harmonizer" || fx.effect === "vocoder");
+    const rest = list.filter(fx => !STAGE_FX.includes(fx.effect));
     out.presets.push(Object.assign({}, p, {list: tunes.slice(0,1).concat(harms.slice(0,1), rest)}));
   });
   (Array.isArray(c.samples) ? c.samples : []).slice(0,4).forEach(s => out.samples.push(Object.assign({playmode:"oneshot"}, s)));
@@ -646,7 +652,7 @@ function sliderEl(meta, value, onInput){
 
 /* --------------------------- rendering ----------------------------- */
 function chainSummary(p){
-  const names = p.list.filter(fx=>fx.enabled!==false).map(fx => fx.effect==="autotune" ? "Autotune" : fx.effect==="harmonizer" ? "Harmonizer" : (EFFECTS[fx.effect]?EFFECTS[fx.effect].label:fx.effect));
+  const names = p.list.filter(fx=>fx.enabled!==false).map(fx => fx.effect==="autotune" ? "Autotune" : fx.effect==="harmonizer" ? "Harmonizer" : fx.effect==="vocoder" ? "Vocoder" : (EFFECTS[fx.effect]?EFFECTS[fx.effect].label:fx.effect));
   return names.length ? names.join(" → ") : "No effects";
 }
 function renderSlots(){
@@ -686,7 +692,9 @@ function renderEditor(){
       h("button",{class:"btn small primary", onclick:()=>{ p.list.unshift({effect:"autotune",key:"C",scale:"chromatic",speed:1,humanize:0,mix:1}); changed(); }}, "Add autotune"))));
   const harm = p.list.find(fx=>fx.effect==="harmonizer");
   if (harm) chain.append(harmonizerCard(p, harm));
-  p.list.forEach((fx,i) => { if (fx.effect!=="autotune" && fx.effect!=="harmonizer") chain.append(effectCard(p.list, i, p)); });
+  const voc = p.list.find(fx=>fx.effect==="vocoder");
+  if (voc) chain.append(vocoderCard(p, voc));
+  p.list.forEach((fx,i) => { if (!STAGE_FX.includes(fx.effect)) chain.append(effectCard(p.list, i, p)); });
   root.append(chain);
   root.append(addEffectBlock(p.list, false));
 
@@ -703,6 +711,7 @@ function loadMeter(p){
   const tuned = p.list.some(fx=>fx.effect==="autotune" && fx.enabled!==false);
   p.list.forEach(fx => { if (fx.enabled===false) return; if (fx.effect==="autotune"){ cost+=AUTOTUNE_COST; return; }
     if (fx.effect==="harmonizer"){ cost += harmonyVoices(fx).length*HARMONY_VOICE_COST + (tuned ? 0 : AUTOTUNE_COST-10); return; }
+    if (fx.effect==="vocoder"){ cost += vocoderCost(fx) + (tuned ? 0 : AUTOTUNE_COST-10); return; }
     const e=EFFECTS[fx.effect]; if(!e) return; cost+=e.cost; if (e.ram){ const ms = typeof fx.max_delay_ms==="number"?fx.max_delay_ms:e.params.max_delay_ms.def; ramKB += ms*2*(typeof config.sample_rate==="number" ? config.sample_rate : 24000)/1e6; } });
   // Costs are for 24 kHz; the built-in effects' work grows with the rate.
   cost = Math.round(cost * (typeof config.sample_rate==="number" ? config.sample_rate : 24000) / 24000);
@@ -718,7 +727,7 @@ function loadMeter(p){
 function fxHead(title, what, list, i, fx, extra){
   const id = nid("en");
   const n = list.length;
-  const isFirstMovable = i===0 || (list[i-1] && (list[i-1].effect==="autotune" || list[i-1].effect==="harmonizer"));
+  const isFirstMovable = i===0 || (list[i-1] && STAGE_FX.includes(list[i-1].effect));
   return h("div",{class:"fx-head"},
     h("label",{class:"switch", for:id, title:"Turn this effect on or off"},
       h("input",{type:"checkbox", id, "aria-label":"Turn "+title+" on or off", checked:fx.enabled!==false||null, onchange:(e)=>{ if(e.target.checked) delete fx.enabled; else fx.enabled=false; changed(); }}),
@@ -894,6 +903,45 @@ function harmonizerCard(p, fx){
     fxHead("Harmonizer", "Sings a chord with you, built on every note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
 }
 
+function vocoderCost(fx){
+  const bands = typeof fx.bands==="number" ? fx.bands : 8;
+  // with no voice in the mix (a fixed Amount of 1) the mic drops the voice's pitch shifter
+  const voiceless = fx.mix===undefined || (typeof fx.mix==="number" && fx.mix>=1);
+  return Math.round(VOCODER_COST + VOCODER_BAND_COST*(bands + ((fx.breath||0)>0 ? 1 : 0)) - (voiceless ? 10 : 0));
+}
+function vocoderCard(p, fx){
+  const body = h("div",{class:"fx-body"});
+  const tune = p.list.find(f=>f.effect==="autotune" && f.enabled!==false);
+  const wave = fx.waveform || "saw";
+  body.append(h("div",{class:"field"}, h("label",{}, "Carrier"),
+    h("div",{class:"seg", role:"group", "aria-label":"Carrier waveform"},
+      VOCODER_WAVES.map(([v,l])=>h("button",{"aria-pressed":String(wave===v), onclick:()=>{ fx.waveform=v; changed(); }}, l)))));
+  const oct = typeof fx.octave==="number" ? fx.octave : 0;
+  body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
+    h("div",{class:"seg", role:"group", "aria-label":"Carrier octave"},
+      [[-2,"−2"],[-1,"Down"],[0,"As sung"],[1,"Up"],[2,"+2"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
+  body.append(sliderEl({label:"Bands",min:4,max:11,step:1,ends:["Smooth, lo-fi","Clear words"]}, typeof fx.bands==="number"?fx.bands:8, v=>{ fx.bands=v; changed(); }));
+  body.append(sliderEl({label:"Breath",min:0,max:1,step:.01,ends:["Off","Hissy s and t"]}, typeof fx.breath==="number"?fx.breath:0, v=>{ fx.breath=v; changedQuiet(); }));
+  // amount: fixed, or brought in by the squeeze
+  const keyJob = tune && (tune.squeeze_key!=null || tune.squeeze_scale!=null);
+  if (fx.mix==="$handle") body.append(h("div",{class:"squeeze"},
+    h("div",{class:"row spread"}, h("b",{class:"small"}, "The robot comes in as you squeeze"),
+      h("button",{class:"btn small ghost", onclick:()=>{ fx.mix=1; changed(); }}, "Use a fixed amount")),
+    h("p",{class:"small muted"}, "A light squeeze is your own voice, a full squeeze is all vocoder.")));
+  else {
+    body.append(sliderEl({label:"Amount",min:0,max:1,step:.01,ends:["Your voice","All vocoder"]}, typeof fx.mix==="number" ? fx.mix : 1, v=>{ if (v>=1) delete fx.mix; else fx.mix=v; changedQuiet(); }));
+    const id = nid("vsq");
+    body.append(h("label",{class:"switch small", for:id, style:"margin-left:2px"},
+      h("input",{type:"checkbox", id, disabled:keyJob||null, onchange:()=>{ fx.mix="$handle"; changed(); }}), h("span",{class:"track"}),
+      h("span",{class:"muted"}, keyJob ? "Squeeze for the vocoder (the squeeze already changes the key)" : "Squeeze to bring in the vocoder")));
+  }
+  body.append(h("p",{class:"small muted"}, tune
+    ? "The carrier plays the note autotune snaps you to, so the robot is always in key."
+    : "The carrier plays the note you sing. Add autotune to keep it in key."));
+  return h("div",{class:"fx tune"+(fx.enabled===false?" off":"")},
+    fxHead("Vocoder", "Your words on a synth that follows your note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
+}
+
 function effectCard(list, i, owner){
   const fx = list[i];
   const def = EFFECTS[fx.effect];
@@ -1005,7 +1053,13 @@ function addEffectBlock(list, forSample){
   wrap.append(h("button",{class:"btn", style:"justify-self:start", "aria-expanded":String(addOpen===list), onclick:()=>{ addOpen = addOpen===list?false:list; render(); }}, addOpen===list ? "Close" : "+ Add effect"));
   if (addOpen===list){
     const menu = h("div",{class:"addmenu"});
-    if (!forSample && !list.some(fx=>fx.effect==="harmonizer"))
+    if (!forSample && !list.some(fx=>fx.effect==="harmonizer" || fx.effect==="vocoder"))
+      menu.append(h("button",{onclick:()=>{
+        const at = list.findIndex(fx=>fx.effect==="autotune");
+        list.splice(at+1, 0, {effect:"vocoder", waveform:"saw", bands:8, octave:0, breath:.3}); addOpen=false; changed(); }},
+        h("b",{}, "Vocoder"), h("span",{}, "Robot voice: your words played by a synth that follows the note you sing."),
+        cpuCost(vocoderCost({bands:8, breath:.3}))));
+    if (!forSample && !list.some(fx=>fx.effect==="harmonizer" || fx.effect==="vocoder"))
       menu.append(h("button",{onclick:()=>{
         const at = list.findIndex(fx=>fx.effect==="autotune");
         list.splice(at+1, 0, {effect:"harmonizer", chord:"major", inversion:0, octave:0, level:.7}); addOpen=false; changed(); }},
@@ -1419,6 +1473,8 @@ function squeezeJob(p){
   if (!p || !JSON.stringify(p).includes("$handle")) return null;
   const at = p.list.find(f=>f.effect==="autotune"), hz = p.list.find(f=>f.effect==="harmonizer");
   if (hz && hz.enabled!==false && JSON.stringify(hz).includes("$handle")) return "the backing vocals come in";
+  const vo = p.list.find(f=>f.effect==="vocoder");
+  if (vo && vo.enabled!==false && JSON.stringify(vo).includes("$handle")) return "the robot voice come in";
   if (at && at.speed==="$handle") return "the tuning tighten up";
   if (at && (at.squeeze_key!=null || at.squeeze_scale!=null)) return "the key change";
   const moved = p.list.find(f=>f.enabled!==false && f.effect!=="autotune" && JSON.stringify(f).includes("$handle"));

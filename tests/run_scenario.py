@@ -98,6 +98,16 @@ def main():
              "levels": [v.level for v in m.voice]}
             for m in script.mixers
             if type(m.voice[0].playing).__name__ == "GranularPitchShift"), None),
+        # the vocoder: carrier pitch, band levels, and what plays it
+        "vocoders": [
+            {"hz": [n.frequency for n in v.pressed],
+             "peaks": [max(n.amplitude_log) if n.amplitude_log else None for n in v.pressed],
+             "filters": [n.filter.kwargs.get("frequency") for n in v.pressed],
+             "rate": v.kwargs.get("sample_rate")}
+            for v in script.synths
+        ],
+        "plays": script.plays,
+        "voice0": type(env["mixer"].voice[0].playing).__name__,
         "red_counts": [
             [round(t, 3), sum(v for k, v in leds.items() if k.startswith("LED_RED"))]
             for t, leds in script.led_log

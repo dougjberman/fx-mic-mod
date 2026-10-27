@@ -23,6 +23,15 @@ Each block sets every harmony shifter to the autotune correction plus its chord 
 autotune in the preset the stage runs with no correction (and skips pitch detection unless a key
 chord needs the note).
 
+## How the vocoder runs
+A `vocoder` effect also joins the autotune stage. Its carrier is a `synthio.Synthesizer` with one
+`Note` per band: a band-limited saw / square / pulse table through that note's own band-pass
+`synthio.Biquad`, all at the tracked note (the corrected note when the preset has autotune).
+Python only measures the voice: on the blocks between pitch searches it takes the newest
+power-of-two samples of the pitch window (512 at 16 or 24 kHz), runs a ulab FFT, sums the bins of
+each band and sets each band note's amplitude. With `mix` 1 nothing plays the voice, so the stage
+builds no shifter and the synth heads the chain; otherwise a two-voice mixer sums voice and synth.
+
 ## Needs checking on the device
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
   the dead zone (0.25, or `"handle_dead_zone"` in config.json). The console prints "handle opens the
@@ -32,6 +41,17 @@ chord needs the note).
   `overflow` with a four-note chord, and try `density` 1 on autotune if it can't keep up.
 - **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for
   flamming or a comb sound on the harmony; if so, the shifters may need one shared feed.
+- **Vocoder CPU:** `import autotune; autotune.bench_vocoder()` on the serial console times the
+  Python side of one measurement (FFT and band sums); it should stay well under the pitch search
+  (`autotune.bench()`). The synth side is native: 8 bands is 8 synthio notes with a biquad each.
+  Watch for `overflow` with 11 bands plus breath, and with the vocoder before a reverb. If blocks
+  overrun, try fewer bands; `VOCODER_EVERY_BLOCK = True` gives smoother bands for more CPU.
+- **Vocoder APIs:** written for CircuitPython 10's `synthio.Note(filter=synthio.Biquad(...))` and
+  `ulab.utils.spectrogram` (or `ulab.numpy.fft.fft`). A preset that fails to build falls back to
+  clean and prints why.
+- **Vocoder level:** `VOCODER_GAIN` (0.7) puts the vocoder about level with the voice in the
+  browser preview. Check it against the Clean spot on the mic, and that a loud voice doesn't hit
+  the synth's soft clip. Band levels step every 32 ms; listen for zipper noise on held vowels.
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.

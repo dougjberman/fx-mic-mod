@@ -513,7 +513,7 @@ def build(ctx, preset):
 
 
 
-        for name in ("speed", "humanize", "harmony_level"):
+        for name in ("speed", "humanize", "harmony_level", "vocoder_mix"):
             if tune_args.get(name) is handle_control:
                 tune_args[name] = handle_value
 
@@ -615,6 +615,8 @@ def select_preset(ctx, index):
                     "autotune" if ctx.tune.correct else "voice",
                     ctx.tune.shifter_name,
                     ", harmonizer {} voices".format(len(ctx.tune.voices)) if ctx.tune.voices else "",
+                ) + (
+                    ", vocoder {} bands".format(len(ctx.tune.vocoder.notes)) if ctx.tune.vocoder else ""
                 ) if ctx.tune else "",
                 gc.mem_free(),
             )
