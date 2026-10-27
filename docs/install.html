@@ -994,15 +994,18 @@ while True:
   // After a power cycle the mic comes back as a new port. Chrome remembers ports it was given,
   // so the console reopens the mic's port when it reappears, unless Disconnect was clicked,
   // and restarts the code once so its start-up lines aren't lost.
-  let lastInfo = null, follow = false;
+  // stopping ends the read loop: a cancelled read returns done, and without it the loop took a
+  // new reader at once, read done again, and so on without ever yielding (the page froze).
+  let lastInfo = null, follow = false, stopping = false, reading = null;
   async function openPort(p) {
     await p.open({ baudRate: 115200 });
-    port = p; lastInfo = p.getInfo(); follow = true;
+    port = p; lastInfo = p.getInfo(); follow = true; stopping = false;
+    let finished; reading = new Promise(r => finished = r);
     writer = port.writable.getWriter();
     serialUi(true); markDone("console");
     const dec = new TextDecoder();
     try {
-      while (port && port.readable) {
+      while (port && port.readable && !stopping) {
         reader = port.readable.getReader();
         try {
           for (;;) { const { value, done } = await reader.read(); if (done) break; log(plain(dec.decode(value, { stream: true }))); }
@@ -1010,7 +1013,7 @@ while True:
       }
     } catch (e) { log("\n[disconnected: " + e.message + (follow ? ". Reconnecting when the mic comes back…" : "") + "]\n"); }
     try { if (writer) writer.releaseLock(); } catch (e) {}
-    writer = null; port = null; serialUi(false);
+    writer = null; port = null; serialUi(false); finished();
   }
   // CircuitPython sends terminal codes (clear line, window title); hide them. A code split
   // across two reads waits for the rest.
@@ -1078,10 +1081,12 @@ while True:
   $("serialBoot").addEventListener("click", () => send("\x03\r\nimport microcontroller; microcontroller.on_next_reset(microcontroller.RunMode.BOOTLOADER); microcontroller.reset()\r\n"));
   $("serialForm").addEventListener("submit", (ev) => { ev.preventDefault(); const v = $("serialLine").value; $("serialLine").value = ""; send(v + "\r\n"); });
   $("serialDisconnect").addEventListener("click", async () => {
-    follow = false;
+    follow = false; stopping = true;
+    $("serialDisconnect").disabled = true;
+    const p = port, loop = reading;
     try { if (reader) await reader.cancel(); } catch (e) {}
-    try { if (writer) { writer.releaseLock(); writer = null; } } catch (e) {}
-    try { if (port) await port.close(); } catch (e) {}
+    if (loop) await loop;   // the read loop lets go of the port's streams
+    try { if (p) await p.close(); } catch (e) {}
     port = null; serialUi(false); log("\nDisconnected.\n");
   });
 
