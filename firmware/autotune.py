@@ -726,6 +726,13 @@ VOCODER_TABLE = 256             # carrier waveform samples
 VOCODER_NOISE = 2048            # breath noise waveform samples
 VOCODER_GAIN = 0.7              # carrier band level against the voice's, by ear
 VOCODER_RELEASE = 0.4           # share of a band's level kept when the voice falls
+# Noise gate: the bands open when the voice's level across them (dB from
+# full scale) reaches the gate, and close again once it has been GATE_CLOSE
+# dB under it for GATE_HOLD measurements (~130 ms), so word ends aren't cut.
+VOCODER_GATE = -50.0            # default gate; at VOCODER_GATE_OFF or below, no gate
+VOCODER_GATE_OFF = -80.0
+VOCODER_GATE_CLOSE = 6.0
+VOCODER_GATE_HOLD = 4
 # True measures the voice every block (smoother, but the pitch-search blocks
 # then carry both); False only on the blocks between pitch searches.
 VOCODER_EVERY_BLOCK = False
@@ -896,9 +903,12 @@ class Vocoder:
                 on the sung note (in just intonation); or a VOCODER_KEY_CHORDS
                 name, and set_chord() picks the chord as the key gives it
       breath    0..1, noise for the voice's highs (s, t, f), so words come through
+      gate      noise gate in dB from full scale (see VOCODER_GATE), so room
+                noise (a fan, an air conditioner) doesn't play the carrier
     """
 
-    def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0, chord=None):
+    def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0, chord=None,
+                 gate=VOCODER_GATE):
         import synthio
 
         if np is None or not (_SPECTRUM is not None or hasattr(np, "fft")):
@@ -938,6 +948,12 @@ class Vocoder:
         self._hann = np.array([math.sin(math.pi * (i + 0.5) / n) ** 2 for i in range(n)])
         # one-sided band power -> RMS^2 in int16 units, for a Hann window
         psd = 2.0 / (n * n * 0.375)
+        # the gate as summed band power: 10^(dB/10) of full scale's 32768^2
+        self._gate = None
+        if gate > VOCODER_GATE_OFF:
+            self._gate = 32768.0 ** 2 * 10.0 ** (gate / 10.0) / psd
+            self._gate_close = self._gate * 10.0 ** (-VOCODER_GATE_CLOSE / 10.0)
+        self._held = 0  # measurements the gate stays open for
 
         # Bands spaced evenly in pitch, each one band wide (edges at the
         # geometric means), and the FFT bins that make them up.
@@ -1023,6 +1039,14 @@ class Vocoder:
         powers = self.measure(window)
         f0 = self.hz or 110.0
         root = self._dk / math.sqrt(f0)
+        if self._gate is not None:
+            total = sum(powers)
+            if total >= self._gate:
+                self._held = VOCODER_GATE_HOLD
+            elif total < self._gate_close and self._held:
+                self._held -= 1
+            if not self._held:
+                root = 0.0  # gate shut: every band falls away
         levels = self._levels
         for i, note in enumerate(self.notes):
             if self._floor[i] < f0:
@@ -1035,7 +1059,7 @@ class Vocoder:
             levels[i] = level
             note.amplitude = level
         if self.noise is not None:
-            self.noise.amplitude = min(1.0, self._noise_k * math.sqrt(powers[-1]))
+            self.noise.amplitude = min(1.0, self._noise_k * math.sqrt(powers[-1])) if root else 0.0
 
     def deinit(self):
         self.synth.release_all()
@@ -1066,7 +1090,8 @@ class Autotune:
       correct    False runs the harmonizer without retuning the voice
     and, from a "vocoder" effect (not with a harmonizer):
       vocoder    the carrier waveform (see Vocoder), or None for no vocoder
-      vocoder_bands, vocoder_octave, vocoder_breath, vocoder_chord   see Vocoder
+      vocoder_bands, vocoder_octave, vocoder_breath, vocoder_chord,
+      vocoder_gate     see Vocoder
       vocoder_mix      vocoder against the voice, 0..1 (number or block); a
                        plain 1 drops the voice and its shifter altogether
     fmt is the shared audio format dict (sample_rate, bits_per_sample,
@@ -1079,7 +1104,8 @@ class Autotune:
                  density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
                  inversion=0, harmony_octave=0, harmony_level=0.7, correct=True,
                  harmony_double=None, vocoder=None, vocoder_bands=8, vocoder_octave=0,
-                 vocoder_breath=0.0, vocoder_mix=1.0, vocoder_chord=None):
+                 vocoder_breath=0.0, vocoder_mix=1.0, vocoder_chord=None,
+                 vocoder_gate=VOCODER_GATE):
         import audiocore
 
         if vocoder is not None and harmony is not None:
@@ -1221,7 +1247,7 @@ class Autotune:
         self._vocoder_level = None
         if vocoder is not None:
             self.vocoder = Vocoder(fmt["sample_rate"], vocoder, vocoder_bands,
-                                   vocoder_octave, vocoder_breath, vocoder_chord)
+                                   vocoder_octave, vocoder_breath, vocoder_chord, vocoder_gate)
             if voiceless:
                 self.output = self.vocoder.output
             else:

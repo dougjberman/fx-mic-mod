@@ -253,7 +253,7 @@ function dspFactory(){
   /* ---------- vocoder, as firmware/autotune.py (Vocoder) ----------
      A carrier at the sung (or tuned) note through one band-pass per band; the band levels come from
      an FFT of the newest power-of-two samples of the pitch window, every other block like the mic. */
-  const VOC={WAVEFORMS:["saw","square","pulse","saw_square"], MAX_BANDS:11, LOW:180, HIGH:5000, BREATH:4000, HARMONICS:48, TABLE:256, NOISE:2048, GAIN:0.7, RELEASE:0.4};
+  const VOC={WAVEFORMS:["saw","square","pulse","saw_square"], MAX_BANDS:11, LOW:180, HIGH:5000, BREATH:4000, HARMONICS:48, TABLE:256, NOISE:2048, GAIN:0.7, RELEASE:0.4, GATE:-50, GATE_OFF:-80, GATE_CLOSE:6, GATE_HOLD:4};
   const vocWaves={};
   function carrierWave(shape){
     if(!VOC.WAVEFORMS.includes(shape)) throw new Error("vocoder waveform must be saw, square, pulse or saw_square");
@@ -298,10 +298,11 @@ function dspFactory(){
   const highPass=(f,Q,sr)=>{ const w=2*Math.PI*f/sr, cs=Math.cos(w), al=Math.sin(w)/(2*Q), a0=1+al; return {b0:(1+cs)/2/a0, b1:-(1+cs)/a0, b2:(1+cs)/2/a0, a1:-2*cs/a0, a2:(1-al)/a0, x1:0,x2:0,y1:0,y2:0}; };
   const biq=(f,x)=>{ const y=f.b0*x+(f.b1||0)*f.x1+f.b2*f.x2-f.a1*f.y1-f.a2*f.y2; f.x2=f.x1; f.x1=x; f.y2=f.y1; f.y1=y; return y; };
   class Vocoder {
-    constructor(sr, buf, waveform, bands, octave, breath, chord){
+    constructor(sr, buf, waveform, bands, octave, breath, chord, gate){
       if(!Number.isInteger(bands)||bands<4||bands>VOC.MAX_BANDS) throw new Error("vocoder bands must be 4 to "+VOC.MAX_BANDS);
       if(!Number.isInteger(octave)||octave<-2||octave>2) throw new Error("vocoder octave must be -2 to 2");
       if(typeof breath!=="number") throw new Error("vocoder breath must be a number");
+      if(typeof gate!=="number") throw new Error("vocoder gate must be a number");
       this.keySteps=chord==null ? null : VOC_KEY_CHORDS[String(chord)]||null;
       if(this.keySteps) chord=vocKeyChord(null, this.keySteps);
       this.waveform=waveform; this.chord=chord==null ? null : String(chord);
@@ -310,7 +311,11 @@ function dspFactory(){
       this.sr=sr; this.table=table; this.oct=Math.pow(2,octave); this.hz=0; this.ph=0; this.breath=clamp(breath,0,1);
       let n=1; while(n*2<=buf) n*=2; this.n=n;
       this.hann=new Float64Array(n); for(let i=0;i<n;i++) this.hann[i]=Math.sin(Math.PI*(i+0.5)/n)**2;
-      const psd=2/(n*n*0.375), high=Math.min(VOC.HIGH,0.4*sr), ratio=Math.pow(high/VOC.LOW,1/(bands-1)), half=Math.sqrt(ratio), Q=1/(half-1/half);
+      const psd=2/(n*n*0.375);
+      // noise gate (firmware VOCODER_GATE): summed band power, open at the gate, shut GATE_CLOSE dB under it after GATE_HOLD
+      this.gate= gate>VOC.GATE_OFF ? 32768*32768*Math.pow(10,gate/10)/psd : null;
+      this.gateClose= this.gate===null ? null : this.gate*Math.pow(10,-VOC.GATE_CLOSE/10); this.held=0;
+      const high=Math.min(VOC.HIGH,0.4*sr), ratio=Math.pow(high/VOC.LOW,1/(bands-1)), half=Math.sqrt(ratio), Q=1/(half-1/half);
       this.bands=[];
       for(let i=0;i<bands;i++){
         const c=VOC.LOW*Math.pow(ratio,i), lo=c/half, hi=c*half, a=Math.max(1,Math.trunc(lo*n/sr+0.5)), b=Math.max(a+1,Math.trunc(hi*n/sr+0.5));
@@ -333,14 +338,19 @@ function dspFactory(){
       const n=this.n, off=win.length-n, x=new Float64Array(n);
       for(let i=0;i<n;i++) x[i]=win[off+i]*32768*this.hann[i];
       const p=powerSpectrum(x), sum=(a,b)=>{ let t=0; for(let i=a;i<b;i++) t+=p[i]; return t; };
-      const f0=this.hz||110, root=this.dk/Math.sqrt(f0);
+      const f0=this.hz||110; let root=this.dk/Math.sqrt(f0);
+      if(this.gate!==null){
+        let total=0; for(const bd of this.bands) total+=sum(bd.a,bd.b); if(this.noise) total+=sum(this.noise.a,this.noise.b);
+        if(total>=this.gate) this.held=VOC.GATE_HOLD; else if(total<this.gateClose&&this.held) this.held--;
+        if(!this.held) root=0;
+      }
       for(const bd of this.bands){
         if(bd.floor<f0){ bd.level=0; continue; }
         let lv=Math.min(1,bd.k*Math.sqrt(sum(bd.a,bd.b))*root);
         if(lv<bd.level) lv+=(bd.level-lv)*VOC.RELEASE;
         bd.level=lv;
       }
-      if(this.noise) this.noise.level=Math.min(1,this.noise.k*Math.sqrt(sum(this.noise.a,this.noise.b)));
+      if(this.noise) this.noise.level= root ? Math.min(1,this.noise.k*Math.sqrt(sum(this.noise.a,this.noise.b))) : 0;
     }
     tick(){
       const T=this.table, L=T.length, f0=this.hz||110;
@@ -356,7 +366,7 @@ function dspFactory(){
   const PARAMS={
     autotune:["key","scale","speed","humanize","mix","grain_size","density","squeeze_key","squeeze_scale"],
     harmonizer:["chord","inversion","octave","level","double"],
-    vocoder:["waveform","bands","octave","breath","mix","chord"],
+    vocoder:["waveform","bands","octave","breath","mix","chord","gate"],
     pitch_shift:["semitones","mix","window","overlap"],
     granular_pitch_shift:["semitones","mix","grain_size","density","spread"],
     distortion:["drive","pre_gain","post_gain","mode","soft_clip","mix"],
@@ -419,7 +429,7 @@ function dspFactory(){
           const usesH=v=> typeof v==="string" ? v==="$handle" : (v&&typeof v==="object" ? Object.values(v).some(usesH) : false);
           if(alt&&usesH(vs.mix)) throw new Error("vocoder: the handle can change the key or drive the mix, not both");
           const intOf=(v,d,nm)=>{ v=v==null?d:v; if(typeof v!=="number") throw new Error("vocoder "+nm+" must be a number"); return Math.trunc(v); };
-          voc=new Vocoder(sr, det.BUF, vs.waveform==null?"saw":String(vs.waveform), intOf(vs.bands,8,"bands"), intOf(vs.octave,0,"octave"), vs.breath==null?0:vs.breath, vs.chord);
+          voc=new Vocoder(sr, det.BUF, vs.waveform==null?"saw":String(vs.waveform), intOf(vs.bands,8,"bands"), intOf(vs.octave,0,"octave"), vs.breath==null?0:vs.breath, vs.chord, vs.gate==null?VOC.GATE:vs.gate);
           vocMixF=compile(vs.mix??1,"vocoder mix",ns);
         }
         else if(harm){

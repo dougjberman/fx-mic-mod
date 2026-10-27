@@ -677,6 +677,7 @@ function h(tag, attrs, ...kids){
 let uid = 0; const nid = (p) => p + "-" + (++uid);
 function fmtVal(v, meta){
   if (typeof v !== "number") return "";
+  if (meta.offAt != null && v <= meta.offAt) return "Off";
   const u = meta.unit ? " " + meta.unit : "";
   if (meta.unit === "st") return (v>0?"+":"") + v + " st";
   if (meta.max <= 1 && !meta.unit) return Math.round(v*100) + "%";
@@ -1004,6 +1005,9 @@ function vocoderCard(p, fx){
       [[-2,"−2"],[-1,"−1"],[0,"As sung"],[1,"+1"],[2,"+2"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
   body.append(sliderEl({label:"Bands",min:4,max:11,step:1,ends:["Smooth, lo-fi","Clear words"]}, typeof fx.bands==="number"?fx.bands:8, v=>{ fx.bands=v; changed(); }));
   body.append(sliderEl({label:"Breath",min:0,max:1,step:.01,ends:["Off","Hissy s and t"]}, typeof fx.breath==="number"?fx.breath:0, v=>{ fx.breath=v; changedQuiet(); }));
+  // noise gate: room noise (a fan, an air conditioner) shouldn't play the synth
+  body.append(sliderEl({label:"Noise gate",min:-80,max:-20,step:1,unit:"dB",offAt:-80,ends:["Off","Only loud singing"]}, typeof fx.gate==="number"?fx.gate:-50, v=>{ if (v===-50) delete fx.gate; else fx.gate=v; changedQuiet(); }));
+  body.append(h("p",{class:"small muted"}, "If the synth hums with no one singing, raise the gate until it stays quiet. If word ends get cut off, lower it."));
   // amount: fixed, or brought in by the squeeze
   const keyJob = tune && (tune.squeeze_key!=null || tune.squeeze_scale!=null);
   if (fx.mix==="$handle") body.append(h("div",{class:"squeeze"},

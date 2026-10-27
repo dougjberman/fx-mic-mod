@@ -733,6 +733,7 @@ VOCODER_PARAMS = {
     "octave": (_int, "vocoder_octave"),
     "breath": (_float, "vocoder_breath"),
     "chord": (_str, "vocoder_chord"),
+    "gate": (_float, "vocoder_gate"),
     "mix": (_block, "vocoder_mix"),
 }
 

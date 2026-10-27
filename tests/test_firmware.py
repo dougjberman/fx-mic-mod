@@ -295,6 +295,22 @@ class LoaderTests(unittest.TestCase):
         # breath follows the highs
         voc.update(tone(5500), 150.0)
         self.assertGreater(voc.noise.amplitude, 0.0)
+        # the noise gate: a quiet hum (about -65 dB) doesn't play the carrier,
+        # unless the gate is off; singing opens it, and it holds through a gap
+        hum = tone(centres[3], 25)
+        for _ in range(autotune.VOCODER_GATE_HOLD + 16):
+            voc.update(hum, 150.0)
+        self.assertTrue(all(n.amplitude < 1e-6 for n in voc.notes))
+        self.assertEqual(voc.noise.amplitude, 0.0)
+        open_voc = autotune.Vocoder(rate, bands=8, gate=autotune.VOCODER_GATE_OFF)
+        open_voc.update(hum, 150.0)
+        self.assertGreater(open_voc.notes[3].amplitude, 0.0)
+        voc.update(tone(centres[3]), 150.0)
+        voc.update(hum, 150.0)
+        self.assertGreater(voc.notes[3].amplitude, 0.0)
+        for _ in range(autotune.VOCODER_GATE_HOLD + 6):
+            voc.update(hum, 150.0)
+        self.assertLess(voc.notes[3].amplitude, 1e-3)
         voc.update(tone(300), 150.0)
         self.assertLess(voc.noise.amplitude, 0.001)
 

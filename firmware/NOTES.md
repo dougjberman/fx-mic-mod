@@ -57,6 +57,9 @@ band notes' `waveform` to the chord the scale gives the snapped note.
 - **Vocoder level:** `VOCODER_GAIN` (0.7) puts the vocoder about level with the voice in the
   browser preview. Check it against the Clean spot on the mic, and that a loud voice doesn't hit
   the synth's soft clip. Band levels step every 32 ms; listen for zipper noise on held vowels.
+- **Vocoder gate:** -50 dB (`VOCODER_GATE`) was picked for a laptop mic in a room with an air
+  conditioner. Check that the mic's own noise floor sits well under it, and that quiet singing
+  still opens it.
 - **Chord tables:** a chord carrier's table is 128 samples per multiple of its top note, so up to
   2304 samples for `m7`. Check synthio takes waveforms that long, and that low sung notes don't
   alias (the sub-note can sit below 20 Hz, which synthio should play fine). A `key_seventh`
