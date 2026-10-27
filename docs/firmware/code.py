@@ -1292,16 +1292,19 @@ print(
     )
 )
 if EFFECTS_ONLY:
-    print("effects only: {} page(s) of presets, MIDDLE = next page, no samples or record mode".format(PAGES))
-print("TOP button = next preset ({} spots, 0 = clean)".format(len(page_presets(data_context)) + 1))
+    print("effects only: {} page(s) of presets, no samples or record mode".format(PAGES))
+    print("TOP button = next preset on the page, MIDDLE = next page, BOTTOM = clean")
+else:
+    print("TOP button = next preset ({} spots, 0 = clean)".format(len(page_presets(data_context)) + 1))
 print(
     "volume knob = DAC volume, {:.0f} to {:+.0f} dB".format(
         VOLUME_MIN_DB, VOLUME_MAX_DB
     )
 )
 print('handle travel = "$handle" block, 0.0 (out) to 1.0 (in)')
-print("BOTTOM: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
-    TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
+if not EFFECTS_ONLY:
+    print("BOTTOM: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
+        TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
 
 
 

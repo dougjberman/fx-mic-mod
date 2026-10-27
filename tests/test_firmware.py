@@ -929,6 +929,8 @@ class DeviceScenarioTests(unittest.TestCase):
                   "presets": [{"list": []} for _ in range(20)]}
         root, out, s = run("pages", config)
         self.assertIn("effects only: 4 page(s) of presets", out)
+        self.assertIn("BOTTOM = clean", out)
+        self.assertNotIn("0 = clean", out)
         # without effects_only only four presets are read, as before
         root, out, s = run("pages", dict(config, effects_only=False))
         self.assertIn("4 preset(s)", out)
