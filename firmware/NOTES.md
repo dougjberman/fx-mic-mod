@@ -42,12 +42,13 @@ chord needs the note).
   render reads it second and the block before it where it reads first. The console prints
   `feed sync: counting renders, …; every N ms` on each load; `render counter off: …` means it
   fell back to the timed sync below. `f` still flips the halves. The counter also times the
-  renders: a write less than half a block before one waits for it (with 2 ms of hysteresis),
+  renders: a write less than 4 ms before one waits for it (with 1.5 ms of hysteresis),
   since on the harmonizer the render lands about 1 ms after each mic block, right on the write.
-  That wait can run to 10 ms, so when it is longer than the pitch work, the pitch work runs in
-  it, before the write. Otherwise a sample plus harmony or echoes overran the 16 ms, the mic
-  overflowed and the sample played slow. `overflow (autotune took X ms of 16, plus Y waiting for
-  the chain)` shows the split.
+  The window was half a block, but those waits ran to 10 ms, and with a sample plus harmony or
+  echoes the pass overran 16 ms: the mic dropped a block (the sample played slow, and crackled).
+  When a wait is longer than the pitch work, the pitch work also runs in it, before the write.
+  `overflow (… ms of 16, plus … waiting for the chain; … spare, … outside)` shows the pass before:
+  "spare" near 16 means a block was lost just before it.
 - **FEED_PHASE / FEED_SYNC** in autotune.py (fallback): the chain reads both feed halves in one burst every
   two blocks (half 0 first). At each load the sync times the burst and the mic's block edges; a
   write due less than half a block before a burst waits for it, so every write has half a block

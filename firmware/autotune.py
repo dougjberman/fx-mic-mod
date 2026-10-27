@@ -77,13 +77,16 @@ PROBE_RATE = 62.5 / 64  # LFO cycles a second: one cycle per 64 renders
 # Order alone isn't enough: on the harmonizer the chain renders about 1 ms
 # after a mic block lands, just when the block is written, so writes fell
 # before or after it at random and blocks were repeated and skipped. So the
-# counter also times the renders, and a write less than half a block before
-# one waits for it to run: every write then has half a block to spare on its
-# side. The edge moves by RENDER_HYST_NS to stay where it last was, so a
-# write that jitters near it doesn't flip sides either. RENDER_GUARD_NS is
-# how late a render can run and still be waited for.
+# counter also times the renders, and a write less than RENDER_NEAR_NS before
+# one waits for it to run. (Half a block, at first: but those waits ran to
+# 10 ms, and with a sample in and the harmony or echoes up, wait plus work
+# passed 16 ms and the mic dropped blocks.) The edge moves by RENDER_HYST_NS
+# to stay where it last was, so a write that jitters near it doesn't flip
+# sides either. RENDER_GUARD_NS is how late a render can run and still be
+# waited for.
 RENDER_GUARD_NS = 2000000
-RENDER_HYST_NS = 2000000
+RENDER_NEAR_NS = 4000000
+RENDER_HYST_NS = 1500000
 # On a Ting the right FEED_PHASE changed from one preset load to the next, and
 # flipping it cured a crackling load. The chain renders two blocks at a time
 # every two blocks, in a burst that reads half 0 and then half 1, so half 0
@@ -972,7 +975,7 @@ class Autotune:
         t = time.monotonic_ns()
         while due + RENDER_GUARD_NS <= t:
             due += period
-        near = BLOCK_NS // 2 + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
+        near = RENDER_NEAR_NS + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
         return due - t if 0 < due - t < near else 0
 
     def _wait_for_render(self):
@@ -986,7 +989,7 @@ class Autotune:
         t = began = now()
         while due + RENDER_GUARD_NS <= t:
             due += period
-        near = BLOCK_NS // 2 + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
+        near = RENDER_NEAR_NS + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
         if due - t >= near:
             if due - t < BLOCK_NS:
                 self._waiting = False
@@ -1312,7 +1315,10 @@ class Autotune:
                 voice.semitones = self.correction + interval
             self._set_levels()
         cost = time.monotonic_ns() - began
-        self._analyse_ns = max(cost, self._analyse_ns - self._analyse_ns // 16)
+        # An average, not a max: a slow pass (a garbage collection) would
+        # keep the work out of the wait for seconds. Should it overrun the
+        # render, the write still lands after it, as when waiting.
+        self._analyse_ns += (cost - self._analyse_ns) // 4
 
 
 

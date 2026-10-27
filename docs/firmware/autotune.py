@@ -82,8 +82,11 @@ PROBE_RATE = 62.5 / 64
 
 
 
+
+
 RENDER_GUARD_NS = 2000000
-RENDER_HYST_NS = 2000000
+RENDER_NEAR_NS = 4000000
+RENDER_HYST_NS = 1500000
 
 
 
@@ -972,7 +975,7 @@ class Autotune:
         t = time.monotonic_ns()
         while due + RENDER_GUARD_NS <= t:
             due += period
-        near = BLOCK_NS // 2 + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
+        near = RENDER_NEAR_NS + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
         return due - t if 0 < due - t < near else 0
 
     def _wait_for_render(self):
@@ -986,7 +989,7 @@ class Autotune:
         t = began = now()
         while due + RENDER_GUARD_NS <= t:
             due += period
-        near = BLOCK_NS // 2 + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
+        near = RENDER_NEAR_NS + (RENDER_HYST_NS if self._waiting else -RENDER_HYST_NS)
         if due - t >= near:
             if due - t < BLOCK_NS:
                 self._waiting = False
@@ -1312,7 +1315,10 @@ class Autotune:
                 voice.semitones = self.correction + interval
             self._set_levels()
         cost = time.monotonic_ns() - began
-        self._analyse_ns = max(cost, self._analyse_ns - self._analyse_ns // 16)
+
+
+
+        self._analyse_ns += (cost - self._analyse_ns) // 4
 
 
 
