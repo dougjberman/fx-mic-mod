@@ -1027,12 +1027,12 @@ function vocoderCard(p, fx){
   body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
     h("div",{class:"seg", role:"group", "aria-label":"Carrier octave"},
       [[-2,"−2"],[-1,"−1"],[0,"As sung"],[1,"+1"],[2,"+2"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
-  // with your voice in the mix its pitch shifter runs too, and the mic can only run 8 bands beside it
+  // with your voice in the mix its pitch shifter runs too, and the mic can only run 9 bands beside it
   const voiced = !(typeof (fx.mix ?? 1)==="number" && (fx.mix ?? 1) >= 1);
-  const maxBands = voiced ? 8 : 11;
+  const maxBands = voiced ? 9 : 11;
   if (typeof fx.bands==="number" && fx.bands > maxBands) fx.bands = maxBands;
   body.append(sliderEl({label:"Bands",min:4,max:maxBands,step:1,ends:["Smooth, lo-fi","Clear words"]}, typeof fx.bands==="number"?fx.bands:8, v=>{ fx.bands=v; changed(); }));
-  if (voiced) body.append(h("p",{class:"small muted"}, "Up to 8 bands while your voice is in the mix. Set Amount to 100% for up to 11."));
+  if (voiced) body.append(h("p",{class:"small muted"}, "Up to 9 bands while your voice is in the mix. Set Amount to 100% for up to 11."));
   body.append(sliderEl({label:"Breath",min:0,max:1,step:.01,ends:["Off","Hissy s and t"]}, typeof fx.breath==="number"?fx.breath:0, v=>{ fx.breath=v; changedQuiet(); }));
   // noise gate: room noise (a fan, an air conditioner) shouldn't play the synth
   body.append(sliderEl({label:"Noise gate",min:-80,max:-20,step:1,unit:"dB",offAt:-80,ends:["Off","Only loud singing"]}, typeof fx.gate==="number"?fx.gate:-50, v=>{ if (v===-50) delete fx.gate; else fx.gate=v; changedQuiet(); }));
