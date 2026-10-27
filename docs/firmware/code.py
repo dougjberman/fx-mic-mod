@@ -114,7 +114,7 @@ from recorder import Recorder, drive_free
 
 
 
-FIRMWARE_VERSION = "1.4"
+FIRMWARE_VERSION = "1.5"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 
@@ -699,7 +699,8 @@ def select_preset(ctx, index):
                     ctx.tune.shifter_name,
                     ", harmonizer {} voices".format(len(ctx.tune.voices)) if ctx.tune.voices else "",
                 ) + (
-                    ", vocoder {} bands".format(len(ctx.tune.vocoder.notes)) if ctx.tune.vocoder else ""
+                    ", vocoder {} bands{}".format(len(ctx.tune.vocoder.levels),
+                                                  " (filters)" if ctx.tune.vocoder.filters else "") if ctx.tune.vocoder else ""
                 ) if ctx.tune else "",
                 gc.mem_free(),
             )

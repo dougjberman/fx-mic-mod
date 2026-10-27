@@ -92,10 +92,31 @@ SCENARIOS = {
 }
 
 
+def track_vocoders():
+    """Every autotune.Vocoder made from here on, each logging its band
+    levels on each update."""
+    import autotune
+    made = []
+    init, update = autotune.Vocoder.__init__, autotune.Vocoder.update
+
+    def tracked_init(self, *args, **kwargs):
+        init(self, *args, **kwargs)
+        self.level_log = []
+        made.append(self)
+
+    def tracked_update(self, *args):
+        update(self, *args)
+        self.level_log.append(list(self.levels))
+
+    autotune.Vocoder.__init__, autotune.Vocoder.update = tracked_init, tracked_update
+    return made
+
+
 def main():
     name, root = sys.argv[1], sys.argv[2]
     script = fakes.Script(**SCENARIOS[name])
     fakes.install(script, root)
+    vocoders = track_vocoders()
     env = runpy.run_path(os.path.join(FIRMWARE, "code.py"), run_name="__main__")
     ctx = env["data_context"]
     summary = {
@@ -130,12 +151,13 @@ def main():
             if type(m.voice[0].playing).__name__ == "GranularPitchShift"), None),
         # the vocoder: carrier pitch, band levels, and what plays it
         "vocoders": [
-            {"hz": [n.frequency for n in v.pressed],
-             "peaks": [max(n.amplitude_log) if n.amplitude_log else None for n in v.pressed],
-             "filters": [n.filter.kwargs.get("frequency") for n in v.pressed],
-             "table": len(v.pressed[0].waveform) if v.pressed else None,
-             "rate": v.kwargs.get("sample_rate")}
-            for v in script.synths
+            {"hz": [n.frequency for n in v.synth.pressed if n is not v.noise],
+             "peaks": [max(levels) for levels in zip(*v.level_log)] if v.level_log else None,
+             "bands": len(v.levels),
+             "chord": v.chord,
+             "table": len(v.notes[0].waveform),
+             "rate": v.synth.kwargs.get("sample_rate")}
+            for v in vocoders
         ],
         "plays": script.plays,
         # the vocoder's mixer: the voice on voice 0, the synth on voice 1

@@ -230,6 +230,7 @@ input.name{font-family:var(--f-display);font-weight:700;font-size:20px;border:0;
 .addmenu{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .addmenu button{text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:10px 12px;cursor:pointer;display:grid;gap:2px}
 .addmenu button:hover{border-color:var(--accent)}
+.addmenu button:disabled{cursor:not-allowed;opacity:.6;border-color:var(--line)}
 .addmenu b{font-size:14px}
 .addmenu span{font-size:12.5px;color:var(--muted)}
 /* what an effect adds to the load meter, as five pips */
@@ -618,8 +619,13 @@ const CHORD_NOTES = {
 const HARMONY_VOICE_COST = 17;
 // Effects that run inside the autotune stage, so they sit at the top of the chain.
 const STAGE_FX = ["autotune", "harmonizer", "vocoder"];
-// Guessed, not yet measured on a Ting: the bands are synthio notes, each a waveform and a biquad.
-const VOCODER_COST = 12, VOCODER_BAND_COST = 2.5;
+// The vocoder, from firmware 1.5: Python measures the bands and works out the waveform (a base cost,
+// a little per band), and the synth plays one plain note per chord note, plus one for breath. With the
+// voice in the mix its pitch shifter runs too, as much as a Grain shift. On 1.4 (a note and a filter per
+// band) Night call, 8 bands with the voice, overflowed: these keep it, squeezed, under 85.
+const VOCODER_COST = 10, VOCODER_BAND_COST = .5, VOCODER_NOTE_COST = 3, VOCODER_VOICE_COST = 21;
+// A preset estimated over this crackles; the editor won't add an effect past it.
+const LOAD_LIMIT = 100;
 const VOCODER_WAVES = [["saw","Saw (buzzy)"],["square","Square (hollow)"],["saw_square","Saw + square (full)"],["pulse","Pulse (nasal)"]];
 const FILTER_MODES = [["high_pass","Thin (cut lows)"],["low_pass","Muffle (cut highs)"],["band_pass","Telephone (band)"],["notch","Notch"]];
 
@@ -845,7 +851,8 @@ function renderEditor(){
 
 function movePreset(d){ const j=selected+d; const a=config.presets; [a[selected],a[j]]=[a[j],a[selected]]; selected=j; changed(); }
 
-function loadMeter(p){
+function presetCost(p){ return presetLoad(p).cost; }
+function presetLoad(p){
   let cost=0, ramKB=0;
   const tuned = p.list.some(fx=>fx.effect==="autotune" && fx.enabled!==false);
   p.list.forEach(fx => { if (fx.enabled===false) return; if (fx.effect==="autotune"){ cost+=AUTOTUNE_COST; return; }
@@ -854,13 +861,17 @@ function loadMeter(p){
     const e=EFFECTS[fx.effect]; if(!e) return; cost+=e.cost; if (e.ram){ const ms = typeof fx.max_delay_ms==="number"?fx.max_delay_ms:e.params.max_delay_ms.def; ramKB += ms*2*(typeof config.sample_rate==="number" ? config.sample_rate : 24000)/1e6; } });
   // Costs are for 24 kHz; the built-in effects' work grows with the rate.
   cost = Math.round(cost * (typeof config.sample_rate==="number" ? config.sample_rate : 24000) / 24000);
+  return {cost, ramKB};
+}
+function loadMeter(p){
+  const {cost, ramKB} = presetLoad(p);
   const pct = Math.min(100, cost);
   const cls = cost>100?"bad":cost>85?"warn":"";
   return h("div",{class:"meter"},
     h("div",{class:"row spread small"}, h("span",{}, h("b",{},"Estimated load "), h("span",{class:"mono"}, cost+"%")),
       h("span",{class:"muted"}, ramKB ? "Delay memory "+Math.round(ramKB)+" KB · " : "", "Estimate, from tests on a Ting")),
     h("div",{class:"bar "+cls}, h("i",{style:"width:"+pct+"%"})),
-    cost>100 ? h("p",{class:"small", style:"color:var(--bad)"},"This chain is likely too heavy for the mic and will crackle. Try removing an effect; the reverb costs the most.") : null);
+    cost>LOAD_LIMIT ? h("p",{class:"small", style:"color:var(--bad)"},"This chain is likely too heavy for the mic and will crackle. Try removing an effect; the reverb costs the most"+(p.list.some(fx=>fx.effect==="vocoder" && fx.enabled!==false) ? ", then the vocoder's voice (set its Amount to 100%)." : ".")) : null);
 }
 
 function fxHead(title, what, list, i, fx, extra){
@@ -1052,11 +1063,15 @@ function harmonizerCard(p, fx){
     fxHead("Harmonizer", "Sings a chord with you, built on every note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
 }
 
+// Notes in each vocoder chord, as firmware/autotune.py plays them: one per chord note.
+const VOCODER_CHORD_NOTES = {key_triad:3, key_seventh:4, major:3, minor:3, power:3, dim:3, "7":4, maj7:4, m7:4, m7b5:4};
 function vocoderCost(fx){
   const bands = typeof fx.bands==="number" ? fx.bands : 8;
   // with no voice in the mix (a fixed Amount of 1) the mic drops the voice's pitch shifter
   const voiceless = fx.mix===undefined || (typeof fx.mix==="number" && fx.mix>=1);
-  return Math.round(VOCODER_COST + VOCODER_BAND_COST*(bands + ((fx.breath||0)>0 ? 1 : 0)) - (voiceless ? 10 : 0));
+  // the bigger of the chord and the squeeze chord: a full squeeze plays that one
+  const notes = Math.max(VOCODER_CHORD_NOTES[fx.chord]||1, VOCODER_CHORD_NOTES[fx.squeeze_chord]||1) + ((fx.breath||0)>0 ? 1 : 0);
+  return Math.round(VOCODER_COST + VOCODER_BAND_COST*bands + VOCODER_NOTE_COST*notes + (voiceless ? 0 : VOCODER_VOICE_COST));
 }
 const VOCODER_CHORD_CHOICES = [["","One note"],["key_triad","In key"],["key_seventh","In key 7th"],["major","Major"],["minor","Minor"],["7","7"],["maj7","maj7"],["m7","m7"],["power","Power"]];
 const VOCODER_KEY_CHORDS = {key_triad:"Your note's chord in the autotune key: major, minor or diminished as the scale makes it.", key_seventh:"Your note's 7th chord in the autotune key."};
@@ -1252,27 +1267,33 @@ function cpuCost(cost, note){
 }
 function addEffectBlock(list, forSample){
   const wrap = h("div",{style:"display:grid;gap:10px"});
+  // An effect that would take a preset past LOAD_LIMIT can't be added: it would crackle on the mic.
+  const tooHeavy = fx => !forSample && presetCost({list: list.concat([fx])}) > LOAD_LIMIT;
+  const heavyNote = h("span",{style:"color:var(--bad)"}, "Too much for the mic with this preset's other effects");
   wrap.append(h("button",{class:"btn", style:"justify-self:start", "aria-expanded":String(addOpen===list), onclick:()=>{ addOpen = addOpen===list?false:list; render(); }}, addOpen===list ? "Close" : "+ Add effect"));
   if (addOpen===list){
     const menu = h("div",{class:"addmenu"});
+    const voc = {effect:"vocoder", waveform:"saw", bands:8, octave:0, breath:.3};
     if (!forSample && !list.some(fx=>fx.effect==="harmonizer" || fx.effect==="vocoder"))
-      menu.append(h("button",{onclick:()=>{
+      menu.append(h("button",{disabled:tooHeavy(voc)||null, onclick:()=>{
         const at = list.findIndex(fx=>fx.effect==="autotune");
-        list.splice(at+1, 0, {effect:"vocoder", waveform:"saw", bands:8, octave:0, breath:.3}); addOpen=false; changed(); }},
+        list.splice(at+1, 0, clone(voc)); addOpen=false; changed(); }},
         h("b",{}, "Vocoder"), h("span",{}, "Robot voice: your words played by a synth that follows the note you sing."),
-        cpuCost(vocoderCost({bands:8, breath:.3}))));
+        tooHeavy(voc) ? heavyNote.cloneNode(true) : cpuCost(vocoderCost(voc))));
+    const harm = {effect:"harmonizer", chord:"major", inversion:0, level:.7};
     if (!forSample && !list.some(fx=>fx.effect==="harmonizer" || fx.effect==="vocoder"))
-      menu.append(h("button",{onclick:()=>{
+      menu.append(h("button",{disabled:tooHeavy(harm)||null, onclick:()=>{
         const at = list.findIndex(fx=>fx.effect==="autotune");
-        list.splice(at+1, 0, {effect:"harmonizer", chord:"major", inversion:0, level:.7}); addOpen=false; changed(); }},
+        list.splice(at+1, 0, clone(harm)); addOpen=false; changed(); }},
         h("b",{}, "Harmonizer"), h("span",{}, "Sings a chord with you on every note: major, minor, 7ths, 9ths and more."),
-        cpuCost(2*HARMONY_VOICE_COST, " for a triad")));
+        tooHeavy(harm) ? heavyNote.cloneNode(true) : cpuCost(2*HARMONY_VOICE_COST, " for a triad")));
     for (const [key, def] of Object.entries(EFFECTS)){
-      menu.append(h("button",{onclick:()=>{
-        const fx = {effect:key};
-        for (const [pn, meta] of Object.entries(def.params)) if (meta.def!==undefined) fx[pn] = clone(meta.def);
-        if (key==="filter") fx.filter = {mode:"high_pass", frequency:200, Q:0.7071};
-        list.push(fx); addOpen=false; changed(); }}, h("b",{}, def.label), h("span",{}, def.what), cpuCost(def.cost)));
+      const fx = {effect:key};
+      for (const [pn, meta] of Object.entries(def.params)) if (meta.def!==undefined) fx[pn] = clone(meta.def);
+      if (key==="filter") fx.filter = {mode:"high_pass", frequency:200, Q:0.7071};
+      const heavy = tooHeavy(fx);
+      menu.append(h("button",{disabled:heavy||null, onclick:()=>{ list.push(fx); addOpen=false; changed(); }},
+        h("b",{}, def.label), h("span",{}, def.what), heavy ? heavyNote.cloneNode(true) : cpuCost(def.cost)));
     }
     wrap.append(menu);
   }
@@ -1450,7 +1471,16 @@ function copyText(){
 }
 $("#btn-copy").addEventListener("click", ()=>{ track("copy"); copyText(); });
 $("#btn-copy2").addEventListener("click", ()=>{ track("copy"); copyText(); });
+// Presets the load meter puts over LOAD_LIMIT crackle on the mic, so ask before they go to it.
+function heavyOk(){
+  const heavy = config.presets.filter(p => presetCost(p) > LOAD_LIMIT);
+  if (!heavy.length) return true;
+  return confirm((heavy.length > 1 ? "These presets are" : "This preset is") + " likely too heavy for the mic and will crackle: " +
+    heavy.map(p => (p.name || "Untitled") + " (" + presetCost(p) + "% load)").join(", ") +
+    ".\n\nOK: save anyway.\nCancel: go back and take an effect out.");
+}
 $("#btn-download").addEventListener("click", ()=>{
+  if (!heavyOk()) return;
   track("download");
   const blob = new Blob([formatJSON(serialize())], {type:"application/json"});
   const a = h("a",{href:URL.createObjectURL(blob), download:"config.json"}); document.body.append(a); a.click(); a.remove();
@@ -1487,6 +1517,7 @@ function firmwareShortfall(config, version){
 const canPickFolder = "showDirectoryPicker" in window;
 if (!canPickFolder) $("#btn-save").title = "Your browser can't write to drives. Use Download, then drag the file onto CIRCUITPY.";
 $("#btn-save").addEventListener("click", async ()=>{
+  if (!heavyOk()) return;
   track("save-to-mic");
   if (!canPickFolder){ notice("This browser can't save straight to the mic. Click Download, then drag config.json onto the CIRCUITPY drive. Chrome and Edge can save directly.", ""); return; }
   let dir;

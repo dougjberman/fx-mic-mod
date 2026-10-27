@@ -114,7 +114,7 @@ from recorder import Recorder, drive_free
 # release that adds a config setting, add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number, and add a row for the release to
 # the "What's new" table on the install page, which its update check lists.
-FIRMWARE_VERSION = "1.4"
+FIRMWARE_VERSION = "1.5"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -699,7 +699,8 @@ def select_preset(ctx, index):
                     ctx.tune.shifter_name,
                     ", harmonizer {} voices".format(len(ctx.tune.voices)) if ctx.tune.voices else "",
                 ) + (
-                    ", vocoder {} bands".format(len(ctx.tune.vocoder.notes)) if ctx.tune.vocoder else ""
+                    ", vocoder {} bands{}".format(len(ctx.tune.vocoder.levels),
+                                                  " (filters)" if ctx.tune.vocoder.filters else "") if ctx.tune.vocoder else ""
                 ) if ctx.tune else "",
                 gc.mem_free(),
             )

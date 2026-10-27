@@ -289,6 +289,9 @@ class Synthesizer(_Obj):
     def press(self, notes):
         self.pressed.extend(notes)
 
+    def release(self, notes):
+        self.pressed = [n for n in self.pressed if n not in notes]
+
     def release_all(self):
         self.released = True
 
