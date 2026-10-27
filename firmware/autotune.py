@@ -757,13 +757,21 @@ def key_by_name(name):
 # is singing (tuned by autotune when the preset has it), as in software
 # vocoders' "pitch tracking" carrier.
 #
-# All the per-sample work is native: one synthio Note per band, each the
-# carrier waveform through its own band-pass Biquad. Python only measures the
-# voice: an FFT of the latest window (ulab, in C), summed into the same bands,
-# sets each band note's amplitude. That runs on the blocks the pitch search
+# Python measures the voice: an FFT of the latest window (ulab, in C), summed
+# into bands, gives each band's level. That runs on the blocks the pitch search
 # skips (DETECT_EVERY), so the slowest block costs no more than autotune's.
+#
+# A channel vocoder is the carrier through a band-pass filter per band, each
+# at its band's level. The carrier repeats at the note, so the sum of them all
+# is one waveform too: each harmonic of the carrier times the band filters'
+# response at that harmonic, weighted by the band levels. So Python works that
+# waveform out (an inverse FFT, in C) on each measurement and one plain synthio
+# Note per carrier note plays it: no filters for the audio side to run. On a
+# Ting, a Note and a Biquad per band beside the voice's pitch shifter
+# overflowed at 8 bands. VOCODER_FILTERS = True plays it that way still.
 
 VOCODER_WAVEFORMS = ("saw", "square", "pulse", "saw_square")
+VOCODER_FILTERS = False         # True: a synthio Note and Biquad per band, as in firmware 1.1 to 1.4
 VOCODER_MAX_BANDS = 11          # synthio plays 12 notes; one is kept for breath
 # With the voice in the mix its pitch shifter runs too, and on a Ting 11 bands
 # plus the shifter overflowed while 8 plus the shifter ran clean (and 11
@@ -777,6 +785,7 @@ VOCODER_TABLE = 256             # carrier waveform samples
 VOCODER_NOISE = 2048            # breath noise waveform samples
 VOCODER_GAIN = 0.7              # carrier band level against the voice's, by ear
 VOCODER_RELEASE = 0.4           # share of a band's level kept when the voice falls
+VOCODER_RETUNE = 0.01           # carrier move (share of its pitch) that has the band responses worked out again
 # Noise gate: the bands open when the voice's level across them (dB from
 # full scale) reaches the gate, and close again once it has been GATE_CLOSE
 # dB under it for GATE_HOLD measurements (~130 ms), so word ends aren't cut.
@@ -795,6 +804,37 @@ if np is not None:
         _SPECTRUM = getattr(_ulab_utils, "spectrogram", None)
     except ImportError:
         pass
+
+
+# How the inverse FFT comes back: ulab without complex numbers (as in
+# CircuitPython) takes and returns real and imaginary parts as a pair.
+_IFFT = None
+_IFFT_GAIN = 1.0  # what makes a VOCODER_TABLE-long one a plain sum
+
+
+def _ifft_real(re, im):
+    """The real part of the inverse FFT of re + i im: for a VOCODER_TABLE-long
+    one, sum(re[k] cos(2 pi k n / N) - im[k] sin(2 pi k n / N)) over _IFFT_GAIN."""
+    if _IFFT == "pair":
+        return np.fft.ifft(re, im)[0]
+    return np.real(np.fft.ifft(re)) - np.imag(np.fft.ifft(im))
+
+
+if np is not None and hasattr(np, "fft") and hasattr(np.fft, "ifft"):
+    try:
+        _IFFT = "pair" if isinstance(np.fft.ifft(np.zeros(4), np.zeros(4)), tuple) else "complex"
+    except Exception:
+        try:
+            _IFFT = "pair" if isinstance(np.fft.ifft(np.zeros(4)), tuple) else "complex"
+        except Exception:
+            _IFFT = None
+    if _IFFT is not None:
+        try:
+            # numpy's is the sum over its length; ulab's may be the plain sum
+            if float(_ifft_real(np.array([0.0, 1.0, 0.0, 0.0]), np.zeros(4))[0]) < 0.5:
+                _IFFT_GAIN = float(VOCODER_TABLE)
+        except Exception:
+            _IFFT = None
 
 
 def _power(x):
@@ -847,6 +887,7 @@ VOCODER_SHAPES = (
 VOCODER_CHORD_SAMPLES = 128     # chord table samples per cycle of the top note
 
 _WAVES = {}
+_SCALES = {}    # what each table was scaled by, to int16 units
 
 
 def chord_wave(shape, chord):
@@ -876,6 +917,7 @@ def chord_wave(shape, chord):
             wave[i] += a + (base[(j + 1) % size] - a) * (p - j)
     scale = 30000.0 / max(abs(v) for v in wave)
     table = array.array("h", [int(v * scale) for v in wave])
+    _SCALES[key] = scale
     # each note's harmonics carry the base density, spread over every m-th
     # harmonic of the sub-note; against the root (m0 of them) that is m / m0
     density *= scale * scale * sum(ratios) / ratios[0]
@@ -918,17 +960,7 @@ def carrier_wave(shape):
     if shape in _WAVES:
         return _WAVES[shape]
     n = VOCODER_TABLE
-    terms = []  # (k, amplitude, cosine?)
-    for k in range(1, VOCODER_HARMONICS + 1):
-        if shape == "saw":
-            terms.append((k, 1.0 / k, False))
-        elif shape == "square":
-            terms.append((k, 1.0 / k if k % 2 else 0.0, False))
-        elif shape == "saw_square":
-            # both at once, equal parts, in one table: no more notes to play
-            terms.append((k, 2.0 / k if k % 2 else 1.0 / k, False))
-        else:  # pulse, 25% duty
-            terms.append((k, math.sin(math.pi * k * 0.25) / k, True))
+    terms = carrier_terms(shape)
     wave = [0.0] * n
     for k, amp, cos in terms:
         if amp:
@@ -939,7 +971,43 @@ def carrier_wave(shape):
     table = array.array("h", [int(v * scale) for v in wave])
     density = sum((k * amp * scale) ** 2 for k, amp, _ in terms) / len(terms)
     _WAVES[shape] = table, density
+    _SCALES[shape] = scale
     return table, density
+
+
+def carrier_terms(shape):
+    """The carrier's harmonics, before scaling: (k, amplitude, cosine?)."""
+    if shape not in VOCODER_WAVEFORMS:
+        raise ValueError("vocoder waveform must be one of {}".format(VOCODER_WAVEFORMS))
+    terms = []
+    for k in range(1, VOCODER_HARMONICS + 1):
+        if shape == "saw":
+            terms.append((k, 1.0 / k, False))
+        elif shape == "square":
+            terms.append((k, 1.0 / k if k % 2 else 0.0, False))
+        elif shape == "saw_square":
+            # both at once, equal parts, in one table: no more notes to play
+            terms.append((k, 2.0 / k if k % 2 else 1.0 / k, False))
+        else:  # pulse, 25% duty
+            terms.append((k, math.sin(math.pi * k * 0.25) / k, True))
+    return terms
+
+
+def carrier_spectrum(shape, chord=None):
+    """Each carrier note's harmonics 1..VOCODER_HARMONICS as int16-unit
+    (real, imaginary) arrays, a cosine term real and a sine term negative
+    imaginary: as carrier_wave(shape), or as each note of chord_wave(shape,
+    chord) (which all share one spectrum, at their own pitches)."""
+    table, density = carrier_wave(shape)
+    scale = _SCALES[shape]
+    if chord is not None:
+        chord_wave(shape, chord)
+        scale *= _SCALES[(shape, chord)]
+    re, im = [], []
+    for k, amp, cos in carrier_terms(shape):
+        re.append(amp * scale if cos else 0.0)
+        im.append(0.0 if cos else -amp * scale)
+    return np.array(re), np.array(im)
 
 
 class Vocoder:
@@ -958,6 +1026,9 @@ class Vocoder:
                 noise (a fan, an air conditioner) doesn't play the carrier
       squeeze_chord   None, or the chord squeeze(True) switches to: any chord
                 name above, or "none" for the plain carrier
+
+    ``notes`` are the synth notes playing: one per carrier note (one per
+    band with VOCODER_FILTERS); ``levels`` the bands' levels, 0..1.
     """
 
     def __init__(self, rate, waveform="saw", bands=8, octave=0, breath=0.0, chord=None,
@@ -970,9 +1041,14 @@ class Vocoder:
             raise ValueError("vocoder bands must be 4 to {}".format(VOCODER_MAX_BANDS))
         if not -2 <= octave <= 2:
             raise ValueError("vocoder octave must be -2 to 2")
+        # Without an inverse FFT, Python can't make the bands' waveform.
+        self.filters = VOCODER_FILTERS or _IFFT is None
+        self.rate = rate
         self.breath = min(1.0, max(0.0, breath))
         self.waveform = waveform
         self.notes = []
+        self._pool = None       # the carrier notes, once made
+        self._pressed = False
         self.key_steps = None
         self.chord = ""  # none yet; None is the plain carrier
         # squeeze_chord: the chord a full squeeze switches to ("none" is the
@@ -982,11 +1058,14 @@ class Vocoder:
             self._modes = (chord, None if squeeze_chord == "none" else squeeze_chord)
         else:
             self._modes = (chord,)
+        tones = 1  # the most notes any chord here has
         for mode in self._modes:
             steps = dict(VOCODER_KEY_CHORDS).get(mode)
             if steps is None:
                 self._wave(mode)
+                tones = max(tones, len(dict(VOCODER_CHORDS).get(mode, (1,))))
             else:
+                tones = max(tones, len(steps))
                 for shape, name in VOCODER_SHAPES:
                     if len(shape) == len(steps):
                         chord_wave(waveform, name)
@@ -1016,26 +1095,51 @@ class Vocoder:
         ratio = (high / VOCODER_LOW_HZ) ** (1.0 / (bands - 1))
         half = math.sqrt(ratio)
         q = 1.0 / (half - 1.0 / half)
+        self.centres = []
         self._bins = []
         self._k = []
         self._floor = []
-        self.notes = []
+        self._biquads = []  # each band's band-pass as (b0, a1, a2), b1 being 0 and b2 -b0
         mode = synthio.FilterMode.BAND_PASS
         for i in range(bands):
             centre = VOCODER_LOW_HZ * ratio ** i
             low, top = centre / half, centre * half
             a = max(1, int(low * n / rate + 0.5))
             b = max(a + 1, int(top * n / rate + 0.5))
+            self.centres.append(centre)
             self._bins.append((a, b))
             # amplitude = k * sqrt(band power) / sqrt(f0): the voice's band
             # level over a full-amplitude carrier's level in the band
             # (over sqrt(density), the carrier's part, kept apart in _dk)
             self._k.append(VOCODER_GAIN * math.sqrt(psd / (0.5 * (1 / low - 1 / top))))
             self._floor.append(top)
-            self.notes.append(synthio.Note(
-                frequency=110.0, waveform=self._table, amplitude=0.0,
-                filter=synthio.Biquad(mode, frequency=centre, Q=q)))
-        self._levels = [0.0] * bands
+            if self.filters:
+                self.notes.append(synthio.Note(
+                    frequency=110.0, waveform=self._table, amplitude=0.0,
+                    filter=synthio.Biquad(mode, frequency=centre, Q=q)))
+            else:
+                # synthio's band-pass, the RBJ cookbook's (0 dB at the centre)
+                w0 = 2 * math.pi * centre / rate
+                alpha = math.sin(w0) / (2 * q)
+                self._biquads.append((alpha / (1 + alpha), -2 * math.cos(w0) / (1 + alpha),
+                                      (1 - alpha) / (1 + alpha)))
+        self.levels = [0.0] * bands
+
+        if not self.filters:
+            # One note per carrier note, each with two tables: one playing,
+            # the next waveform written into the other.
+            self._harmonics = np.array([float(k) for k in range(1, VOCODER_HARMONICS + 1)])
+            self._re = np.zeros(VOCODER_TABLE)
+            self._im = np.zeros(VOCODER_TABLE)
+            self._pool = []
+            for _ in range(tones):
+                tables = [array.array("h", [0] * VOCODER_TABLE) for _ in range(2)]
+                self._pool.append([synthio.Note(frequency=110.0, waveform=tables[0], amplitude=0.0),
+                                   tables, [np.frombuffer(t, dtype=np.int16) for t in tables], 0])
+            self._resp = None
+            self._resp_hz = 0.0
+            self._spectra = {}
+            self._retone()
 
         self.noise = None
         if self.breath > 0:
@@ -1049,14 +1153,20 @@ class Vocoder:
             level = 17320.0 * math.sqrt(1.0 - cut / (rate / 2.0))
             self._noise_bins = (int(cut * n / rate + 0.5), n // 2)
             self._noise_k = self.breath * VOCODER_GAIN * math.sqrt(psd) / level
+            hpf = synthio.Biquad(synthio.FilterMode.HIGH_PASS, frequency=cut, Q=0.7071)
+            if not self.filters:
+                # The noise loops, so its high-pass can be run here, once.
+                noise, scale = _high_passed(noise, cut / rate, 0.7071)
+                self._noise_k /= scale
+                hpf = None
             self.noise = synthio.Note(
-                frequency=rate / VOCODER_NOISE, waveform=noise, amplitude=0.0,
-                filter=synthio.Biquad(synthio.FilterMode.HIGH_PASS, frequency=cut, Q=0.7071))
+                frequency=rate / VOCODER_NOISE, waveform=noise, amplitude=0.0, filter=hpf)
         self.synth = synthio.Synthesizer(sample_rate=rate, channel_count=1)
         self.output = self.synth
 
     def start(self):
         self.synth.press(self.notes + ([self.noise] if self.noise else []))
+        self._pressed = True
 
     def _wave(self, chord):
         """(table, sub-note share, density) for a chord, or None's carrier."""
@@ -1089,10 +1199,115 @@ class Vocoder:
         self._table, self._sub, density = self._wave(chord)
         self.chord = chord
         self._dk = 1.0 / math.sqrt(density)
+        if self._pool is not None:
+            self._retone()
+            return
         for note in self.notes:
             note.waveform = self._table
             if self.hz:
                 note.frequency = self.hz * self._sub
+
+    def _retone(self):
+        """Without filters: one note per note of the chord, each at its pitch,
+        and the band responses to work out again."""
+        self._ratios = dict(VOCODER_CHORDS).get(self.chord, (1,))
+        if self.chord not in self._spectra:
+            self._spectra[self.chord] = carrier_spectrum(self.waveform, self.chord)
+        self._coefs = self._spectra[self.chord]
+        self._resp = None
+        notes = [entry[0] for entry in self._pool[:len(self._ratios)]]
+        if self._pressed:
+            gone = [note for note in self.notes if note not in notes]
+            new = [note for note in notes if note not in self.notes]
+            for note in gone:
+                note.amplitude = 0.0
+            if gone:
+                self.synth.release(gone)
+            if new:
+                self.synth.press(new)
+        self.notes = notes
+        self._tune()
+
+    def _tune(self):
+        """Set the carrier notes to the carrier pitch."""
+        if not self.hz:
+            return
+        if self._pool is None:
+            for note in self.notes:
+                note.frequency = self.hz * self._sub
+            return
+        root = self._ratios[0]
+        for note, m in zip(self.notes, self._ratios):
+            note.frequency = self.hz * m / root
+
+    def _respond(self):
+        """Without filters: each band's response at every carrier harmonic,
+        times the harmonic, for the carrier's pitch now (a sum of these,
+        weighted by the band levels, is the spectrum the notes play)."""
+        hz, rate, count = self.hz or 110.0, self.rate, VOCODER_HARMONICS
+        # (ulab arrays go first in each sum: a number first needs reverse
+        # operators, which a build may leave out)
+        root = self._ratios[0]
+        size = count * len(self._ratios)
+        w, cr, ci = np.zeros(size), np.zeros(size), np.zeros(size)
+        for t, m in enumerate(self._ratios):
+            f = hz * m / root
+            w[t * count:(t + 1) * count] = self._harmonics * (2 * math.pi * f / rate)
+            # harmonics at or over half the rate would alias: leave them out
+            keep = min(count, max(0, int(0.5 * rate / f - 1e-6)))
+            cr[t * count:t * count + keep] = self._coefs[0][:keep]
+            ci[t * count:t * count + keep] = self._coefs[1][:keep]
+        cw, sw = np.cos(w), np.sin(w)
+        c2, s2 = np.cos(w * 2.0), np.sin(w * 2.0)
+        nr = c2 * -1.0 + 1.0  # the band-pass numerator, b0 (1 - z^-2), over b0
+        resp = []
+        for b0, a1, a2 in self._biquads:
+            dr = cw * a1 + c2 * a2 + 1.0
+            di = sw * -a1 - s2 * a2
+            mag = (dr * dr + di * di) * (1.0 / b0)
+            hr = (nr * dr + s2 * di) / mag
+            hi = (s2 * dr - nr * di) / mag
+            resp.append((cr * hr - ci * hi, cr * hi + ci * hr))
+        self._resp = resp
+        self._resp_hz = hz
+
+    def _play(self, root):
+        """Without filters: the bands' waveform for each carrier note."""
+        notes = self.notes
+        if not root:
+            for note in notes:
+                note.amplitude = 0.0
+            return
+        if self._resp is None or abs(self.hz - self._resp_hz) > VOCODER_RETUNE * self._resp_hz:
+            self._respond()
+        re = im = None
+        for level, (hr, hi) in zip(self.levels, self._resp):
+            if level:
+                if re is None:
+                    re, im = hr * level, hi * level
+                else:
+                    re += hr * level
+                    im += hi * level
+        if re is None:
+            for note in notes:
+                note.amplitude = 0.0
+            return
+        count = VOCODER_HARMONICS
+        gain = _IFFT_GAIN
+        for t, entry in enumerate(self._pool[:len(notes)]):
+            note, tables, views, playing = entry
+            self._re[1:count + 1] = re[t * count:(t + 1) * count]
+            self._im[1:count + 1] = im[t * count:(t + 1) * count]
+            wave = _ifft_real(self._re, self._im)
+            peak = max(float(np.max(wave)), -float(np.min(wave))) * gain
+            if peak < 1.0:
+                note.amplitude = 0.0
+                continue
+            spare = 1 - playing
+            views[spare][:] = np.array(wave * (30000.0 * gain / peak), dtype=np.int16)
+            note.waveform = tables[spare]
+            note.amplitude = min(1.0, peak / 30000.0)
+            entry[3] = spare
 
     def measure(self, window):
         """Power in each band (and the breath band) of the analysis window."""
@@ -1111,8 +1326,7 @@ class Vocoder:
             hz = min(2000.0, max(30.0, hz * self.octave))
             if abs(hz - self.hz) > 0.002 * hz:
                 self.hz = hz
-                for note in self.notes:
-                    note.frequency = hz * self._sub
+                self._tune()
         powers = self.measure(window)
         f0 = self.hz or 110.0
         root = self._dk / math.sqrt(f0)
@@ -1124,23 +1338,51 @@ class Vocoder:
                 self._held -= 1
             if not self._held:
                 root = 0.0  # gate shut: every band falls away
-        levels = self._levels
-        for i, note in enumerate(self.notes):
+        levels = self.levels
+        for i in range(len(levels)):
             if self._floor[i] < f0:
                 # a band under the note: the carrier has nothing there
-                levels[i] = note.amplitude = 0.0
+                levels[i] = 0.0
                 continue
             level = min(1.0, self._k[i] * math.sqrt(powers[i]) * root)
             if level < levels[i]:
                 level += (levels[i] - level) * VOCODER_RELEASE
             levels[i] = level
-            note.amplitude = level
+        if self._pool is None:
+            for note, level in zip(self.notes, levels):
+                note.amplitude = level
+        else:
+            self._play(root)
         if self.noise is not None:
             self.noise.amplitude = min(1.0, self._noise_k * math.sqrt(powers[-1])) if root else 0.0
 
     def deinit(self):
         self.synth.release_all()
         self.synth.deinit()
+
+
+def _high_passed(wave, cutoff, q):
+    """A looping int16 ``wave`` through synthio's high-pass (the RBJ
+    cookbook's) at ``cutoff`` (a share of the rate), as it plays once the
+    filter has settled: scaled back up to +-30000, and the scale."""
+    w0 = 2 * math.pi * cutoff
+    alpha = math.sin(w0) / (2 * q)
+    cos = math.cos(w0)
+    a0 = 1 + alpha
+    b0 = (1 + cos) / 2 / a0
+    b1 = -(1 + cos) / a0
+    a1 = -2 * cos / a0
+    a2 = (1 - alpha) / a0
+    x1 = x2 = y1 = y2 = 0.0
+    out = [0.0] * len(wave)
+    for _ in range(2):  # the second time round, it has settled
+        for i in range(len(wave)):
+            x = wave[i]
+            y = b0 * (x + x2) + b1 * x1 - a1 * y1 - a2 * y2
+            x2, x1, y2, y1 = x1, x, y1, y
+            out[i] = y
+    scale = 30000.0 / max(abs(v) for v in out)
+    return array.array("h", [int(v * scale) for v in out]), scale
 
 
 def _feed_sample(buffer, fmt):
@@ -1856,16 +2098,27 @@ def bench(hz=150.0, runs=5):
     print("ulab: {}  detection: {:.2f} ms  found {:.1f} Hz for {:.1f}".format(np is not None, best, found, hz))
 
 
-def bench_vocoder(bands=8, runs=5):
-    """Time the vocoder's measurement of one window, for the serial console:
-    >>> import autotune; autotune.bench_vocoder()"""
-    voc = Vocoder(SAMPLE_RATE, bands=bands, breath=0.3)
-    buf = array.array("h", [int(6000 * math.sin(2 * math.pi * 150.0 * i / SAMPLE_RATE)) for i in range(BUFFER_SIZE)])
-    best = None
-    for _ in range(runs):
-        t = time.monotonic_ns()
-        voc.update(buf, 150.0)
-        ms = (time.monotonic_ns() - t) / 1e6
-        best = ms if best is None or ms < best else best
+def bench_vocoder(bands=8, runs=5, chord=None):
+    """Time the vocoder's work on one window, for the serial console:
+    >>> import autotune; autotune.bench_vocoder()
+    "a block" is a held note; "a new note" adds working out the bands'
+    response at the new pitch (VOCODER_RETUNE)."""
+    voc = Vocoder(SAMPLE_RATE, bands=bands, breath=0.3, chord=chord, gate=VOCODER_GATE_OFF)
+    buf = array.array("h", [int(6000 * math.sin(2 * math.pi * 150.0 * i / SAMPLE_RATE)
+                                + 3000 * math.sin(2 * math.pi * 900.0 * i / SAMPLE_RATE))
+                            for i in range(BUFFER_SIZE)])
+    times = []
+    for hz in (150.0, 160.0):
+        best = None
+        for i in range(runs):
+            if hz == 160.0:
+                voc.update(buf, 150.0 if i % 2 else 170.0)  # so the next one is a new note
+            t = time.monotonic_ns()
+            voc.update(buf, hz)
+            ms = (time.monotonic_ns() - t) / 1e6
+            best = ms if best is None or ms < best else best
+        times.append(best)
     voc.deinit()
-    print("vocoder, {} bands: {:.2f} ms a block".format(bands, best))
+    print("vocoder, {} bands{}: {:.2f} ms a block, {:.2f} ms on a new note ({})".format(
+        bands, ", " + chord if chord else "", times[0], times[1],
+        "filters" if voc.filters else "no filters"))

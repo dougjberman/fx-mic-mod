@@ -24,18 +24,22 @@ autotune in the preset the stage runs with no correction (and skips pitch detect
 chord needs the note).
 
 ## How the vocoder runs
-A `vocoder` effect also joins the autotune stage. Its carrier is a `synthio.Synthesizer` with one
-`Note` per band: a band-limited saw / square / pulse / saw+square table through that note's own band-pass
-`synthio.Biquad`, all at the tracked note (the corrected note when the preset has autotune).
-Python only measures the voice: on the blocks between pitch searches it takes the newest
-power-of-two samples of the pitch window (512 at 16 or 24 kHz), runs a ulab FFT, sums the bins of
-each band and sets each band note's amplitude. With `mix` 1 nothing plays the voice, so the stage
-builds no shifter and the synth heads the chain; otherwise a two-voice mixer sums voice and synth.
-A `chord` carrier costs nothing extra: the chord's notes are whole-number multiples of a lower
-note (minor is 10:12:15), so one longer table holds the whole chord and each band note plays it
-at the sung note divided by the root's multiple. A key chord (`key_triad`, `key_seventh`)
-builds every chord its key can ask for when the preset loads, and on each pitch search sets the
-band notes' `waveform` to the chord the scale gives the snapped note.
+A `vocoder` effect also joins the autotune stage. On the blocks between pitch searches Python
+takes the newest power-of-two samples of the pitch window (512 at 16 or 24 kHz), runs a ulab FFT
+and sums the bins of each band into a level. A channel vocoder is the carrier through each band's
+band-pass at that band's level; the carrier repeats at the note, so the sum is one waveform too.
+Since 1.5 Python works that waveform out: each of the carrier's 48 harmonics times the bands'
+`synthio` band-pass response at that harmonic (worked out again only when the note moves 1%),
+weighted by the levels, then a 256-point ulab inverse FFT into one of two tables, and one plain
+`synthio.Note` per carrier note plays it at the tracked note. The breath noise loops, so its
+high-pass is run once at load and baked into its table. So the synth runs no `Biquad` at all:
+on a Ting a Note and Biquad per band (1.1 to 1.4) beside the voice's pitch shifter overflowed at
+8 bands. `VOCODER_FILTERS = True` in autotune.py plays it that way still, to compare.
+With `mix` 1 nothing plays the voice, so the stage builds no shifter and the synth heads the
+chain; otherwise a two-voice mixer sums voice and synth. A `chord` carrier is a note per chord
+note, in just intonation (minor is 10:12:15 of a lower note), each with its own waveform from the
+same band levels. A key chord (`key_triad`, `key_seventh`) picks the chord the scale gives the
+snapped note on each pitch search, pressing or letting go of notes as the chord's size changes.
 
 ## Needs checking on the device
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
@@ -47,24 +51,21 @@ band notes' `waveform` to the chord the scale gives the snapped note.
 - **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for
   flamming or a comb sound on the harmony; if so, the shifters may need one shared feed.
 - **Vocoder CPU:** `import autotune; autotune.bench_vocoder()` on the serial console times the
-  Python side of one measurement (FFT and band sums); it should stay well under the pitch search
-  (`autotune.bench()`). The synth side is native: 8 bands is 8 synthio notes with a biquad each.
-  Watch for `overflow` with 11 bands plus breath, and with the vocoder before a reverb. If blocks
-  overrun, try fewer bands; `VOCODER_EVERY_BLOCK = True` gives smoother bands for more CPU.
-- **Vocoder APIs:** written for CircuitPython 10's `synthio.Note(filter=synthio.Biquad(...))` and
-  `ulab.utils.spectrogram` (or `ulab.numpy.fft.fft`). A preset that fails to build falls back to
-  clean and prints why.
+  Python side of one block on a held note and on a new note (`bench_vocoder(chord="minor")` for
+  three notes). Both should stay under the pitch search (`autotune.bench()`). The synth side is
+  one plain note per carrier note plus breath. Watch for `overflow` on Night call, squeezed and not.
+- **Vocoder APIs:** written for CircuitPython 10's `synthio`, `ulab.utils.spectrogram` (or
+  `ulab.numpy.fft.fft`) and `ulab.numpy.fft.ifft` (either the (real, imaginary) pair CircuitPython
+  builds have, or complex numbers). Without `ifft` the vocoder falls back to a Biquad per band.
+  A preset that fails to build falls back to clean and prints why.
 - **Vocoder level:** `VOCODER_GAIN` (0.7) puts the vocoder about level with the voice in the
   browser preview. Check it against the Clean spot on the mic, and that a loud voice doesn't hit
   the synth's soft clip. Band levels step every 32 ms; listen for zipper noise on held vowels.
 - **Vocoder gate:** -50 dB (`VOCODER_GATE`) is a starting guess, tried only in the preview with a
   synthetic hum. Check that the mic's own noise floor sits well under it, and that quiet singing
   still opens it.
-- **Chord tables:** a chord carrier's table is 128 samples per multiple of its top note, so up to
-  2304 samples for `m7`. Check synthio takes waveforms that long, and that low sung notes don't
-  alias (the sub-note can sit below 20 Hz, which synthio should play fine). A `key_seventh`
-  preset holds four tables (about 12 KB) and takes a moment more to load; listen for a click
-  when the chord swaps (setting `Note.waveform` mid-note).
+- **Waveform swaps:** each band update writes a new 256-sample table and points the note at it
+  (`Note.waveform`) every 32 ms. Listen for zipper noise or clicks on held vowels against 1.4.
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.
