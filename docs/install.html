@@ -1008,8 +1008,10 @@ while True:
       while (port && port.readable && !stopping) {
         reader = port.readable.getReader();
         try {
-          for (;;) { const { value, done } = await reader.read(); if (done) break; log(plain(dec.decode(value, { stream: true }))); }
-        } finally { reader.releaseLock(); reader = null; }
+          for (;;) { const { value, done } = await reader.read(); if (done || stopping) break; log(plain(dec.decode(value, { stream: true }))); }
+        } finally { try { reader.releaseLock(); } catch (e) {} reader = null; }
+        // Let the page breathe before a new reader: a stream that ends at once must not spin.
+        await new Promise(r => setTimeout(r, 50));
       }
     } catch (e) { log("\n[disconnected: " + e.message + (follow ? ". Reconnecting when the mic comes back…" : "") + "]\n"); }
     try { if (writer) writer.releaseLock(); } catch (e) {}
@@ -1080,14 +1082,17 @@ while True:
   // Keep the handle squeezed: the reset releases POWER_HOLD until the boot ROM takes over.
   $("serialBoot").addEventListener("click", () => send("\x03\r\nimport microcontroller; microcontroller.on_next_reset(microcontroller.RunMode.BOOTLOADER); microcontroller.reset()\r\n"));
   $("serialForm").addEventListener("submit", (ev) => { ev.preventDefault(); const v = $("serialLine").value; $("serialLine").value = ""; send(v + "\r\n"); });
+  // Nothing here may wait for ever: each step gives up after a second, and the console says
+  // Disconnected straight away.
+  const within = (promise, ms) => Promise.race([promise, new Promise(r => setTimeout(r, ms))]);
   $("serialDisconnect").addEventListener("click", async () => {
     follow = false; stopping = true;
-    $("serialDisconnect").disabled = true;
-    const p = port, loop = reading;
-    try { if (reader) await reader.cancel(); } catch (e) {}
-    if (loop) await loop;   // the read loop lets go of the port's streams
-    try { if (p) await p.close(); } catch (e) {}
-    port = null; serialUi(false); log("\nDisconnected.\n");
+    const p = port, loop = reading, w = writer;
+    port = null; writer = null; serialUi(false); log("\nDisconnected.\n");
+    try { if (reader) reader.cancel().catch(() => {}); } catch (e) {}
+    if (loop) await within(loop, 1000);   // the read loop lets go of the port's streams
+    try { if (w) w.releaseLock(); } catch (e) {}
+    try { if (p) await within(p.close().catch(() => {}), 1000); } catch (e) {}
   });
 
   // ---------- 07 restore ----------
