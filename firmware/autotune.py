@@ -609,8 +609,9 @@ class WaveReader:
             else:
                 f.seek(size + (size & 1), 1)
 
-    def read(self):
-        """Fill ``buf`` with the next block. Returns how many samples."""
+    def read(self, gain=256):
+        """Fill ``buf`` with the next block, scaled by ``gain`` / 256.
+        Returns how many samples."""
         if self.done:
             return 0
         if self.left <= 0:
@@ -622,6 +623,10 @@ class WaveReader:
         want = min(BLOCK_SIZE, self.left)
         got = (self.file.readinto(self._view[0:want]) or 0) // 2
         self.left = self.left - got if got else 0
+        if gain != 256:
+            buf = self.buf
+            for i in range(got):
+                buf[i] = (buf[i] * gain) >> 8
         return got
 
     def close(self):
@@ -714,6 +719,7 @@ class Autotune:
         # The WaveReader being mixed in, or None, and its level in 256ths.
         self.sample = None
         self.sample_gain = 256
+        self._sample_ready = 0   # samples of the next block already read
         self._zeros = array.array("h", [0] * BLOCK_SIZE)
         self.gate_open = False
         self._gate_hold = 0
@@ -808,6 +814,7 @@ class Autotune:
         sample already playing."""
         self.stop_sample()
         self.sample = WaveReader(path, loop)
+        self._sample_ready = self.sample.read(self.sample_gain)
 
     def stop_sample(self):
         if self.sample is not None:
@@ -1140,13 +1147,19 @@ class Autotune:
             block[i] = 0
         if not self.gate:
             block[0:BLOCK_SIZE] = self._zeros
+        # The sample's next block was read (and scaled) after the last write,
+        # so the write below lands at the same moment with or without one: a
+        # file read here pushed it across the chain's render now and then.
         sample = self.sample
         if sample is not None:
-            extra, n, gain = sample.buf, sample.read(), self.sample_gain
-            for i in range(n):
-                value = block[i] + ((extra[i] * gain) >> 8)
-                block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
-            if sample.done:
+            extra, n = sample.buf, self._sample_ready
+            if not self.gate:  # the mic is muted: the block is just the sample
+                block[0:n] = extra[0:n]
+            else:
+                for i in range(n):
+                    value = block[i] + extra[i]
+                    block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
+            if not n and sample.done:
                 self.stop_sample()
         # Hand the block to the pitch shifter straight away, at the same
         # moment every pass. Writing it after the pitch search made the write
@@ -1158,6 +1171,8 @@ class Autotune:
         if self.ola is None:
             began += self._wait_out_burst()  # waiting is not work
             self._feed_block(block)
+        if self.sample is not None:
+            self._sample_ready = self.sample.read(self.sample_gain)
         window = self._window
         window[0:BLOCK_SIZE] = window[BLOCK_SIZE:BUFFER_SIZE]
         window[BLOCK_SIZE:BUFFER_SIZE] = block
