@@ -152,11 +152,11 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 /* effects-only mode: one row of slots per page, the page shown on white lights */
 .pages{display:grid;gap:14px}
 .page{display:grid;gap:8px}
-.page-head{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
-.page-head b{color:var(--ink);font-family:var(--f-mono);font-size:12px;letter-spacing:.04em}
-.page-head .wleds{display:inline-flex;gap:3px;padding:3px 4px;border-radius:7px;background:#3a3d41}
-.page-head .wled{width:8px;height:8px;border-radius:50%;background:#5a5e63}
-.page-head .wled.lit{background:#fff;box-shadow:0 0 5px rgba(255,255,255,.85)}
+.pg-head{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.pg-head b{color:var(--ink);font-family:var(--f-mono);font-size:12px;letter-spacing:.04em}
+.pg-head .wleds{display:inline-flex;gap:3px;padding:3px 4px;border-radius:7px;background:#3a3d41}
+.pg-head .wled{width:8px;height:8px;border-radius:50%;background:#5a5e63}
+.pg-head .wled.lit{background:#fff;box-shadow:0 0 5px rgba(255,255,255,.85)}
 .more-fx{display:grid;gap:10px}
 .more-fx .switch{font-weight:700;font-size:16px}
 
@@ -788,7 +788,7 @@ function renderSlots(){
         else row.append(h("div",{class:"slot empty","aria-hidden":"true"}));
       }
       root.append(h("div",{class:"page", role:"group", "aria-label":"Page "+(page+1)},
-        h("div",{class:"page-head"}, h("span",{class:"wleds","aria-hidden":"true"}, ...[0,1,2,3].map(j=>h("span",{class:j<=page?"wled lit":"wled"}))),
+        h("div",{class:"pg-head"}, h("span",{class:"wleds","aria-hidden":"true"}, ...[0,1,2,3].map(j=>h("span",{class:j<=page?"wled lit":"wled"}))),
           h("b",{}, "PAGE "+(page+1)), h("span",{}, page ? (page+1)+" white lights" : "1 white light")),
         row));
     }
@@ -1285,7 +1285,7 @@ function renderMoreFx(){
     h("label",{class:"switch"}, h("input",{type:"checkbox", id:"effects-only", checked:on||null, onchange:(e)=>setEffectsOnly(e.target.checked)}), h("span",{class:"track"}), "Give me more effects instead of samples"),
     h("p",{class:"small muted"}, ...(on
       ? ["Your mic has no samples and no Record mode now. Instead it holds up to 16 effect presets, four pages of four, up in ", h("a",{href:"#effects"},"Effects presets"), ". The ", dw("mid"), " button turns the page, the white lights show which page you're on, and the ", dw("bot"), " button does nothing. Your WAV files stay on the mic, and turning this off brings the samples back."]
-      : ["Swap the samples and Record mode for more effects: four pages of four presets, sixteen in all. The ", dw("mid"), " button turns the page instead of picking a sample, and the white lights show the page. Presets are tiny next to a WAV, so they all fit."])));
+      : ["Swap the samples and Record mode for more effects: four pages of four presets, sixteen in all. The ", dw("mid"), " button turns the page instead of picking a sample, and the white lights show the page."])));
   $("#samples-panel").style.display = on ? "none" : "grid";  // hidden loses to the inline display
 }
 function setEffectsOnly(on){
