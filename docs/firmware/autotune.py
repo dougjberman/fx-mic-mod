@@ -623,15 +623,55 @@ class WaveReader:
         want = min(BLOCK_SIZE, self.left)
         got = (self.file.readinto(self._view[0:want]) or 0) // 2
         self.left = self.left - got if got else 0
-        if gain != 256:
-            buf = self.buf
-            for i in range(got):
-                buf[i] = (buf[i] * gain) >> 8
+        if gain != 256 and got:
+            _scale(self.buf, got, gain)
         return got
 
     def close(self):
         self.done = True
         self.file.close()
+
+
+
+
+
+
+
+def _views_write_through():
+    if np is None:
+        return False
+    try:
+        buf = array.array("h", [0])
+        np.frombuffer(buf, dtype=np.int16)[0:1] = np.array([7], dtype=np.int16)
+        return buf[0] == 7
+    except Exception:
+        return False
+
+
+_NP_VIEWS = _views_write_through()
+
+
+def _mix_into(block, extra, n):
+    0
+    if _NP_VIEWS:
+        out = np.frombuffer(block, dtype=np.int16)
+        mixed = np.array(out[0:n], dtype=_FLOAT) + np.frombuffer(extra, dtype=np.int16)[0:n]
+        out[0:n] = np.array(np.clip(mixed, -32768, 32767), dtype=np.int16)
+        return
+    for i in range(n):
+        value = block[i] + extra[i]
+        block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
+
+
+def _scale(buf, n, gain):
+    0
+    if _NP_VIEWS:
+        out = np.frombuffer(buf, dtype=np.int16)
+        scaled = np.array(out[0:n], dtype=_FLOAT) * (gain / 256)
+        out[0:n] = np.array(np.clip(scaled, -32768, 32767), dtype=np.int16)
+        return
+    for i in range(n):
+        buf[i] = (buf[i] * gain) >> 8
 
 
 def _value(param):
@@ -1155,10 +1195,8 @@ class Autotune:
             extra, n = sample.buf, self._sample_ready
             if not self.gate:
                 block[0:n] = extra[0:n]
-            else:
-                for i in range(n):
-                    value = block[i] + extra[i]
-                    block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
+            elif n:
+                _mix_into(block, extra, n)
             if not n and sample.done:
                 self.stop_sample()
 
