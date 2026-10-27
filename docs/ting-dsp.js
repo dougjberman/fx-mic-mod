@@ -253,7 +253,7 @@ function dspFactory(){
   /* ---------- vocoder, as firmware/autotune.py (Vocoder) ----------
      A carrier at the sung (or tuned) note through one band-pass per band; the band levels come from
      an FFT of the newest power-of-two samples of the pitch window, every other block like the mic. */
-  const VOC={WAVEFORMS:["saw","square","pulse","saw_square"], MAX_BANDS:11, VOICE_MAX_BANDS:9, LOW:180, HIGH:5000, BREATH:4000, HARMONICS:48, TABLE:256, NOISE:2048, GAIN:0.7, RELEASE:0.4, GATE:-50, GATE_OFF:-80, GATE_CLOSE:6, GATE_HOLD:4};
+  const VOC={WAVEFORMS:["saw","square","pulse","saw_square"], MAX_BANDS:11, VOICE_MAX_BANDS:8, LOW:180, HIGH:5000, BREATH:4000, HARMONICS:48, TABLE:256, NOISE:2048, GAIN:0.7, RELEASE:0.4, GATE:-50, GATE_OFF:-80, GATE_CLOSE:6, GATE_HOLD:4};
   const vocWaves={};
   function carrierWave(shape){
     if(!VOC.WAVEFORMS.includes(shape)) throw new Error("vocoder waveform must be saw, square, pulse or saw_square");
@@ -442,7 +442,7 @@ function dspFactory(){
           if(alt&&vs.squeeze_chord!=null) throw new Error("vocoder: the handle can change the key or the chord, not both");
           if(vs.squeeze_chord!=null&&usesH(vs.mix)) throw new Error("vocoder: the handle can change the chord or drive the mix, not both");
           const intOf=(v,d,nm)=>{ v=v==null?d:v; if(typeof v!=="number") throw new Error("vocoder "+nm+" must be a number"); return Math.trunc(v); };
-          // with the voice in, its shifter runs too: bands stop at 9, as on the mic (firmware VOCODER_VOICE_MAX_BANDS)
+          // with the voice in, its shifter runs too: bands stop at 8, as on the mic (firmware VOCODER_VOICE_MAX_BANDS)
           const voiced=!(typeof (vs.mix??1)==="number" && (vs.mix??1)>=1), vb=intOf(vs.bands,8,"bands");
           voc=new Vocoder(sr, det.BUF, vs.waveform==null?"saw":String(vs.waveform), voiced&&vb>VOC.VOICE_MAX_BANDS ? VOC.VOICE_MAX_BANDS : vb, intOf(vs.octave,0,"octave"), vs.breath==null?0:vs.breath, vs.chord, vs.gate==null?VOC.GATE:vs.gate, vs.squeeze_chord);
           vocMixF=compile(vs.mix??1,"vocoder mix",ns);

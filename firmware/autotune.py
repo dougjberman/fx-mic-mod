@@ -721,7 +721,7 @@ VOCODER_MAX_BANDS = 11          # synthio plays 12 notes; one is kept for breath
 # With the voice in the mix its pitch shifter runs too, and on a Ting 11 bands
 # plus the shifter overflowed while 8 plus the shifter ran clean (and 11
 # alone ran clean); so with the voice in, bands stop here.
-VOCODER_VOICE_MAX_BANDS = 9  # 9 is on trial: Doug is testing it
+VOCODER_VOICE_MAX_BANDS = 8
 VOCODER_LOW_HZ = 180.0          # centre of the lowest band
 VOCODER_HIGH_HZ = 5000.0        # centre of the highest band (at most 0.4 x the rate)
 VOCODER_BREATH_HZ = 4000.0      # breath noise covers the voice above this

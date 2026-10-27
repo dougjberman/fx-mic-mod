@@ -808,9 +808,9 @@ class DeviceScenarioTests(unittest.TestCase):
         config = {"name": "V", "presets": [{"list": [
             {"effect": "vocoder", "bands": 11, "mix": 0.9}]}], "samples": []}
         root, out, s = run("level", config)
-        self.assertIn("using 9", out)
+        self.assertIn("using 8", out)
         voc, = s["vocoders"]
-        self.assertEqual(len(voc["hz"]), 9)
+        self.assertEqual(len(voc["hz"]), 8)
 
     def test_vocoder_with_the_voice(self):
         config = {"name": "V", "presets": [{"list": [
