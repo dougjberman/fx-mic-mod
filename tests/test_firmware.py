@@ -627,8 +627,9 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertEqual((lead["min"], lead["max"]), (0.0, 0.0))
         voc, = s["vocoders"]
         self.assertAlmostEqual(voc["hz"][0], 207.0, delta=1.0)
-        mixer = s["tune_mixer"]
-        self.assertEqual(mixer["playing"], ["GranularPitchShift", "Synthesizer"])
+        # the voice (the shifter's mixer, with its render counter) and the synth
+        mixer = s["vocoder_mixer"]
+        self.assertEqual(mixer["playing"], ["Mixer", "Synthesizer"])
         # squeezed all the way: vocoder only
         self.assertAlmostEqual(mixer["levels"][0], 0.0, places=5)
         self.assertAlmostEqual(mixer["levels"][1], 1.0, places=5)

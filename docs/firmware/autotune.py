@@ -1002,6 +1002,7 @@ class Autotune:
 
 
         self.vocoder = None
+        self._vmixer = None
         self.vocoder_mix = vocoder_mix
         self._vocoder_level = None
         if vocoder is not None:
@@ -1012,8 +1013,8 @@ class Autotune:
             else:
                 import audiomixer
                 self._voice_out = self.output
-                self.mixer = audiomixer.Mixer(voice_count=2, **fmt)
-                self.output = self.mixer
+                self._vmixer = audiomixer.Mixer(voice_count=2, **fmt)
+                self.output = self._vmixer
 
     @property
     def mix(self):
@@ -1044,12 +1045,12 @@ class Autotune:
 
         if self.vocoder is not None and not self._started:
             self.vocoder.start()
-            if self.mixer is not None:
-                self.mixer.voice[0].play(self._voice_out, loop=True)
-                self.mixer.voice[1].play(self.vocoder.output, loop=True)
+            if self._vmixer is not None:
+                self._vmixer.voice[0].play(self._voice_out, loop=True)
+                self._vmixer.voice[1].play(self.vocoder.output, loop=True)
                 self._set_vocoder_levels()
         if self.shifter is not None and not self._started:
-            if self.voices:
+            if self.mixer is not None:
                 self.mixer.voice[0].play(self.shifter, loop=True)
                 for index, voice in enumerate(self.voices):
                     self.mixer.voice[index + 1].play(voice, loop=True)
@@ -1210,7 +1211,7 @@ class Autotune:
 
     def deinit(self):
         self.stop_sample()
-        for part in [self.mixer, self.shifter] + self.voices + self._feeds + [self.feed]:
+        for part in [self._vmixer, self.mixer, self.shifter] + self.voices + self._feeds + [self.feed]:
             if part is not None:
                 part.deinit()
         if self.vocoder is not None:
@@ -1221,8 +1222,8 @@ class Autotune:
         if level == self._vocoder_level:
             return
         self._vocoder_level = level
-        self.mixer.voice[0].level = 1.0 - level
-        self.mixer.voice[1].level = level
+        self._vmixer.voice[0].level = 1.0 - level
+        self._vmixer.voice[1].level = level
 
     def _set_levels(self):
         level = min(1.0, max(0.0, _value(self.harmony_level)))
@@ -1414,7 +1415,7 @@ class Autotune:
             if VOCODER_EVERY_BLOCK or DETECT_EVERY == 1 or self._turn != 0:
                 hz = self.hz * 2.0 ** (self.correction / 12.0) if self.hz > 0 else 0.0
                 self.vocoder.update(window, hz)
-            if self.mixer is not None:
+            if self._vmixer is not None:
                 self._set_vocoder_levels()
 
 
