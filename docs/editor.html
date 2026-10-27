@@ -1038,8 +1038,8 @@ function renderSamples(){
       h("div",{class:"seg", role:"group", "aria-label":"Takes recorded on the mic"},
         [[true,"Trim silence"],[false,"Keep whole"]].map(([v,l])=>h("button",{"aria-pressed":String((config.trim_takes!==false)===v), onclick:()=>{ if (v) delete config.trim_takes; else config.trim_takes=false; changed(); }}, l)))),
     h("p",{class:"small muted"}, config.trim_takes!==false
-      ? "Silence before and after the sound is cut, so a take plays the moment you press and stops when the sound does. The click of letting go of the handle is always cut."
-      : "Takes keep everything from the squeeze to the release, apart from the handle's clicks."),
+      ? "Silence before and after the sound is cut, so a take plays the moment you press and stops when the sound does. Either way, the handle's clicks are always cut: the first 50 ms (squeezing) and the last 100 ms (letting go), with a 5 ms fade at each end."
+      : "Takes keep everything from the squeeze to the release, apart from the handle's clicks: the first 50 ms (squeezing) and the last 100 ms (letting go) are always cut, with a 5 ms fade at each end."),
     // "sample_level": a trim on every sample, full by default (firmware SAMPLE_LEVEL)
     h("div",{class:"levelrow"}, sliderEl({label:"Sample volume", min:0, max:1, step:.05}, typeof config.sample_level==="number" ? config.sample_level : 1,
       v=>{ v=Math.round(v*100)/100; if (v===1) delete config.sample_level; else config.sample_level=v; trySend({g:tryG()}); changedQuiet(); })));
