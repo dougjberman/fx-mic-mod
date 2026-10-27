@@ -90,12 +90,14 @@ def main():
              "sample": type(m.voice[1].playing).__name__,
              "sample_level": m.voice[1].level}
             for m in script.mixers[1:]
+            if type(m.voice[0].playing).__name__ != "GranularPitchShift"
         ],
         "out_level": env["mixer"].voice[0].level,
         # the harmonizer's mixer: the one whose voices play pitch shifters
         "tune_mixer": next((
             {"playing": [type(v.playing).__name__ for v in m.voice],
-             "levels": [v.level for v in m.voice]}
+             # voice 0's level is the render counter LFO; its offset is the level
+             "levels": [getattr(v.level, "offset", v.level) for v in m.voice]}
             for m in script.mixers
             if type(m.voice[0].playing).__name__ == "GranularPitchShift"), None),
         # the vocoder: carrier pitch, band levels, and what plays it

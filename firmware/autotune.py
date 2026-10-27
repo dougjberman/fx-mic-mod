@@ -63,7 +63,17 @@ GRAIN_DENSITY = 2       # native overlapping grains (1..8)
 # written half by half; the value picks which half is written while the other
 # plays. Typing f and Enter in the serial console flips it live, to test. None keeps the feed as a two-block
 # window instead, oldest block first; on a Ting that crackled on every load.
-FEED_PHASE = 1
+FEED_PHASE = 0
+# How the right half is found: the chain's mixer has a synthio LFO as the
+# voice's level (a constant: scale 0), and an LFO's phase only moves when the
+# mixer renders. So Python can count the renders since the feed started.
+# Render n reads half n % 2 (a RawSample flips halves on every pull and never
+# resets), so each write puts the new block in the half the next render reads
+# second, and the block before it in the half it reads first. No timing
+# guesses: a burst at any offset reads two blocks in order, and a late write
+# only repeats or skips a block, once.
+# Without a working LFO, FEED_SYNC below is the fallback.
+PROBE_RATE = 62.5 / 64  # LFO cycles a second: one cycle per 64 renders
 # On a Ting the right FEED_PHASE changed from one preset load to the next, and
 # flipping it cured a crackling load. The chain renders two blocks at a time
 # every two blocks, in a burst that reads half 0 and then half 1, so half 0
@@ -897,6 +907,11 @@ class Autotune:
         self._half = 0
         self._burst_due = None   # next chain burst, once start() has timed it
         self._guard = 0
+        self._probe = None      # the render counter (see PROBE_RATE)
+        self._step = 0          # its phase step per render, once measured
+        self._renders = 0
+        self._probe_phase = 0.0
+        self._newest = 0        # the half holding the last block written
         self._turn = 0
         self.busy_ms = 0.0
         # Mic level, 0 or 1, applied before pitch detection. Used when
@@ -963,16 +978,26 @@ class Autotune:
                 print("harmonizer off: it needs audiodelays.GranularPitchShift")
             else:
                 import audiodelays
-                import audiomixer
                 count = len(tones) - 1
-                self.mixer = audiomixer.Mixer(voice_count=count + 1, **fmt)
                 for _ in range(count):
                     self._feeds.append(_feed_sample(self._out, fmt))
                     self.voices.append(_make_native_shifter(
                         audiodelays, fmt, 1.0, grain_size, density)[0])
                 if self._key_chord:
                     self._intervals = voicing(OFF_KEY_SHAPE[:count + 1], inversion, harmony_octave)
-                self.output = self.mixer
+        if self.shifter is not None:
+            # The shifters always go through a mixer, harmony or not: its
+            # voice level is the render counter (see PROBE_RATE).
+            import audiomixer
+            self.mixer = audiomixer.Mixer(voice_count=len(self.voices) + 1, **fmt)
+            self.output = self.mixer
+            try:
+                import synthio
+                self._probe = synthio.LFO(rate=PROBE_RATE, scale=0.0, offset=1.0)
+                self.mixer.voice[0].level = self._probe
+            except Exception as error:
+                print("render counter off: {}".format(error))
+                self._probe = None
 
         # Vocoder: a synthio carrier, on a mixer with the voice unless the
         # voice is left out.
@@ -1029,15 +1054,80 @@ class Autotune:
                 for index, voice in enumerate(self.voices):
                     self.mixer.voice[index + 1].play(voice, loop=True)
                 self._set_levels()
-                for voice, feed in zip(self.voices, self._feeds):
-                    voice.play(feed, loop=True)
+            counting = False
+            try:
+                counting = FEED_PHASE is not None and self._await_render()
+            except Exception as error:  # never worth losing the preset over
+                print("render counter off: {}".format(error))
+            for voice, feed in zip(self.voices, self._feeds):
+                voice.play(feed, loop=True)
             self.shifter.play(self.feed, loop=True)
-            if FEED_SYNC and FEED_PHASE is not None:
+            if counting:
+                try:
+                    counting = self._count_from_start()
+                except Exception as error:
+                    print("render counter off: {}".format(error))
+                    counting = self._step = 0
+            if not counting and FEED_SYNC and FEED_PHASE is not None:
                 try:
                     self._sync_feed()
                 except Exception as error:  # never worth losing the preset over
                     print("feed sync failed: {}".format(error))
         self._started = True
+
+    def _await_render(self):
+        """Wait for the mixer to render once (its counter LFO moves), so the
+        block each voice's play() pulled early is used up and the next render
+        is a burst away. False if the counter doesn't work here."""
+        probe = self._probe
+        if probe is None:
+            return False
+        try:
+            phase = probe.phase
+        except AttributeError:
+            return False
+        now = time.monotonic_ns
+        began = now()
+        while probe.phase == phase:
+            if now() - began > 6 * BLOCK_NS:
+                print("render counter off: the LFO never moved")
+                return False
+        return True
+
+    def _count_from_start(self):
+        """Right after the feeds start: watch the counter for a few bursts
+        to learn its phase step per render, and count the renders so far.
+        False if it saw too few to tell."""
+        probe = self._probe
+        now = time.monotonic_ns
+        phase = probe.phase
+        began = now()
+        total = 0.0
+        first = last = None
+        while now() - began < 5 * BLOCK_NS:
+            p = probe.phase
+            if p != phase:
+                total += (p - phase) % 1.0
+                phase = p
+                last = (now(), total)
+                if first is None:
+                    first = last
+        renders = 0 if first is None else (last[0] - first[0] + BLOCK_NS // 2) // BLOCK_NS
+        if not renders:
+            print("render counter off: too few renders seen")
+            return False
+        # Per render the LFO moves by its rate times the block's length, but
+        # the mixer may count a block in 32-bit words (half the time), so
+        # take whichever of the two the bursts match.
+        per = PROBE_RATE * BLOCK_NS / 1e9
+        measured = (last[1] - first[1]) / renders
+        self._step = per if abs(measured - per) < abs(measured - per / 2) else per / 2
+        self._renders = int(total / self._step + 0.5)
+        self._probe_phase = phase
+        self._feed_block(self._zeros)
+        print("feed sync: counting renders, {} in {:.0f} ms, {} since the feed started".format(
+            renders, (last[0] - first[0]) / 1e6, self._renders))
+        return True
 
     def _sync_feed(self):
         """Time the chain's burst and set ``_half`` so the last write before
@@ -1144,7 +1234,10 @@ class Autotune:
         # unrelated sounds: on the mic, a 1/sqrt gain here still came out
         # about 7 dB louder with the harmony fully in.
         gain = 1.0 / (1.0 + len(self.voices) * level)
-        self.mixer.voice[0].level = gain
+        if self._probe is not None:
+            self._probe.offset = gain
+        else:
+            self.mixer.voice[0].level = gain
         for index in range(len(self.voices)):
             self.mixer.voice[index + 1].level = gain * level
 
@@ -1200,6 +1293,21 @@ class Autotune:
         if FEED_PHASE is None:
             self._front[:] = self._back
             self._back[:] = block
+            return
+        if self._step:
+            # Render n reads half n % 2. The next render reads the last block
+            # first, then this one (see PROBE_RATE).
+            phase = self._probe.phase
+            count = int((phase - self._probe_phase) % 1.0 / self._step + 0.5)
+            if count:
+                self._probe_phase = phase
+                self._renders += count
+            first = (self._renders % 2) ^ FEED_PHASE
+            halves = (self._front, self._back)
+            if self._newest != first:
+                halves[first][:] = halves[self._newest]
+            halves[first ^ 1][:] = block
+            self._newest = first ^ 1
             return
         start = (self._half ^ FEED_PHASE) * BLOCK_SIZE
         self._out[start:start + BLOCK_SIZE] = block

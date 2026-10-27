@@ -351,6 +351,7 @@ class LoaderTests(unittest.TestCase):
                         h = A.__new__(A)
                         h.mic, h._block, h._zeros = Mic(), array.array("h", [0] * n), array.array("h", [0] * n)
                         h._out, h._half, h._burst_due, h._guard = array.array("h", [-1] * (2 * n)), 0, None, 0
+                        h._step = 0
                         h._noise_gate = lambda block: clock.__setitem__("t", clock["t"] + int(gate_ms * 1000000))
                         saved = autotune.time.monotonic_ns, autotune.FEED_PHASE
                         autotune.time.monotonic_ns, autotune.FEED_PHASE = now, phase
@@ -374,6 +375,53 @@ class LoaderTests(unittest.TestCase):
                                     read.append([blk for t, hf, blk in writes if t < b and hf == half][-1])
                         self.assertEqual(read, list(range(read[0], read[0] + len(read))),
                                          (burst_after_edge, length_ms, gate_ms, phase))
+
+    def test_counted_renders_keep_every_burst_in_order(self):
+        # With the render counter, each burst reads two blocks in a row,
+        # older first, wherever the burst falls and whichever half the first
+        # render reads. On time, that is every block once; late writes only
+        # repeat or skip one.
+        import array
+        import random
+        import autotune
+        A, n, B = autotune.Autotune, autotune.BLOCK_SIZE, autotune.BLOCK_NS
+        rng = random.Random(2)
+        for trial in range(200):
+            h = A.__new__(A)
+            h._out = array.array("h", [-1] * (2 * n))
+            h._step = 1 / 64
+            h._probe = type("Probe", (), {"phase": 0.0})()
+            h._probe_phase, h._newest = 0.0, 0
+            view = memoryview(h._out)
+            h._front, h._back = view[:n], view[n:]
+            late = (0, 0, 0, 0.5, 2, 6, 10) if trial % 2 else (0.5,)
+            renders = h._renders = rng.choice((0, 1))  # one render short, or not
+            length = rng.choice((3, 12, 14.8)) * 1000000
+            offset = rng.randrange(0, 2 * B)
+            bursts = [offset + k * 2 * B for k in range(40)]
+            reads, done = [], 0
+            for m in range(1, 70):
+                t = m * B + rng.choice(late) * 1000000
+                for b in bursts:  # Python is held while a burst runs
+                    if b <= t < b + length:
+                        t = b + length
+                while done < len(bursts) and bursts[done] < t:
+                    pair = []
+                    for _ in (0, 1):
+                        half = renders % 2
+                        pair.append(h._out[half * n])
+                        renders += 1
+                        h._probe.phase = (h._probe.phase + h._step) % 1.0
+                    reads.append(pair)
+                    done += 1
+                h._feed_block(array.array("h", [m] * n))
+            reads = reads[2:]
+            # two blocks in a row, older first, never going back
+            self.assertTrue(all(b == a + 1 for a, b in reads), (trial, reads))
+            self.assertEqual([b for a, b in reads], sorted(b for a, b in reads), trial)
+            if not trial % 2:  # on time: every block, once
+                got = [blk for pair in reads for blk in pair]
+                self.assertEqual(got, list(range(got[0], got[0] + len(got))), trial)
 
     def test_autotune_not_allowed_in_samples(self):
         with self.assertRaises(ValueError):
