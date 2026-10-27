@@ -119,5 +119,10 @@ band notes' `waveform` to the chord the scale gives the snapped note.
   where the pass is tightest.
 - **Squeeze key threshold:** check the handle really reaches 0.67 travel on a firm squeeze
   (`handle_control.a` on the serial console). Lower `SQUEEZE_KEY_ON` / `SQUEEZE_KEY_OFF` if not.
+- **Effects-only pages** (`"effects_only": true`): MIDDLE rebuilds the preset at the same slot on
+  the next page, so a page turn sounds like a TOP press (a muted switch, one `overflow` cleared).
+  The console prints `page N of M, preset K of 4: name, … bytes free` on each change; check free
+  memory with 16 presets against a 4-preset pack (each preset's JSON stays in RAM, its effects
+  don't), and that TOP + MIDDLE still powers off.
 - **LFO-driven speed/humanize:** only plain numbers and `"$handle"` are verified. A synthio LFO
   only updates while a native effect ticks it.

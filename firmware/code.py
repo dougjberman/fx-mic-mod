@@ -11,6 +11,8 @@ fx-mic-mod fork of Adafruit's demo, adding:
   other effects after it (see autotune.py and config_loader.create_preset).
 * a record mode, one spot past the last preset, for recording samples on the
   device (see recorder.py and boot.py).
+* an effects-only mode (``"effects_only": true``): no samples and no record
+  mode, and up to four pages of four presets instead, MIDDLE stepping the page.
 
 Up to four presets are used (one per red LED). Only one chain exists at a time:
 switching tears the old chain down and builds the new one.
@@ -49,6 +51,16 @@ Record mode (TOP past the last preset):
 * Needs the drive writable by CircuitPython (the default, see boot.py). In
   edit mode (TOP held at power-on) the red LEDs flash in alternating pairs
   and nothing records.
+
+Effects-only mode (``"effects_only": true`` in config.json):
+
+* Up to 16 presets, in pages of four. TOP steps through Clean and the current
+  page's presets (the red LEDs, as above); there is no record mode.
+* MIDDLE steps to the next page, wrapping from the last back to page 1. The
+  white LEDs count the page: page 2 lights two, all four is page 4. The mic
+  stays on the same slot of the new page (or the page's last preset if the
+  page is shorter), and on Clean if it was on Clean.
+* BOTTOM does nothing: there are no samples.
 
 Indication, counting up like the stock firmware:
 
@@ -99,7 +111,7 @@ from recorder import Recorder, drive_free
 # firmware knows, so keep it on one line in this form. Raise it with every
 # release that adds a config setting, and add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number.
-FIRMWARE_VERSION = "1.3"
+FIRMWARE_VERSION = "1.4"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -153,6 +165,16 @@ SAMPLE_COUNT_PARAMS = ("grain_size", "window", "overlap")
 
 MAX_PRESETS = 4
 MAX_SAMPLES = 4
+
+# "effects_only": true gives up the samples and record mode for MAX_PAGES
+# pages of MAX_PRESETS presets, the page stepped by MIDDLE and shown on the
+# white LEDs. Only the selected preset's effects are ever built, so more
+# presets cost only their JSON in RAM.
+MAX_PAGES = 4
+EFFECTS_ONLY = CONFIG.get("effects_only", False)
+if not isinstance(EFFECTS_ONLY, bool):
+    print("effects_only must be true or false; using false")
+    EFFECTS_ONLY = False
 
 # How long TOP + MIDDLE must be held together, in seconds, to shut down.
 SHUTDOWN_HOLD_SECONDS = 0.8
@@ -282,9 +304,11 @@ class DataContext:
         self.tune_squeezed = False
         # The sample recorder while in record mode, else None.
         self.recorder = None
-        # Index into the cycle: 0 == clean, 1..len(PRESETS) == that preset,
+        # Index into the cycle: 0 == clean, 1..4 == that preset of the page,
         # RECORD_SPOT == record mode.
         self.active = 0
+        # The page of presets, 0-based. Always 0 unless EFFECTS_ONLY.
+        self.page = 0
 
         # Active white LED, 1..4 (top to bottom).
         self.white_active = 1
@@ -358,7 +382,9 @@ PACK_NAME = CONFIG.get("name", "none")
 # Presets are passed to config_loader whole, since a preset is more than its
 # effect list: it may carry a "blocks" mapping of LFOs and Math blocks that
 # its effects refer to by name.
-PRESETS = list(CONFIG.get("presets", ())[:MAX_PRESETS])
+PRESETS = list(CONFIG.get("presets", ())[:MAX_PRESETS * (MAX_PAGES if EFFECTS_ONLY else 1)])
+# How many pages of presets MIDDLE steps through: one unless EFFECTS_ONLY.
+PAGES = max(1, (len(PRESETS) + MAX_PRESETS - 1) // MAX_PRESETS)
 
 
 def at_rate(effects):
@@ -381,13 +407,13 @@ def at_rate(effects):
 PRESETS = [dict(p, list=at_rate(p.get("list"))) if isinstance(p, dict) else p for p in PRESETS]
 
 # One wave file per white LED slot. See config_loader.load_samples().
-SAMPLES = load_samples(CONFIG, max_samples=MAX_SAMPLES)
+SAMPLES = [] if EFFECTS_ONLY else load_samples(CONFIG, max_samples=MAX_SAMPLES)
 SAMPLES = [dict(e, effects=at_rate(e.get("effects"))) for e in SAMPLES]
 
 # "preset": samples play dry into the selected preset, like the mic does.
 # "own": each sample keeps its own effects (Adafruit's behaviour).
 try:
-    THROUGH_PRESET = sample_routing(CONFIG) == "preset"
+    THROUGH_PRESET = sample_routing(CONFIG) == "preset" and not EFFECTS_ONLY
 except ValueError as error:
     print("config: {}".format(error))
     THROUGH_PRESET = False
@@ -424,8 +450,21 @@ if isinstance(_sample_level, (int, float)) and not isinstance(_sample_level, boo
 else:
     print("sample_level must be a number from 0 to 1; using {}".format(SAMPLE_LEVEL))
 
-# The cycle position of record mode: one past the last preset.
-RECORD_SPOT = len(PRESETS) + 1
+# The cycle position of record mode: one past the last preset. None in
+# effects-only mode, which has no record mode.
+RECORD_SPOT = None if EFFECTS_ONLY else len(PRESETS) + 1
+
+
+def page_presets(ctx):
+    """The presets TOP steps through now: the current page's."""
+    return PRESETS[ctx.page * MAX_PRESETS:(ctx.page + 1) * MAX_PRESETS]
+
+
+def next_spot(ctx):
+    """The cycle position TOP steps to: clean, the page's presets, then
+    record mode (when there is one), then round to clean."""
+    spots = len(page_presets(ctx)) + (1 if RECORD_SPOT is None else 2)
+    return (ctx.active + 1) % spots
 
 # Whether the code may write the drive (boot.py decides at power-on).
 CAN_RECORD = not storage.getmount("/").readonly
@@ -625,7 +664,7 @@ def select_preset(ctx, index):
         if index == RECORD_SPOT:
             enter_record_mode(ctx)
         else:
-            build(ctx, PRESETS[index - 1] if index else [])
+            build(ctx, page_presets(ctx)[index - 1] if index else [])
     except (ValueError, MemoryError) as error:
         print("preset {} failed: {}".format(index, error))
         teardown(ctx)
@@ -638,13 +677,15 @@ def select_preset(ctx, index):
         print("record mode, {} bytes free, {} KB left on the drive".format(
             gc.mem_free(), (drive_free() or 0) // 1024))
     else:
+        presets = page_presets(ctx)
         print(
-            "preset {} of {}{} ({} effects{}), {} bytes free".format(
+            "{}preset {} of {}{} ({} effects{}), {} bytes free".format(
+                "page {} of {}, ".format(ctx.page + 1, PAGES) if EFFECTS_ONLY else "",
                 ctx.active,
-                len(PRESETS),
-                ": " + PRESETS[ctx.active - 1]["name"]
-                if ctx.active and isinstance(PRESETS[ctx.active - 1], dict)
-                and isinstance(PRESETS[ctx.active - 1].get("name"), str) else "",
+                len(presets),
+                ": " + presets[ctx.active - 1]["name"]
+                if ctx.active and isinstance(presets[ctx.active - 1], dict)
+                and isinstance(presets[ctx.active - 1].get("name"), str) else "",
                 len(ctx.chain),
                 ", {} via {}{}".format(
                     "autotune" if ctx.tune.correct else "voice",
@@ -842,9 +883,11 @@ def update_red_leds(ctx):
 
 
 def update_white_leds(ctx):
-    """Light as many white LEDs as the selected sample's number."""
+    """Light as many white LEDs as the selected sample's number, or in
+    effects-only mode the page's."""
+    lit = ctx.page + 1 if EFFECTS_ONLY else ctx.white_active
     for index, _led in enumerate(white_leds):
-        _led.value = index < ctx.white_active
+        _led.value = index < lit
 
 
 def build_sample_chain(wave, sample):
@@ -1058,6 +1101,16 @@ def ms_between(earlier, later):
     return (later - earlier) & TICKS_MASK
 
 
+def next_page(ctx):
+    """Handle a MIDDLE press in effects-only mode: step to the next page,
+    keeping the slot (or the page's last preset, on a shorter page)."""
+    if PAGES == 1:
+        print("one page of presets: add a fifth to get a second page")
+        return
+    ctx.page = (ctx.page + 1) % PAGES
+    select_preset(ctx, min(ctx.active, len(page_presets(ctx))))
+
+
 def play_current_wave_sample(ctx, at=0):
     """Handle a BOTTOM button press: play the sample through once, at once
     (a press while it plays starts it again). `release_current_wave()` stops
@@ -1217,14 +1270,17 @@ data_context.paddle_held = paddle.value
 
 # Initialize the first LED and load its wave file.
 update_white_leds(data_context)
-load_selected_wave_sample(data_context)
+if not EFFECTS_ONLY:
+    load_selected_wave_sample(data_context)
 
 print(
     "demo v2: pack {!r}, {} preset(s), {} Hz, mic gain {:.0f} dB, codec ADC HPF {:d} Hz".format(
         PACK_NAME, len(PRESETS), RATE, codec.mic_gain, HPF_HZ
     )
 )
-print("TOP button = next preset ({} spots, 0 = clean)".format(len(PRESETS) + 1))
+if EFFECTS_ONLY:
+    print("effects only: {} page(s) of presets, MIDDLE = next page, no samples or record mode".format(PAGES))
+print("TOP button = next preset ({} spots, 0 = clean)".format(len(page_presets(data_context)) + 1))
 print(
     "volume knob = DAC volume, {:.0f} to {:+.0f} dB".format(
         VOLUME_MIN_DB, VOLUME_MAX_DB
@@ -1257,10 +1313,13 @@ try:
                 data_context.middle_held = event.pressed
             if event.pressed and event.key_number == TOP:
                 # Step to the next spot in the cycle, wrapping around. The
-                # cycle is two longer than the preset count: spot 0 is clean
-                # and the last spot is record mode.
-                select_preset(data_context, (data_context.active + 1) % (RECORD_SPOT + 1))
-            if event.pressed and event.key_number == MIDDLE:
+                # cycle is two longer than the page's preset count: spot 0 is
+                # clean and the last spot is record mode (none in
+                # effects-only mode).
+                select_preset(data_context, next_spot(data_context))
+            if event.pressed and event.key_number == MIDDLE and EFFECTS_ONLY:
+                next_page(data_context)
+            elif event.pressed and event.key_number == MIDDLE:
                 # Cycle the white LEDs: 1 -> 2 -> 3 -> 4 -> 1 ...
                 # No empty spot; exactly one is always lit.
                 data_context.white_active = (
@@ -1269,9 +1328,9 @@ try:
                 update_white_leds(data_context)
                 load_selected_wave_sample(data_context)
                 print("white LED {}".format(data_context.white_active))
-            if event.pressed and event.key_number == BOTTOM:
+            if event.pressed and event.key_number == BOTTOM and not EFFECTS_ONLY:
                 play_current_wave_sample(data_context, event_ms(event))
-            if event.released and event.key_number == BOTTOM:
+            if event.released and event.key_number == BOTTOM and not EFFECTS_ONLY:
                 release_current_wave(data_context, event_ms(event))
             event = keys.events.get()
 
