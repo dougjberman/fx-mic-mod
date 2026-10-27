@@ -92,6 +92,14 @@ from config_loader import (
 )
 from recorder import Recorder, drive_free
 
+# The firmware's release number. The editor reads this line from the mic's
+# code.py before Save to mic, to check the presets only use settings this
+# firmware knows, so keep it on one line in this form. Raise it with every
+# release that adds a config setting, and add that setting to the editor's
+# FIRMWARE_NEEDS table with the new number.
+FIRMWARE_VERSION = "1.0"
+print("fx-mic-mod firmware", FIRMWARE_VERSION)
+
 # Where to look for the preset config
 CONFIG_PATHS = ("/config.json", "/ep2350_circuitpython_config.json")
 

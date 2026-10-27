@@ -271,7 +271,8 @@ function dspFactory(){
     if(!spec||typeof spec!=="object") throw new Error("effect config must be a dict");
     if(!("effect" in spec)) throw new Error('effect config is missing the "effect" key');
     const type=effectKey(spec.effect), sr=host.sr, S=sr/BASE;
-    for(const k in spec) if(k!=="effect"&&k!=="enabled"&&!PARAMS[type].includes(k)) throw new Error(type+" has no parameter "+k);
+    // Like the firmware, leave out parameters it doesn't know instead of failing.
+    for(const k in spec) if(k!=="effect"&&k!=="enabled"&&!PARAMS[type].includes(k)) console.warn(type+" has no parameter "+k+"; ignoring it");
     const P=(k,d)=>compile(spec[k]??d, type+" "+k, ns);
     const mixF=P("mix",MIX_DEFAULT[type]);
     const fx={type, latency:0};
@@ -306,7 +307,7 @@ function dspFactory(){
         let voices=[], ivs=[], keyChord=null, inv=0, oct=0, levelF=null, dbl=0;
         if(harm){
           const hs=harm.spec;
-          for(const k in hs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.harmonizer.includes(k)) throw new Error("harmonizer has no parameter "+k);
+          for(const k in hs) if(k!=="effect"&&k!=="enabled"&&!PARAMS.harmonizer.includes(k)) console.warn("harmonizer has no parameter "+k+"; ignoring it");
           const chord=hs.chord==null?"major":String(hs.chord);
           const tones=CHORDS[chord]||KEY_CHORDS[chord];
           if(!tones) throw new Error("unknown harmonizer chord: "+chord);

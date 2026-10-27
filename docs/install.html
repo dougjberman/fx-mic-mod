@@ -833,7 +833,9 @@ while True:
         await writeFile(dir, f.name, f.data);
         status("codeStatus", `Copying… ${++n}/${total}`);
       }
-      status("codeStatus", "Installed" + (keepConfig ? " (your config.json was kept)" : "") + ". The mic restarts its code by itself, but turn it off and on again once to finish, so the edit and record mode setup runs: hold the orange and " + (window.siteDevice ? siteDevice.word("mid") : "white") + " buttons together until the lights go out, let go, then squeeze the handle to turn it back on. White LED 1 staying lit means it worked; two blinks every few seconds means an error, which the serial console below will show. Open the serial console below to watch it start.", "ok");
+      const code = files.find(f => f.name === "code.py");
+      const ver = /^FIRMWARE_VERSION\s*=\s*["']([\d.]+)["']/m.exec(code ? await code.data.text() : "");
+      status("codeStatus", "Installed" + (ver ? " firmware " + ver[1] : "") + (keepConfig ? " (your config.json was kept)" : "") + ". The mic restarts its code by itself, but turn it off and on again once to finish, so the edit and record mode setup runs: hold the orange and " + (window.siteDevice ? siteDevice.word("mid") : "white") + " buttons together until the lights go out, let go, then squeeze the handle to turn it back on. White LED 1 staying lit means it worked; two blinks every few seconds means an error, which the serial console below will show. Open the serial console below to watch it start.", "ok");
       markDone("install");
     } catch (e) {
       status("codeStatus", "The mic didn't accept the files (" + e.message + "). If fx-mic-mod is already installed, the drive is read-only: turn the mic off, hold the orange button while you squeeze the handle to power it on, and try again. If CIRCUITPY is full, delete old files from lib/ first.", "bad");

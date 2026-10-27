@@ -169,6 +169,18 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   docstring says 500 ms but the constant wins).
 - Omitted effect params use the CircuitPython constructor defaults.
 
+## Firmware versions
+The firmware's release number is `FIRMWARE_VERSION` in `code.py` (it prints at boot). Mics
+from before 1.0 have none. To keep configs and firmware working together after release:
+- New firmware always reads older configs. A setting the editor drops (like the harmonizer's
+  `octave`) stays readable on the mic.
+- A config setting added after a release raises `FIRMWARE_VERSION` and gets a row in the
+  editor's `FIRMWARE_NEEDS` table with that number. Save to mic reads the mic's `code.py`
+  and refuses to write a config that uses a setting the mic's firmware is too old for.
+- Firmware from 1.0 on skips an effect parameter it doesn't know, with a console line
+  (`... has no parameter x; ignoring it`), instead of failing the whole preset.
+  Unknown top-level keys were always ignored.
+
 ## Blocks
 - `{"block": "lfo", "waveform": "sine|triangle|square|saw|ramp_down", "rate", "scale", "offset", "phase_offset", "once", "interpolate"}`
 - `{"block": "math", "operation": <synthio.MathOperation name, e.g. "constrained_lerp">, "a", "b", "c"}`

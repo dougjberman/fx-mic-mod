@@ -1236,6 +1236,27 @@ $("#btn-download").addEventListener("click", ()=>{
   toast("Downloaded config.json");
 });
 
+/* Settings that need a firmware newer than some mics have. Each release that
+ * adds a config setting raises FIRMWARE_VERSION in code.py and adds a row
+ * here with that number, so Save to mic can stop before writing a file the
+ * mic's firmware would skip parts of. Mics from before 1.0 have no number. */
+const FIRMWARE_NEEDS = [
+  {version:"1.0", what:"Double your voice on a harmonizer",
+   uses: c => (c.presets||[]).some(p => (p.list||[]).some(fx => fx.effect==="harmonizer" && fx.double && fx.enabled!==false))},
+  {version:"1.0", what:"Normalize recording levels", uses: c => c.normalize_takes === true},
+];
+const versionParts = v => String(v).split(".").map(n => parseInt(n,10)||0);
+function versionBelow(a, b){
+  const x = versionParts(a), y = versionParts(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++){ if ((x[i]||0) !== (y[i]||0)) return (x[i]||0) < (y[i]||0); }
+  return false;
+}
+// The release number in the mic's code.py, or null for firmware from before 1.0.
+function firmwareVersion(codePy){ const m = /^FIRMWARE_VERSION\s*=\s*["']([\d.]+)["']/m.exec(codePy); return m ? m[1] : null; }
+function firmwareShortfall(config, version){
+  return FIRMWARE_NEEDS.filter(n => n.uses(config) && (version === null || versionBelow(version, n.version)));
+}
+
 const canPickFolder = "showDirectoryPicker" in window;
 if (!canPickFolder) $("#btn-save").title = "Your browser can't write to drives. Use Download, then drag the file onto CIRCUITPY.";
 $("#btn-save").addEventListener("click", async ()=>{
@@ -1247,9 +1268,20 @@ $("#btn-save").addEventListener("click", async ()=>{
   const btn = $("#btn-save"); btn.disabled = true;
   notice("Saving to the mic", "busy");
   try {
-    let isTing = false;
-    try { await dir.getFileHandle("code.py"); isTing = true; } catch(e){}
-    if (!isTing){ notice("That folder has no code.py, so it doesn't look like the mic's CIRCUITPY drive. Pick CIRCUITPY and try again.", "bad"); return; }
+    let codePy = null;
+    try { codePy = await (await (await dir.getFileHandle("code.py")).getFile()).text(); } catch(e){}
+    if (codePy === null){ notice("That folder has no code.py, so it doesn't look like the mic's CIRCUITPY drive. Pick CIRCUITPY and try again.", "bad"); return; }
+    // Stop before writing settings the mic's firmware doesn't know yet.
+    const version = firmwareVersion(codePy), short = firmwareShortfall(serialize(), version);
+    if (short.length){
+      const need = short.map(n => n.version).reduce((a, b) => versionBelow(a, b) ? b : a);
+      const msg = "Nothing saved. The mic has firmware " + (version ? version : "from before 1.0") + ", and this config uses " +
+        short.map(n => n.what).join(" and ") + ", which needs firmware " + need + " or newer. ";
+      notice(msg, "bad");
+      $("#notice").append(h("a",{href:"install.html#install"}, "Update the firmware"), " first, or turn that setting off and save again.");
+      track("save-to-mic-old-firmware");
+      return;
+    }
     // The whole file is replaced, so ask first if the mic has settings this page hasn't seen.
     let onMic = null;
     try { onMic = serializeOf(normalizeConfig(JSON.parse(await (await (await dir.getFileHandle("config.json")).getFile()).text()))); } catch(e){}

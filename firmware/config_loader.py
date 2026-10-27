@@ -522,6 +522,17 @@ ALIASES = {
 }
 
 
+def _skip(effect, param):
+    """Leave out a parameter this firmware doesn't know, and say so.
+
+    A config saved for newer firmware can carry settings this one has never
+    heard of. Failing the whole preset over one of them would leave the mic
+    clean, so the rest of the effect still runs and the console names what
+    was dropped. Misspelt parameters land here too.
+    """
+    print("{} has no parameter {}; ignoring it (newer firmware?)".format(effect, param))
+
+
 def _normalize(name):
     """ "GranularPitchShift", "granular pitch shift", "reverb" -> table key."""
     if not isinstance(name, str):
@@ -588,7 +599,8 @@ def create_effect(
             # which skips disabled specs before they ever reach here.
             continue
         if name not in params:
-            raise ValueError("{} has no parameter {}".format(class_name, name))
+            _skip(class_name, name)
+            continue
         kwargs[name] = params[name](value, name, blocks)
 
     try:
@@ -798,7 +810,8 @@ def create_preset(preset, blocks=None, **format_args):
             if name in ("effect", "enabled") or name in FORMAT_ARGS:
                 continue
             if name not in AUTOTUNE_PARAMS:
-                raise ValueError("autotune has no parameter {}".format(name))
+                _skip("autotune", name)
+                continue
             tune[name] = AUTOTUNE_PARAMS[name](value, name, namespace)
 
     if harmony_specs:
@@ -816,7 +829,8 @@ def create_preset(preset, blocks=None, **format_args):
             if name in ("effect", "enabled") or name in FORMAT_ARGS:
                 continue
             if name not in HARMONIZER_PARAMS:
-                raise ValueError("harmonizer has no parameter {}".format(name))
+                _skip("harmonizer", name)
+                continue
             convert, keyword = HARMONIZER_PARAMS[name]
             tune[keyword] = convert(value, name, namespace)
 

@@ -121,9 +121,14 @@ class LoaderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [{"effect": "autotune"}, {"effect": "AutoTune"}]})
 
-    def test_unknown_autotune_param_rejected(self):
-        with self.assertRaises(ValueError):
-            self.cl.create_preset({"list": [{"effect": "autotune", "pitch": 3}]})
+    def test_unknown_params_are_skipped(self):
+        tune, effects = self.cl.create_preset({"list": [
+            {"effect": "autotune", "pitch": 3},
+            {"effect": "harmonizer", "chord": "major", "sparkle": 1},
+            {"effect": "echo", "sparkle": 1}]})
+        self.assertNotIn("pitch", tune)
+        self.assertNotIn("sparkle", tune)
+        self.assertEqual(len(effects), 1)
 
     def test_squeeze_key_must_be_text(self):
         with self.assertRaises(ValueError):
@@ -174,8 +179,6 @@ class LoaderTests(unittest.TestCase):
     def test_harmonizer_checks(self):
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [{"effect": "harmonizer"}, {"effect": "harmony"}]})
-        with self.assertRaises(ValueError):
-            self.cl.create_preset({"list": [{"effect": "harmonizer", "voices": 3}]})
         with self.assertRaises(ValueError):
             self.cl.create_preset({"list": [
                 {"effect": "autotune", "squeeze_scale": "minor"},

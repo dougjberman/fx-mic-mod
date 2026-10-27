@@ -93,6 +93,14 @@ from config_loader import (
 from recorder import Recorder, drive_free
 
 
+
+
+
+
+FIRMWARE_VERSION = "1.0"
+print("fx-mic-mod firmware", FIRMWARE_VERSION)
+
+
 CONFIG_PATHS = ("/config.json", "/ep2350_circuitpython_config.json")
 
 def load_config():
