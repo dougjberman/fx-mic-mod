@@ -129,13 +129,13 @@ the file position, so it adds no audio work to the autotune pass.
   play backwards); move the numbers to whatever feels natural and the editor's `TAP_HOLD_MS` /
   `DOUBLE_TAP_MS` to match. Timing uses keypad's own event timestamps, so a slow loop pass doesn't
   skew it.
-- **Backwards samples:** off autotune, the first double tap loads the WAV backwards into RAM and
-  prints `turned round in N ms`; that delay is heard once per slot. That takes one unbroken block
-  as big as the file, and on the device the biggest is 123 KB even at power-on (a 3 s take, 140 KB,
-  never fit). A sample that doesn't fit streams backwards from the drive instead (`too long to turn
-  round in RAM: streaming it backwards`): autotune.BackwardsStream, a looped double-buffered
-  RawSample of two 4096-sample halves (170 ms each), refilled by the main loop by the clock, each
-  half way through the other's turn. Listen for a stutter or repeated piece while one streams,
+- **Backwards samples:** off autotune, a double tap streams the WAV backwards from the drive:
+  autotune.BackwardsStream, a looped double-buffered RawSample of two 4096-sample halves (170 ms
+  each), refilled by the main loop by the clock, each half way through the other's turn. Until
+  1.7.1 it was turned round whole in RAM, which needs one unbroken block as big as the file: the
+  heap's biggest is 123 KB even at power-on, so a 3 s take (140 KB) never fit, and the copy
+  stalled the mic 100-430 ms (an overflow each time) and held its RAM while the slot was loaded
+  (Night call down to 24 KB free). Listen for a stutter or repeated piece while one streams,
   above all on a busy preset or when switching presets mid-sample (a main loop pass more than
   85 ms late repeats a piece), and for a click where the halves meet. Through autotune it streams backwards from flash, one seek per 16 ms block:
   watch for `overflow` or crackle while a sample plays backwards on a harmonizer or vocoder preset,

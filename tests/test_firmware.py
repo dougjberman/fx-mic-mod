@@ -538,7 +538,6 @@ class LoaderTests(unittest.TestCase):
                 got.extend(reader.buf[0:count])
             reader.close()
             self.assertEqual(got, forwards[::-1], block)
-        self.assertEqual(list(autotune.load_reversed(path)), forwards[::-1])
 
     def test_feed_window_holds_the_last_two_blocks_in_order(self):
         # feed_phase null: after every write the buffer reads oldest block first.
@@ -861,27 +860,23 @@ class DeviceScenarioTests(unittest.TestCase):
             "playing 1",
             "playing 1",                          # 500 ms apart: two taps
         ])
-        self.assertEqual(out.count("turned round"), 1)  # built once, then kept
-        # with the sample's own effects, the backwards copy feeds their chain
+        # with the sample's own effects, the backwards stream feeds their chain
         config["samples"][0]["effects"] = [{"effect": "freeverb", "mix": 0.4}]
         root, out, s = run("auto", config, tone=(340.0, 1.0))
         self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])
         self.assertIn("playing 1 (double tap: backwards)", out)
 
-    def test_a_sample_too_long_for_ram_streams_backwards(self):
-        # turning a long take round needs more unbroken RAM than the heap
-        # has: it streams backwards from the drive instead, looped through a
-        # double buffer, and stops itself at the end
+    def test_double_tap_streams_backwards(self):
+        # straight from the drive, looped through a double buffer, and it
+        # stops itself at the end
         config = json.loads(json.dumps(TEST_CONFIG))
         config["samples"] = [{"file": "1.wav"}]
-        root, out, s = run("auto", config, tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "9"})
-        self.assertIn("/1.wav too long to turn round in RAM: streaming it backwards", out)
-        self.assertEqual(out.count("streaming it backwards"), 1)  # built once, then kept
+        root, out, s = run("auto", config, tone=(340.0, 1.0))
         self.assertNotIn("can't", out)
         self.assertIn(("MixerVoice", "_Obj"), [tuple(p) for p in s["looped"]])
         # with the sample's own effects, their head loops it
         config["samples"] = [{"file": "1.wav", "effects": [{"effect": "freeverb", "mix": 0.4}]}]
-        root, out, s = run("auto", config, tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "9"})
+        root, out, s = run("auto", config, tone=(340.0, 1.0))
         self.assertIn(("_Obj", "_Obj"), [tuple(p) for p in s["looped"]])
         self.assertNotIn("can't", out)
 

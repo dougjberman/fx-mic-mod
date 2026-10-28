@@ -342,12 +342,8 @@ class DataContext:
         self.press_at = 0
         self.press_double = False
         self.tap_at = None
-        # The loaded sample backwards, built on its first double tap (a
-        # RawSample and the array it plays), or None.
-        self.reversed_wave = None
-        self.reversed_data = None
-        # Or, for a sample too long to turn round in RAM, the stream that
-        # plays it backwards from the drive (an autotune.BackwardsStream).
+        # The loaded sample backwards, streamed from the drive (an
+        # autotune.BackwardsStream), built on its first double tap, or None.
         self.backwards_stream = None
         # The shake effect on samples the native mixer plays (a
         # shake.ShakeFX), and the stutter roll for samples autotune streams
@@ -1017,9 +1013,6 @@ def unload_wave_sample(ctx):
         ctx.current_wave.deinit()
         ctx.current_wave = None
     ctx.current_source = None
-    if ctx.reversed_wave is not None:
-        ctx.reversed_wave.deinit()
-    ctx.reversed_wave = ctx.reversed_data = None
     if ctx.backwards_stream is not None:
         ctx.backwards_stream.deinit()
         ctx.backwards_stream = None
@@ -1059,42 +1052,24 @@ def set_gate(ctx, held):
     ctx.gate_open = held
 
 
-def reversed_wave(ctx):
-    """The loaded sample backwards, or None if it can't be had: a RawSample
-    of it turned round in RAM or, for one too long for that, a
-    BackwardsStream from the drive. Built on the first double tap and kept
-    until the sample is unloaded. (Through autotune the sample streams
-    backwards from flash instead, so this isn't needed there.)
+def backwards_stream(ctx):
+    """The loaded sample backwards, as a BackwardsStream from the drive, or
+    None if it can't be had. Built on the first double tap and kept until
+    the sample is unloaded. (Through autotune the sample streams backwards
+    inside autotune instead, so this isn't needed there.)
 
-    Turning round needs one unbroken block of RAM as big as the file, and
-    the heap's biggest is about 120 KB even at power-on, so samples over
-    about 2.5 s stream."""
-    if ctx.reversed_wave is None and ctx.backwards_stream is None:
-        began = time.monotonic()
+    Turning a sample round whole in RAM needs one unbroken block as big as
+    the file, and the heap's biggest is about 120 KB even at power-on, so a
+    3 s take never fit; the copy also stalled the mic for up to half a
+    second and held its RAM while the slot was loaded. The stream starts at
+    once and takes 16 KB whatever the length."""
+    if ctx.backwards_stream is None:
         try:
-            gc.collect()
-            ctx.reversed_data = autotune.load_reversed(ctx.current_path)
-            ctx.reversed_wave = audiocore.RawSample(
-                ctx.reversed_data, channel_count=1, sample_rate=RATE
-            )
-            print("{} turned round in {:.0f} ms".format(
-                ctx.current_path, (time.monotonic() - began) * 1000))
-        except MemoryError:
-            ctx.reversed_data = None
-            gc.collect()
-            try:
-                ctx.backwards_stream = autotune.BackwardsStream(ctx.current_path, RATE)
-            except (MemoryError, OSError, ValueError) as error:
-                print("{} can't play backwards: {}".format(ctx.current_path, error))
-                return None
-            print("{} too long to turn round in RAM: streaming it backwards".format(
-                ctx.current_path))
-        except (OSError, ValueError) as error:
-            ctx.reversed_data = None
+            ctx.backwards_stream = autotune.BackwardsStream(ctx.current_path, RATE)
+        except (MemoryError, OSError, ValueError) as error:
             print("{} can't play backwards: {}".format(ctx.current_path, error))
-            gc.collect()
             return None
-    return ctx.reversed_wave if ctx.reversed_wave is not None else ctx.backwards_stream
+    return ctx.backwards_stream
 
 
 def shake_echo(ctx):
@@ -1119,15 +1094,13 @@ def start_sample(ctx, reverse=False):
         except (OSError, ValueError) as error:
             print("{} can't go through autotune: {}".format(ctx.current_path, error))
         return
-    wave = reversed_wave(ctx) if reverse else None
-    if wave is None:
-        wave = ctx.current_wave
-    stream = ctx.backwards_stream
-    if stream is not None:
-        stream.stop()
-    # A stream is a looped double buffer, refilled by the main loop, and
+    if ctx.backwards_stream is not None:
+        ctx.backwards_stream.stop()
+    stream = backwards_stream(ctx) if reverse else None
+    wave = ctx.current_wave
+    # The stream is a looped double buffer, refilled by the main loop, that
     # stops itself at the end; whatever plays it straight loops it.
-    looped = wave is stream
+    looped = stream is not None
     if looped:
         stream.start(time.monotonic())
         wave = stream.sample
@@ -1166,9 +1139,8 @@ TICKS_MASK = (1 << 29) - 1
 
 def event_ms(event):
     """When a button event happened, in ms: keypad's own timestamp, taken
-    when it scanned the button, so a loop pass that ran long (a sample
-    being turned round, or a 16 ms autotune block) doesn't blur a tap
-    into a hold."""
+    when it scanned the button, so a loop pass that ran long (a preset
+    switch, or a 16 ms autotune block) doesn't blur a tap into a hold."""
     stamp = getattr(event, "timestamp", None)
     if stamp is None:
         stamp = int(time.monotonic() * 1000)

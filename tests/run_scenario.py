@@ -65,14 +65,6 @@ SCENARIOS = {
         paddle=[],
         end=6.0,
     ),
-    # A double tap, then TOP to preset 1 while it plays backwards, then
-    # back to clean and another double tap.
-    "auto_preset": dict(
-        presses=tap(1.0, BOTTOM) + tap(1.2, BOTTOM) + tap(1.5, TOP)
-        + tap(2.5, TOP) + tap(2.8, TOP) + tap(3.5, BOTTOM) + tap(3.7, BOTTOM),
-        paddle=[],
-        end=4.5,
-    ),
     # The same double tap on an autotune preset with samples through it.
     "auto_through": dict(
         presses=tap(0.5, TOP) + tap(1.0, BOTTOM) + tap(1.2, BOTTOM),
@@ -151,22 +143,6 @@ def track_vocoders():
     return made
 
 
-def squeeze_reversed():
-    """FAKE_REVERSE_FAILS=n: the first n backwards copies run out of RAM, as
-    on a fragmented heap."""
-    import autotune
-    fails = [int(os.environ.get("FAKE_REVERSE_FAILS", "0"))]
-    load = autotune.load_reversed
-
-    def squeezed(path):
-        if fails[0]:
-            fails[0] -= 1
-            raise MemoryError("memory allocation failed, allocating 144346 bytes")
-        return load(path)
-
-    autotune.load_reversed = squeezed
-
-
 def track_rolls():
     """Every WaveReader.roll() call, as its block count."""
     import autotune
@@ -187,7 +163,6 @@ def main():
     fakes.install(script, root)
     vocoders = track_vocoders()
     rolls = track_rolls()
-    squeeze_reversed()
     env = runpy.run_path(os.path.join(FIRMWARE, "code.py"), run_name="__main__")
     ctx = env["data_context"]
     summary = {

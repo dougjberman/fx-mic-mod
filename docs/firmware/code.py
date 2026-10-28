@@ -344,10 +344,6 @@ class DataContext:
         self.tap_at = None
 
 
-        self.reversed_wave = None
-        self.reversed_data = None
-
-
         self.backwards_stream = None
 
 
@@ -1017,9 +1013,6 @@ def unload_wave_sample(ctx):
         ctx.current_wave.deinit()
         ctx.current_wave = None
     ctx.current_source = None
-    if ctx.reversed_wave is not None:
-        ctx.reversed_wave.deinit()
-    ctx.reversed_wave = ctx.reversed_data = None
     if ctx.backwards_stream is not None:
         ctx.backwards_stream.deinit()
         ctx.backwards_stream = None
@@ -1059,7 +1052,7 @@ def set_gate(ctx, held):
     ctx.gate_open = held
 
 
-def reversed_wave(ctx):
+def backwards_stream(ctx):
     0
 
 
@@ -1069,32 +1062,14 @@ def reversed_wave(ctx):
 
 
 
-    if ctx.reversed_wave is None and ctx.backwards_stream is None:
-        began = time.monotonic()
+
+    if ctx.backwards_stream is None:
         try:
-            gc.collect()
-            ctx.reversed_data = autotune.load_reversed(ctx.current_path)
-            ctx.reversed_wave = audiocore.RawSample(
-                ctx.reversed_data, channel_count=1, sample_rate=RATE
-            )
-            print("{} turned round in {:.0f} ms".format(
-                ctx.current_path, (time.monotonic() - began) * 1000))
-        except MemoryError:
-            ctx.reversed_data = None
-            gc.collect()
-            try:
-                ctx.backwards_stream = autotune.BackwardsStream(ctx.current_path, RATE)
-            except (MemoryError, OSError, ValueError) as error:
-                print("{} can't play backwards: {}".format(ctx.current_path, error))
-                return None
-            print("{} too long to turn round in RAM: streaming it backwards".format(
-                ctx.current_path))
-        except (OSError, ValueError) as error:
-            ctx.reversed_data = None
+            ctx.backwards_stream = autotune.BackwardsStream(ctx.current_path, RATE)
+        except (MemoryError, OSError, ValueError) as error:
             print("{} can't play backwards: {}".format(ctx.current_path, error))
-            gc.collect()
             return None
-    return ctx.reversed_wave if ctx.reversed_wave is not None else ctx.backwards_stream
+    return ctx.backwards_stream
 
 
 def shake_echo(ctx):
@@ -1119,15 +1094,13 @@ def start_sample(ctx, reverse=False):
         except (OSError, ValueError) as error:
             print("{} can't go through autotune: {}".format(ctx.current_path, error))
         return
-    wave = reversed_wave(ctx) if reverse else None
-    if wave is None:
-        wave = ctx.current_wave
-    stream = ctx.backwards_stream
-    if stream is not None:
-        stream.stop()
+    if ctx.backwards_stream is not None:
+        ctx.backwards_stream.stop()
+    stream = backwards_stream(ctx) if reverse else None
+    wave = ctx.current_wave
 
 
-    looped = wave is stream
+    looped = stream is not None
     if looped:
         stream.start(time.monotonic())
         wave = stream.sample
@@ -1166,7 +1139,6 @@ TICKS_MASK = (1 << 29) - 1
 
 def event_ms(event):
     0
-
 
 
     stamp = getattr(event, "timestamp", None)

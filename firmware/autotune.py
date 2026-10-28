@@ -728,35 +728,11 @@ def _reverse(buf, n):
         j -= 1
 
 
-def load_reversed(path):
-    """The WAV at ``path`` backwards, whole, in one int16 array that an
-    audiocore.RawSample can play. For playing a sample backwards on the
-    native mixer, which can only play a file forwards. Raises MemoryError
-    if it doesn't fit."""
-    reader = WaveReader(path, reverse=True, block=2048)
-    try:
-        n = reader.size
-        out = np.zeros(n, dtype=np.int16) if np is not None else array.array("h", bytes(2 * n))
-        done = 0
-        while True:
-            got = reader.read()
-            if not got:
-                break
-            if np is not None:
-                out[done:done + got] = np.frombuffer(reader.buf, dtype=np.int16)[0:got]
-            else:
-                out[done:done + got] = reader.buf[0:got]
-            done += got
-        return out
-    finally:
-        reader.close()
-
-
 class BackwardsStream:
     """A WAV played backwards straight from the drive, for the native mixer,
-    which can only play a file forwards. Turning a long sample round in RAM
-    needs one unbroken block as big as the file, and the heap hasn't one
-    much over 120 KB even at power-on (2.5 s at 24 kHz); this takes 16 KB.
+    which can only play a file forwards, in 16 KB of RAM whatever the
+    length. (Turning it round whole in RAM needs one unbroken block as big
+    as the file, and the heap hasn't one much over 120 KB even at power-on.)
 
     ``sample`` is a double-buffered RawSample, to be played looped: the
     mixer reads one half while Python refills the other. A half is HALF

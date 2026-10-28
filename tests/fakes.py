@@ -384,10 +384,7 @@ def _map(path):
 
 def install(script, root):
     import gc
-    import os
-    # FAKE_MEM_LOW_AFTER=t: from t s on, a preset has filled the heap.
-    low_after = float(os.environ.get("FAKE_MEM_LOW_AFTER", "inf"))
-    gc.mem_free = lambda: 40000 if script.clock.t >= low_after else 123456
+    gc.mem_free = lambda: 123456
     global SCRIPT, ROOT
     import builtins
     import os

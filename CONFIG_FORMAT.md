@@ -88,10 +88,8 @@ every press starts the sample at once, so a tap never waits.
 to firmware older than 1.2, which doesn't know it and stops. Firmware 1.3 still reads `"oneshot"`,
 `"hold"` and `"startstop"` (Adafruit's packs use them) but plays those slots the same way.
 Backwards through autotune (`"sample_fx": "preset"` on an autotune preset) streams from flash;
-everywhere else the first double tap loads the sample backwards into RAM (48 KB a second at 24 kHz),
-kept until another slot is picked. That needs one unbroken block as big as the file, and the mic's
-biggest is about 120 KB, so a sample over about 2.5 s streams backwards from the drive instead, a
-piece at a time, in 16 KB of RAM.
+everywhere else it streams backwards from the drive too, a piece at a time, in 16 KB of RAM whatever
+the length.
 
 Samples must be 16-bit mono WAVs at the mic's `sample_rate` (24 kHz unless set). The install guide's step 05 converts other WAVs to 24 kHz.
 
