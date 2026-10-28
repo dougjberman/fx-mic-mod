@@ -885,7 +885,7 @@ class DeviceScenarioTests(unittest.TestCase):
         import autotune
         root = tempfile.mkdtemp()
         path = os.path.join(root, "ramp.wav")
-        n, half = 1000, 64
+        n = 3000
         with wave.open(path, "wb") as file:
             file.setnchannels(1)
             file.setsampwidth(2)
@@ -899,25 +899,31 @@ class DeviceScenarioTests(unittest.TestCase):
             def deinit(self):
                 pass
 
-        stream = autotune.BackwardsStream(path, half=half, raw_sample=Raw)
-        self.assertEqual(stream.sample.kwargs["single_buffer"], False)
-        t = stream.seconds
-        for late in (0.0, 0.2, 0.45):  # a main loop pass up to nearly half a half late
-            stream.start(0.0)
-            played, k = [], 0
-            while True:
-                # the mixer reads half k % 2 through its turn, from k halves in;
-                # the main loop runs part way through each turn
-                now = (k + 0.5 + late) * t
-                if not stream.update(now):
-                    break
-                for i in range(half):
-                    played.append(stream.buffer[(k % 2) * half + i])
-                k += 1
-            self.assertEqual(played[0:n], list(range(n))[::-1], late)
-            self.assertEqual(set(played[n:]), {0})  # then silence to ring out
-            self.assertIsNone(stream.reader)
-        stream.deinit()
+        for half, views in ((64, True), (1024, True), (1024, False)):
+            # 1024: two pieces a half, the last one short
+            autotune._NP_VIEWS, saved = views, autotune._NP_VIEWS
+            try:
+                stream = autotune.BackwardsStream(path, half=half, raw_sample=Raw)
+                self.assertEqual(stream.sample.kwargs["single_buffer"], False)
+                t = stream.seconds
+                for late in (0.0, 0.2, 0.45):  # a main loop pass up to nearly half a half late
+                    stream.start(0.0)
+                    played, k = [], 0
+                    while True:
+                        # the mixer reads half k % 2 through its turn, from k
+                        # halves in; the main loop runs part way through each
+                        now = (k + 0.5 + late) * t
+                        if not stream.update(now):
+                            break
+                        for i in range(half):
+                            played.append(stream.buffer[(k % 2) * half + i])
+                        k += 1
+                    self.assertEqual(played[0:n], list(range(n))[::-1], (half, views, late))
+                    self.assertEqual(set(played[n:]), {0})  # then silence to ring out
+                    self.assertIsNone(stream.reader)
+                stream.deinit()
+            finally:
+                autotune._NP_VIEWS = saved
 
     def test_double_tap_backwards_through_autotune(self):
         config = json.loads(json.dumps(THROUGH_CONFIG))

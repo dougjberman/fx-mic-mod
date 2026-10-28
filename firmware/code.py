@@ -1501,6 +1501,8 @@ try:
         stream = data_context.backwards_stream
         if stream is not None and stream.playing and not stream.update(now):
             stop_current_wave(data_context)
+            print("{} backwards: longest refill {:.1f} ms".format(
+                data_context.current_path, stream.worst_ms))
 
         # Shaking the mic while a sample plays. The accelerometer is awake
         # and read only then, and goes back to sleep after. Through autotune

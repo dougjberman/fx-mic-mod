@@ -131,7 +131,10 @@ the file position, so it adds no audio work to the autotune pass.
   skew it.
 - **Backwards samples:** off autotune, a double tap streams the WAV backwards from the drive:
   autotune.BackwardsStream, a looped double-buffered RawSample of two 4096-sample halves (170 ms
-  each), refilled by the main loop by the clock, each half way through the other's turn. Until
+  each), refilled by the main loop by the clock, each half way through the other's turn, 512
+  samples at a time straight into the buffer (reading whole halves into fresh arrays made the mic
+  overflow every second or so). A sample that plays to the end prints `backwards: longest refill
+  N ms`; over a few ms there means the drive reads themselves are what stalls the mic. Until
   1.7.1 it was turned round whole in RAM, which needs one unbroken block as big as the file: the
   heap's biggest is 123 KB even at power-on, so a 3 s take (140 KB) never fit, and the copy
   stalled the mic 100-430 ms (an overflow each time) and held its RAM while the slot was loaded

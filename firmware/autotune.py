@@ -740,9 +740,16 @@ class BackwardsStream:
     other's turn, by the clock, so a refill may come up to 85 ms late or
     early and still land. ``update()`` does that, once a pass of the main
     loop, and says when the sample has played through.
+
+    A half is read PIECE samples at a time, straight into the buffer and
+    turned round there, so nothing is allocated: the first version read a
+    whole half in one go into fresh arrays, and on the device the mic
+    overflowed every second or so while one played (16 KB of garbage a
+    half, and a long stall in one call).
     """
 
     HALF = 4096
+    PIECE = 512
     # Silence after the last block, for effects downstream to ring out.
     TAIL_SECONDS = 0.5
 
@@ -754,9 +761,11 @@ class BackwardsStream:
         self.half = half
         self.seconds = half / sample_rate
         self.buffer = array.array("h", bytes(4 * half))
-        view = memoryview(self.buffer)
-        self._halves = (view[0:half], view[half:2 * half])
-        self._zeros = array.array("h", bytes(2 * half))
+        self._piece = array.array("h", bytes(2 * self.PIECE))
+        self._piece_view = memoryview(self._piece)
+        if _NP_VIEWS:
+            self._np_buffer = np.frombuffer(self.buffer, dtype=np.int16)
+            self._np_piece = np.frombuffer(self._piece, dtype=np.int16)
         self.sample = raw_sample(self.buffer, channel_count=1,
                                  sample_rate=sample_rate, single_buffer=False)
         self.reader = None
@@ -764,13 +773,18 @@ class BackwardsStream:
         self._started = 0.0
         self._next = 0
         self._blocks = 0
+        self._left = 0
+        # The longest refill of the last play, in ms, for the console.
+        self.worst_ms = 0.0
 
     def start(self, now):
         """Go back to the end of the file and fill both halves. Play
         ``sample``, looped, straight after."""
         self._close_reader()
-        self.reader = WaveReader(self.path, reverse=True, block=self.half)
+        self.reader = WaveReader(self.path)
+        self._left = self.reader.size
         self._blocks = (self.reader.size + self.half - 1) // self.half
+        self.worst_ms = 0.0
         self._fill(0)
         self._fill(1)
         self._next = 2
@@ -778,12 +792,41 @@ class BackwardsStream:
         self.playing = True
 
     def _fill(self, index):
-        half = self._halves[index % 2]
-        got = self.reader.read() if self.reader is not None else 0
-        if got:
-            half[0:got] = self.reader.buf[0:got]
-        if got < self.half:
-            half[got:self.half] = self._zeros[got:self.half]
+        """Half ``index`` % 2 gets the next HALF samples, backwards."""
+        began = time.monotonic()
+        at = (index % 2) * self.half
+        end = at + self.half
+        reader = self.reader
+        while at < end:
+            want = min(self.PIECE, end - at, self._left if reader is not None else 0)
+            got = 0
+            if want > 0:
+                self._left -= want
+                reader.file.seek(reader.start + 2 * self._left)
+                got = (reader.file.readinto(self._piece_view[0:want]) or 0) // 2
+            if not got:
+                # Past the start of the file: silence.
+                self._write_silence(at, end)
+                break
+            self._write_reversed(at, got)
+            at += got
+        self.worst_ms = max(self.worst_ms, (time.monotonic() - began) * 1000)
+
+    def _write_reversed(self, at, n):
+        if _NP_VIEWS:
+            self._np_buffer[at:at + n] = self._np_piece[0:n][::-1]
+            return
+        buf, piece = self.buffer, self._piece
+        for i in range(n):
+            buf[at + i] = piece[n - 1 - i]
+
+    def _write_silence(self, at, end):
+        if _NP_VIEWS:
+            self._np_buffer[at:end] = 0
+            return
+        buf = self.buffer
+        for i in range(at, end):
+            buf[i] = 0
 
     def update(self, now):
         """Refill whichever half is due. False once the sample has played
