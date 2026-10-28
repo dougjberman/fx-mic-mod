@@ -58,6 +58,9 @@ h3{font-family:var(--f-display);font-size:17px;margin:0;font-weight:700}
 p{margin:0}
 .muted{color:var(--muted)}
 .small{font-size:13px}
+.demo{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.demo p{margin:0;flex:1 1 220px}
+.demo audio{width:min(100%,340px);height:36px}
 .btn-guide{display:grid;gap:8px}
 .btn-guide h3{margin:0;font-size:15px}
 .btn-guide table{border-collapse:collapse;width:100%;font-size:14px}
@@ -460,6 +463,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       <div class="row small muted"><span class="adv">Pack name</span><input id="pack-name" class="text mono adv" maxlength="16" aria-label="Pack name"></div>
     </div>
     <div class="slots" id="slots"></div>
+    <div class="demo"><p class="small"><b>Hear the defaults on a real mic.</b> <span class="muted">A walk through the four starting presets, recorded on a Ting.</span></p><audio controls preload="none" src="audio/default-presets.mp3">Your browser can't play this recording.</audio></div>
     <p class="small muted" id="slots-help">The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic.</p>
     <p class="small muted" id="level-help"><b>Volume between presets.</b> Distortion and reverb can make one preset much louder than another. Sing the same phrase through each preset and watch the meter in Try it, then set each preset's <b>Output level</b> so the peak line lands in about the same place. The preview only estimates the mic, so check by ear on the mic too: switch between Clean and each preset while you sing, and turn down any that jump out.</p>
   </section>
