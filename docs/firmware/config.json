@@ -13,10 +13,10 @@
     {
       "name": "Night call",
       "level": 0.7,
-      "comment": "A synth that sings your words, in the style of Kavinsky's Nightcall: hard autotune in C minor into a one-note vocoder, with a trace of your voice. Squeeze for each note's chord in the key. Needs firmware 1.1.",
+      "comment": "A synth that sings your words, in the style of Kavinsky's Nightcall: hard autotune in C minor into a one-note vocoder. Squeeze for each note's chord in the key. Needs firmware 1.1.",
       "list": [
         {"effect": "autotune", "key": "C", "scale": "minor", "speed": 1, "humanize": 0, "mix": 1},
-        {"effect": "vocoder", "waveform": "pulse", "bands": 8, "octave": 0, "breath": 0.7, "mix": 0.85, "gate": -60, "squeeze_chord": "key_triad"}
+        {"effect": "vocoder", "waveform": "pulse", "bands": 11, "octave": 0, "breath": 0.7, "mix": 1, "gate": -60, "squeeze_chord": "key_triad"}
       ]
     },
     {
