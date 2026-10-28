@@ -50,7 +50,9 @@ KNOWN_IDS = {0x33: "LIS3DH", 0x11: "SC7A20"}
 CTRL_REG1 = 0x20
 CTRL_REG4 = 0x23
 
+
 REG1_100HZ = 0x57
+REG1_ASLEEP = 0x07
 
 REG4_4G = 0x90
 
@@ -87,8 +89,19 @@ class Accelerometer:
         if who not in KNOWN_IDS:
             raise ValueError("unknown accelerometer id 0x{:02x}".format(who))
         self.name = KNOWN_IDS[who]
-        self._write(CTRL_REG1, REG1_100HZ)
         self._write(CTRL_REG4, REG4_4G)
+        self.awake = True
+        self.sleep()
+
+    def wake(self):
+        if not self.awake:
+            self._write(CTRL_REG1, REG1_100HZ)
+            self.awake = True
+
+    def sleep(self):
+        if self.awake:
+            self._write(CTRL_REG1, REG1_ASLEEP)
+            self.awake = False
 
     def _lock(self):
 
@@ -141,12 +154,30 @@ class ShakeMeter:
             print("shake: no accelerometer ({})".format(error))
             return None
 
+    @property
+    def awake(self):
+        return self.accelerometer.awake
+
     def reset(self):
+        0
         self.amount = 0.0
         self.read_at = None
+        self.gravity = None
+        try:
+            self.accelerometer.sleep()
+        except OSError:
+            pass
 
     def update(self, now):
         0
+
+        if not self.accelerometer.awake:
+            try:
+                self.accelerometer.wake()
+            except OSError:
+                return self.amount
+            self.read_at = now
+            return self.amount
         if self.read_at is not None and now - self.read_at < READ_SECONDS:
             return self.amount
         dt = READ_SECONDS if self.read_at is None else min(now - self.read_at, 0.2)

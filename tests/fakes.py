@@ -45,6 +45,9 @@ class Script:
         # accelerometer (what every other scenario runs on).
         self.shakes = shakes
         self.echoes = []
+        # Each value written to the accelerometer's CTRL_REG1 (0x57 awake,
+        # 0x07 asleep).
+        self.accel_power = []
 
     def shaking(self):
         t = self.clock.t
@@ -270,6 +273,8 @@ class I2C:
     def writeto(self, address, data):
         if address == 0x18 and SCRIPT.shakes is None:
             raise OSError(19, "No such device")
+        if address == 0x18 and len(data) == 2 and data[0] == 0x20:
+            SCRIPT.accel_power.append(data[1])
 
     def writeto_then_readfrom(self, address, out, into):
         self.writeto(address, out)

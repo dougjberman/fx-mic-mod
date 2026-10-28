@@ -1094,16 +1094,28 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertLessEqual(echo["mix_max"], 0.3)
         self.assertEqual(echo["mix_last"], 0.0)
         self.assertEqual((echo["clears"], echo["retriggered"]), (2, 1))
+        # the accelerometer sleeps from boot, wakes for the sample, and
+        # sleeps again once it stops
+        self.assertEqual(s["accel_power"], [0x07, 0x57, 0x07])
 
     def test_shaking_a_sample_through_autotune_rolls_it(self):
         root, out, s = run("shake_through", THROUGH_CONFIG, tone=(340.0, 3.0))
-        self.assertEqual(s["shake_echo"]["mix_max"], 0.0)  # the Echo isn't in this path
+        # the Echo isn't in this path, so it is never built
+        self.assertIsNone(s["shake_echo"])
         rolls = s["rolls"]
         self.assertTrue(rolls and rolls[-1] == 0, rolls)  # rolled, then let go
         sweep = rolls[rolls.index(0, 1) + 1:]
         sweep = sweep[:sweep.index(0)]
         self.assertEqual(sweep, sorted(sweep, reverse=True))  # each stretch shorter
         self.assertGreater(sweep[0], 3 * sweep[-1])
+
+    def test_shake_costs_nothing_until_a_sample_plays(self):
+        # sung (and shaken) through two presets, no sample: no Echo is
+        # built, and the accelerometer is put to sleep at boot and stays so
+        root, out, s = run("shake_idle", tone=(340.0, 1.0))
+        self.assertIn("shake: LIS3DH found", out)
+        self.assertIsNone(s["shake_echo"])
+        self.assertEqual(s["accel_power"], [0x07])
 
     def test_shake_without_an_accelerometer(self):
         root, out, s = run("shake_no_chip", tone=(340.0, 1.0))

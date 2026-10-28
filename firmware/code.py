@@ -117,7 +117,7 @@ import shake
 # release that adds a config setting, add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number, and add a row for the release to
 # the "What's new" table on the install page, which its update check lists.
-FIRMWARE_VERSION = "1.7"
+FIRMWARE_VERSION = "1.7.1"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -1076,6 +1076,19 @@ def reversed_wave(ctx):
     return ctx.reversed_wave
 
 
+def shake_echo(ctx):
+    """The shake Echo for samples on the native mixer, built the first time
+    one plays, or None with the shake off (or out of RAM for it)."""
+    global shake_meter
+    if ctx.shake_fx is None and shake_meter is not None:
+        try:
+            ctx.shake_fx = shake.ShakeFX(SHAKE, FORMAT)
+        except (ValueError, MemoryError) as error:
+            print("shake: off ({})".format(error))
+            shake_meter = None
+    return ctx.shake_fx
+
+
 def start_sample(ctx, reverse=False):
     """Play the loaded sample from the top on whatever plays samples now,
     or from the end, backwards, with ``reverse``."""
@@ -1093,7 +1106,7 @@ def start_sample(ctx, reverse=False):
         # Re-hand the wave to the head of the chain so the press restarts it.
         ctx.current_effects[0].play(wave)
         source = ctx.current_source
-    if ctx.shake_fx is not None:
+    if shake_echo(ctx) is not None:
         # Last on the sample's way to the mixer: its own effects, or the
         # preset it plays into, take the shaken sound.
         source = ctx.shake_fx.play(source)
@@ -1305,14 +1318,12 @@ def learn_handle_open():
 data_context = DataContext()
 data_context.paddle_held = paddle.value
 if shake_meter is not None:
-    try:
-        data_context.shake_fx = shake.ShakeFX(SHAKE, FORMAT)
-        data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
-        print("shake: {} found; shaking a sample plays it {}".format(
-            shake_meter.name, shake.describe(SHAKE)))
-    except (ValueError, MemoryError) as error:
-        print("shake: off ({})".format(error))
-        shake_meter = None
+    # The shake Echo is built the first time a sample plays on the native
+    # mixer (see shake_echo()), so until then the shake holds no RAM: free
+    # memory at boot, and so how often gc runs, stays as it was before 1.7.
+    data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
+    print("shake: {} found; shaking a sample plays it {}".format(
+        shake_meter.name, shake.describe(SHAKE)))
 
 # Initialize the first LED and load its wave file.
 update_white_leds(data_context)
@@ -1481,25 +1492,29 @@ try:
                 vocoder.squeeze(not vocoder.squeezed)
                 print("vocoder chord now {}".format(vocoder.chord or "one note"))
 
-        # Shaking the mic while a sample plays. The accelerometer is read
-        # only then. Through autotune the sample streams from the drive, so
-        # the shake rolls it there; elsewhere it mixes in the shake Echo.
-        # (A tap leaves wave_playing set after the sample ends; the Echo's
-        # own playing goes off then, but a shake under way rings out.)
+        # Shaking the mic while a sample plays. The accelerometer is awake
+        # and read only then, and goes back to sleep after. Through autotune
+        # the sample streams from the drive, so the shake rolls it there;
+        # elsewhere it mixes in the shake Echo. (A tap leaves wave_playing
+        # set after the sample ends; the Echo's own playing goes off then,
+        # but a shake under way rings out.) With no sample playing this is
+        # two attribute checks a pass.
         if shake_meter is not None:
             tune = data_context.tune
             shake_fx = data_context.shake_fx
             if THROUGH_PRESET and tune is not None:
                 if tune.sample is not None:
                     data_context.shake_roll.update(tune.sample, shake_meter.update(now), now)
-                elif shake_meter.amount:
+                elif shake_meter.awake:
                     shake_meter.reset()
                     data_context.shake_roll.reset()
-            elif data_context.wave_playing and (shake_fx.echo.playing or shake_fx.on):
+            elif (shake_fx is not None and data_context.wave_playing
+                  and (shake_fx.echo.playing or shake_fx.on)):
                 shake_fx.set_amount(shake_meter.update(now))
-            elif shake_meter.amount or shake_fx.on:
+            elif shake_meter.awake:
                 shake_meter.reset()
-                shake_fx.set_amount(0.0)
+                if shake_fx is not None:
+                    shake_fx.set_amount(0.0)
 
         # Reading .overflow clears it. It trips if the playback side falls
         # behind the mic, which should not happen here. Both run off the

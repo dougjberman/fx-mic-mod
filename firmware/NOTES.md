@@ -54,6 +54,9 @@ A `synthio.LFO` sweeps its delay; Python only sets its mix from the shake (0 whe
 Echo copies the sample straight through). Zip and warble use `freq_shift`, so a changing delay
 bends the repeats' pitch instead of clicking; glitch is a plain Echo whose delay steps down.
 The Shake FX Lab (a page made in the project thread) runs the same Echo step for step at 24 kHz.
+Until a sample plays nothing of the shake exists or runs: the Echo is built on the first sample
+played on the native mixer, and the accelerometer sits in power-down (CTRL_REG1 0x07) except
+while a sample plays. With no sample, the loop checks two attributes a pass.
 Through an autotune preset the sample is streamed by Python, so there the shake is a stutter roll:
 `WaveReader.roll()` repeats the last stretch of the file, shorter on each sweep. That only moves
 the file position, so it adds no audio work to the autotune pass.

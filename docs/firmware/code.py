@@ -117,7 +117,7 @@ import shake
 
 
 
-FIRMWARE_VERSION = "1.7"
+FIRMWARE_VERSION = "1.7.1"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 
@@ -1076,6 +1076,19 @@ def reversed_wave(ctx):
     return ctx.reversed_wave
 
 
+def shake_echo(ctx):
+    0
+
+    global shake_meter
+    if ctx.shake_fx is None and shake_meter is not None:
+        try:
+            ctx.shake_fx = shake.ShakeFX(SHAKE, FORMAT)
+        except (ValueError, MemoryError) as error:
+            print("shake: off ({})".format(error))
+            shake_meter = None
+    return ctx.shake_fx
+
+
 def start_sample(ctx, reverse=False):
     0
 
@@ -1093,7 +1106,7 @@ def start_sample(ctx, reverse=False):
 
         ctx.current_effects[0].play(wave)
         source = ctx.current_source
-    if ctx.shake_fx is not None:
+    if shake_echo(ctx) is not None:
 
 
         source = ctx.shake_fx.play(source)
@@ -1305,14 +1318,12 @@ def learn_handle_open():
 data_context = DataContext()
 data_context.paddle_held = paddle.value
 if shake_meter is not None:
-    try:
-        data_context.shake_fx = shake.ShakeFX(SHAKE, FORMAT)
-        data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
-        print("shake: {} found; shaking a sample plays it {}".format(
-            shake_meter.name, shake.describe(SHAKE)))
-    except (ValueError, MemoryError) as error:
-        print("shake: off ({})".format(error))
-        shake_meter = None
+
+
+
+    data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
+    print("shake: {} found; shaking a sample plays it {}".format(
+        shake_meter.name, shake.describe(SHAKE)))
 
 
 update_white_leds(data_context)
@@ -1486,20 +1497,24 @@ try:
 
 
 
+
+
         if shake_meter is not None:
             tune = data_context.tune
             shake_fx = data_context.shake_fx
             if THROUGH_PRESET and tune is not None:
                 if tune.sample is not None:
                     data_context.shake_roll.update(tune.sample, shake_meter.update(now), now)
-                elif shake_meter.amount:
+                elif shake_meter.awake:
                     shake_meter.reset()
                     data_context.shake_roll.reset()
-            elif data_context.wave_playing and (shake_fx.echo.playing or shake_fx.on):
+            elif (shake_fx is not None and data_context.wave_playing
+                  and (shake_fx.echo.playing or shake_fx.on)):
                 shake_fx.set_amount(shake_meter.update(now))
-            elif shake_meter.amount or shake_fx.on:
+            elif shake_meter.awake:
                 shake_meter.reset()
-                shake_fx.set_amount(0.0)
+                if shake_fx is not None:
+                    shake_fx.set_amount(0.0)
 
 
 
