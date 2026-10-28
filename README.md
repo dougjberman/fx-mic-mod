@@ -2,7 +2,8 @@
 
 Custom CircuitPython firmware for the Teenage Engineering EP-2350 "Ting" / FX Mic: stackable effects
 (autotune, a chord harmonizer, a pitch-tracking vocoder, distortion, reverb, delay, chorus, phaser, pitch shift, filters) plus on-device
-sample recording, with a friendly web editor for the presets.
+sample recording, with a friendly web editor for the presets. Or swap the samples for more effects:
+the optional **effects-only mode** holds up to 16 presets on the mic, in four pages of four.
 
 It is a fork of Adafruit's [EP-2350 CircuitPython demo](https://github.com/adafruit/Adafruit_Learning_System_Guides/tree/main/Teenage_Engineering_EP2350_Demo)
 by Tim Cocks (MIT), from the guide
@@ -32,7 +33,6 @@ instructions to match your mic.
 | TOP | Next effects preset: clean → preset 1..4 → **record mode** → clean. The red LEDs count up as on the stock firmware: one lit for preset 1, two for preset 2, all four for preset 4, none on clean. In record mode all four flash. |
 | MIDDLE | Next sample slot 1..4, counted on the white LEDs the same way (one lit for slot 1, all four for slot 4). |
 | BOTTOM | Play the selected sample: a tap plays it through, a hold plays it until you let go, and a double tap plays it backwards. In config, you can decide if you want samples to play through the currently selected effect preset, (`"sample_fx": "preset"`) or hardcode the sample's own effects. |
-| Effects only | With **Give me more effects instead of samples** on in the editor (`"effects_only": true`), there are no samples or record mode: TOP steps preset 1..4 of the page and round, MIDDLE turns the page (up to four pages, sixteen presets, counted on the white LEDs), and BOTTOM goes to clean with every LED off. From clean, TOP or MIDDLE goes to page 1, preset 1. |
 | Squeeze handle | Turns the mic on. Its travel is also `"$handle"` in presets (0 = just squeezed enough to open the mic, 1 = fully in). Effects parameters can be mapped to the squeeze, such as an autotune preset that switches key on a full squeeze (`squeeze_key` / `squeeze_scale`). |
 | Shake | While a sample plays, shaking the mic zips it up (the default), warbles it or glitches it: `"shake": "zip"`, `"warble"`, `"glitch"` or `"off"`. Played through an autotune preset, the sample stutters instead. |
 | Volume knob | Output level. |
@@ -41,6 +41,24 @@ instructions to match your mic.
 **Record mode:** all four red LEDs flash together and the white LEDs show the slot to record into. MIDDLE picks the slot,
 squeeze and hold the handle to record, release to save. The red LEDs stop flashing and count down the 4 second max sample length as you record. While the take saves, a light runs down the mic from the top red LED to the bottom white one. Silence before and after the sound is trimmed (the editor can turn that off), so the sample starts right on it. The editor can also normalize takes, so each one peaks at -3 dB (off by default).
 A recording immediately replaces the slot's WAV. BOTTOM plays it back to decide if you want another take.
+
+## Effects-only mode: 16 presets
+
+Can't pick just four? Turn on **Give me more effects instead of samples** in the editor's Samples
+section (`"effects_only": true` in `config.json`, firmware 1.4 or newer). The mic drops the samples
+and record mode and holds up to **16 effect presets, in four pages of four**. The editor shows them
+as four rows, one per page, and every preset has a copy button so you can paste it into another
+slot and make a variation.
+
+| Control | Does |
+|---|---|
+| TOP | Next preset on the current page, 1..4 and round again. The red LEDs count the preset as usual. |
+| MIDDLE | Next page, 1..4 and back to 1, keeping the same preset number. The white LEDs count the page: two lit is page 2. |
+| BOTTOM | Clean (no effects), with every LED off. It's the only way to clean; from there, TOP or MIDDLE goes to page 1, preset 1. |
+
+Pages fill in order, so page 2 starts at the fifth preset. Your WAV files stay on the mic and your
+sample settings stay in `config.json`, so turning the mode off brings the samples back. Presets are
+small: the mic keeps all 16 as JSON and only builds the effects of the one playing.
 
 ## Two power-on modes (boot.py)
 
