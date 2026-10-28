@@ -867,6 +867,20 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])
         self.assertIn("playing 1 (double tap: backwards)", out)
 
+    def test_double_tap_backwards_frees_the_shake_echo_when_ram_is_tight(self):
+        # the first copy doesn't fit: the shake Echo is freed, the copy is
+        # tried again, and the Echo comes back for the backwards play
+        root, out, s = run("auto_shake", tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "1"})
+        self.assertIn("playing 1 (double tap: backwards)", out)
+        self.assertNotIn("can't play backwards", out)
+        self.assertEqual(out.count("turned round"), 1)
+        self.assertEqual(s["plays"][-1][0], "Echo")
+        self.assertEqual(s["shake_echo"]["max_delay_ms"], 140)
+        # still too tight: it plays forwards, as before
+        root, out, s = run("auto_shake", tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "2"})
+        self.assertIn("/1.wav can't play backwards: memory allocation failed", out)
+        self.assertEqual(s["plays"][-1][0], "Echo")
+
     def test_double_tap_backwards_through_autotune(self):
         config = json.loads(json.dumps(THROUGH_CONFIG))
         config["samples"] = [{"file": "1.wav"}]

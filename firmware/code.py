@@ -1062,7 +1062,17 @@ def reversed_wave(ctx):
         began = time.monotonic()
         try:
             gc.collect()
-            ctx.reversed_data = autotune.load_reversed(ctx.current_path)
+            try:
+                ctx.reversed_data = autotune.load_reversed(ctx.current_path)
+            except MemoryError:
+                # The copy needs one unbroken block as big as the file, and
+                # the shake Echo's buffer can sit in the middle of the free
+                # RAM. Free it and try once more; start_sample builds it
+                # again afterwards, in whatever room is left.
+                if ctx.shake_fx is None:
+                    raise
+                drop_shake_echo(ctx)
+                ctx.reversed_data = autotune.load_reversed(ctx.current_path)
             ctx.reversed_wave = audiocore.RawSample(
                 ctx.reversed_data, channel_count=1, sample_rate=RATE
             )
@@ -1087,6 +1097,14 @@ def shake_echo(ctx):
             print("shake: off ({})".format(error))
             shake_meter = None
     return ctx.shake_fx
+
+
+def drop_shake_echo(ctx):
+    """Free the shake Echo, to make room. shake_echo() builds it again."""
+    sample_voice(ctx).stop()
+    ctx.shake_fx.deinit()
+    ctx.shake_fx = None
+    gc.collect()
 
 
 def start_sample(ctx, reverse=False):
