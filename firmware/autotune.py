@@ -728,49 +728,115 @@ def _reverse(buf, n):
         j -= 1
 
 
-def reverse_into(path, out):
-    """Fill the start of ``out`` (an int16 array) with the WAV at ``path``
-    backwards, and return how many samples that took. Raises MemoryError
-    if the file is longer than ``out``."""
-    reader = WaveReader(path, reverse=True, block=2048)
-    try:
-        n = reader.size
-        if n > len(out):
-            raise MemoryError("{} samples, the buffer holds {}".format(n, len(out)))
-        ulab_out = np is not None and not isinstance(out, array.array)
-        done = 0
-        while True:
-            got = reader.read()
-            if not got:
-                break
-            if ulab_out:
-                out[done:done + got] = np.frombuffer(reader.buf, dtype=np.int16)[0:got]
-            else:
-                out[done:done + got] = reader.buf[0:got]
-            done += got
-        return done
-    finally:
-        reader.close()
-
-
-def int16_buffer(n):
-    """A zeroed int16 array of ``n`` samples, in one allocation."""
-    if np is not None:
-        return np.zeros(n, dtype=np.int16)
-    return array.array("h", bytes(2 * n))
-
-
 def load_reversed(path):
     """The WAV at ``path`` backwards, whole, in one int16 array that an
     audiocore.RawSample can play. For playing a sample backwards on the
     native mixer, which can only play a file forwards. Raises MemoryError
     if it doesn't fit."""
-    reader = WaveReader(path)
-    n = reader.size
-    reader.close()
-    out = int16_buffer(n)
-    reverse_into(path, out)
-    return out
+    reader = WaveReader(path, reverse=True, block=2048)
+    try:
+        n = reader.size
+        out = np.zeros(n, dtype=np.int16) if np is not None else array.array("h", bytes(2 * n))
+        done = 0
+        while True:
+            got = reader.read()
+            if not got:
+                break
+            if np is not None:
+                out[done:done + got] = np.frombuffer(reader.buf, dtype=np.int16)[0:got]
+            else:
+                out[done:done + got] = reader.buf[0:got]
+            done += got
+        return out
+    finally:
+        reader.close()
+
+
+class BackwardsStream:
+    """A WAV played backwards straight from the drive, for the native mixer,
+    which can only play a file forwards. Turning a long sample round in RAM
+    needs one unbroken block as big as the file, and the heap hasn't one
+    much over 120 KB even at power-on (2.5 s at 24 kHz); this takes 16 KB.
+
+    ``sample`` is a double-buffered RawSample, to be played looped: the
+    mixer reads one half while Python refills the other. A half is HALF
+    samples (170 ms at 24 kHz), and each is refilled half way through the
+    other's turn, by the clock, so a refill may come up to 85 ms late or
+    early and still land. ``update()`` does that, once a pass of the main
+    loop, and says when the sample has played through.
+    """
+
+    HALF = 4096
+    # Silence after the last block, for effects downstream to ring out.
+    TAIL_SECONDS = 0.5
+
+    def __init__(self, path, sample_rate=SAMPLE_RATE, half=HALF, raw_sample=None):
+        if raw_sample is None:
+            import audiocore
+            raw_sample = audiocore.RawSample
+        self.path = path
+        self.half = half
+        self.seconds = half / sample_rate
+        self.buffer = array.array("h", bytes(4 * half))
+        view = memoryview(self.buffer)
+        self._halves = (view[0:half], view[half:2 * half])
+        self._zeros = array.array("h", bytes(2 * half))
+        self.sample = raw_sample(self.buffer, channel_count=1,
+                                 sample_rate=sample_rate, single_buffer=False)
+        self.reader = None
+        self.playing = False
+        self._started = 0.0
+        self._next = 0
+        self._blocks = 0
+
+    def start(self, now):
+        """Go back to the end of the file and fill both halves. Play
+        ``sample``, looped, straight after."""
+        self._close_reader()
+        self.reader = WaveReader(self.path, reverse=True, block=self.half)
+        self._blocks = (self.reader.size + self.half - 1) // self.half
+        self._fill(0)
+        self._fill(1)
+        self._next = 2
+        self._started = now
+        self.playing = True
+
+    def _fill(self, index):
+        half = self._halves[index % 2]
+        got = self.reader.read() if self.reader is not None else 0
+        if got:
+            half[0:got] = self.reader.buf[0:got]
+        if got < self.half:
+            half[got:self.half] = self._zeros[got:self.half]
+
+    def update(self, now):
+        """Refill whichever half is due. False once the sample has played
+        through (or was stopped): the voice playing it can be stopped."""
+        if not self.playing:
+            return False
+        elapsed = now - self._started
+        # Block n plays from n halves in; it goes in when the block before
+        # it is half way through.
+        while elapsed >= (self._next - 0.5) * self.seconds:
+            self._fill(self._next)
+            self._next += 1
+        if elapsed >= self._blocks * self.seconds + self.TAIL_SECONDS:
+            self.stop()
+            return False
+        return True
+
+    def stop(self):
+        self.playing = False
+        self._close_reader()
+
+    def _close_reader(self):
+        if self.reader is not None:
+            self.reader.close()
+            self.reader = None
+
+    def deinit(self):
+        self.stop()
+        self.sample.deinit()
 
 
 def _value(param):

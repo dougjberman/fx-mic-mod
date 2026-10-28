@@ -868,35 +868,61 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])
         self.assertIn("playing 1 (double tap: backwards)", out)
 
-    def test_double_tap_backwards_uses_ram_set_aside_at_power_on(self):
-        # after a while the heap has no free block as big as a long take,
-        # so one is set aside at power-on and every slot turns round in it
-        root, out, s = run("auto", tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "9"})
-        self.assertIn("backwards: 46 KB set aside, for samples up to 1.0 s", out)
-        self.assertLess(out.index("set aside"), out.index("loaded /1.wav"))
-        self.assertIn("playing 1 (double tap: backwards)", out)
-        self.assertIn("/1.wav turned round in", out)
+    def test_a_sample_too_long_for_ram_streams_backwards(self):
+        # turning a long take round needs more unbroken RAM than the heap
+        # has: it streams backwards from the drive instead, looped through a
+        # double buffer, and stops itself at the end
+        config = json.loads(json.dumps(TEST_CONFIG))
+        config["samples"] = [{"file": "1.wav"}]
+        root, out, s = run("auto", config, tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "9"})
+        self.assertIn("/1.wav too long to turn round in RAM: streaming it backwards", out)
+        self.assertEqual(out.count("streaming it backwards"), 1)  # built once, then kept
+        self.assertNotIn("can't", out)
+        self.assertIn(("MixerVoice", "_Obj"), [tuple(p) for p in s["looped"]])
+        # with the sample's own effects, their head loops it
+        config["samples"] = [{"file": "1.wav", "effects": [{"effect": "freeverb", "mix": 0.4}]}]
+        root, out, s = run("auto", config, tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "9"})
+        self.assertIn(("_Obj", "_Obj"), [tuple(p) for p in s["looped"]])
         self.assertNotIn("can't", out)
 
-    def test_double_tap_backwards_with_no_room_set_aside(self):
-        # 2 s needs 94 KB, and with room to spare that's more than is free:
-        # the sample is turned round in RAM on the double tap, as before
-        root, out, s = run("auto", tone=(340.0, 2.0))
-        self.assertIn("backwards: no room set aside (93 KB needed, 120 KB free)", out)
-        self.assertIn("/1.wav turned round in", out)
-        # and when the heap has no block that big, it plays forwards
-        root, out, s = run("auto", tone=(340.0, 2.0), env={"FAKE_REVERSE_FAILS": "9"})
-        self.assertIn("/1.wav can't play backwards: memory allocation failed", out)
-        self.assertIn("playing 1 (double tap: backwards)", out)
+    def test_backwards_stream_plays_the_file_backwards(self):
+        import array
+        import autotune
+        root = tempfile.mkdtemp()
+        path = os.path.join(root, "ramp.wav")
+        n, half = 1000, 64
+        with wave.open(path, "wb") as file:
+            file.setnchannels(1)
+            file.setsampwidth(2)
+            file.setframerate(autotune.SAMPLE_RATE)
+            file.writeframes(b"".join(int(i).to_bytes(2, "little", signed=True) for i in range(n)))
 
-    def test_a_full_preset_borrows_the_backwards_buffer(self):
-        # a preset that leaves too little free takes the buffer, stopping the
-        # backwards sample it held; it comes back once the preset is gone
-        root, out, s = run("auto_preset", tone=(340.0, 1.0),
-                           env={"FAKE_MEM_LOW_AFTER": "1.45", "FAKE_REVERSE_FAILS": "9"})
-        self.assertIn("backwards: buffer lent to the preset", out)
-        self.assertNotIn("Traceback", out)
-        self.assertEqual(out.count("turned round"), 1)
+        class Raw:
+            def __init__(self, buffer, **kwargs):
+                self.buffer, self.kwargs = buffer, kwargs
+
+            def deinit(self):
+                pass
+
+        stream = autotune.BackwardsStream(path, half=half, raw_sample=Raw)
+        self.assertEqual(stream.sample.kwargs["single_buffer"], False)
+        t = stream.seconds
+        for late in (0.0, 0.2, 0.45):  # a main loop pass up to nearly half a half late
+            stream.start(0.0)
+            played, k = [], 0
+            while True:
+                # the mixer reads half k % 2 through its turn, from k halves in;
+                # the main loop runs part way through each turn
+                now = (k + 0.5 + late) * t
+                if not stream.update(now):
+                    break
+                for i in range(half):
+                    played.append(stream.buffer[(k % 2) * half + i])
+                k += 1
+            self.assertEqual(played[0:n], list(range(n))[::-1], late)
+            self.assertEqual(set(played[n:]), {0})  # then silence to ring out
+            self.assertIsNone(stream.reader)
+        stream.deinit()
 
     def test_double_tap_backwards_through_autotune(self):
         config = json.loads(json.dumps(THROUGH_CONFIG))

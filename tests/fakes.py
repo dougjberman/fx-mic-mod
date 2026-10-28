@@ -40,6 +40,7 @@ class Script:
         self.mixers = []
         self.synths = []
         self.plays = []
+        self.looped = []
         self.mic_reads = 0
         # [(start, end)] shaken intervals, or None for a board without an
         # accelerometer (what every other scenario runs on).
@@ -72,6 +73,8 @@ class _Obj:
     def play(self, source, loop=False):
         self.playing = source
         SCRIPT.plays.append((type(self).__name__, type(source).__name__))
+        if loop:
+            SCRIPT.looped.append((type(self).__name__, type(source).__name__))
 
     def stop(self):
         self.playing = None
@@ -208,6 +211,8 @@ class _Voice:
 
     def play(self, source, loop=False):
         self.playing = source
+        if loop:
+            SCRIPT.looped.append(("MixerVoice", type(source).__name__))
 
     def stop(self):
         self.playing = None

@@ -348,8 +348,7 @@ class DataContext:
         self.reversed_data = None
 
 
-        self.backwards_buffer = None
-        self.backwards_why = ""
+        self.backwards_stream = None
 
 
 
@@ -689,32 +688,14 @@ def select_preset(ctx, index):
     ctx.active = index
     try:
         if index == RECORD_SPOT:
-
-            release_backwards(ctx)
             enter_record_mode(ctx)
         else:
-            try:
-                build(ctx, page_presets(ctx)[index - 1] if index else [])
-            except MemoryError:
-                if ctx.backwards_buffer is None:
-                    raise
-
-                teardown(ctx)
-                release_backwards(ctx)
-                build(ctx, page_presets(ctx)[index - 1] if index else [])
+            build(ctx, page_presets(ctx)[index - 1] if index else [])
     except (ValueError, MemoryError) as error:
         print("preset {} failed: {}".format(index, error))
         teardown(ctx)
         ctx.active = 0
         build(ctx, [])
-    if ctx.active != RECORD_SPOT:
-        gc.collect()
-        if ctx.backwards_buffer is not None and gc.mem_free() < BACKWARDS_MARGIN:
-
-            release_backwards(ctx)
-            print("backwards: buffer lent to the preset")
-        elif reserve_backwards(ctx):
-            print("backwards: buffer back, {} KB".format(2 * len(ctx.backwards_buffer) // 1024))
 
     update_red_leds(ctx)
     update_white_leds(ctx)
@@ -1039,6 +1020,9 @@ def unload_wave_sample(ctx):
     if ctx.reversed_wave is not None:
         ctx.reversed_wave.deinit()
     ctx.reversed_wave = ctx.reversed_data = None
+    if ctx.backwards_stream is not None:
+        ctx.backwards_stream.deinit()
+        ctx.backwards_stream = None
     ctx.tap_at = None
     gc.collect()
 
@@ -1075,114 +1059,42 @@ def set_gate(ctx, held):
     ctx.gate_open = held
 
 
-
-
-
-
-
-
-
-BACKWARDS_MARGIN = 48 * 1024
-
-
-def longest_sample():
-    0
-    longest = 0
-    for slot in range(1, len(white_leds) + 1):
-        try:
-            reader = autotune.WaveReader("/{}".format(sample_for_slot(slot)["file"]))
-        except (OSError, ValueError):
-            continue
-        longest = max(longest, reader.size)
-        reader.close()
-    return longest
-
-
-def release_backwards(ctx):
-    0
-
-    if ctx.backwards_buffer is None:
-        return
-    if ctx.reversed_data is ctx.backwards_buffer:
-        stop_current_wave(ctx)
-        ctx.reversed_wave.deinit()
-        ctx.reversed_wave = ctx.reversed_data = None
-    ctx.backwards_buffer = None
-    gc.collect()
-
-
-def reserve_backwards(ctx):
-    0
-
-
-    need = longest_sample()
-    buffer = ctx.backwards_buffer
-    if buffer is not None and len(buffer) >= need:
-        return False
-    release_backwards(ctx)
-    if not need:
-        ctx.backwards_why = "no samples"
-        return False
-    gc.collect()
-    if gc.mem_free() < 2 * need + BACKWARDS_MARGIN:
-        ctx.backwards_why = "{} KB needed, {} KB free".format(
-            2 * need // 1024, gc.mem_free() // 1024)
-        return False
-    try:
-        ctx.backwards_buffer = autotune.int16_buffer(need)
-    except MemoryError:
-        ctx.backwards_why = "{} KB needed in one piece, the largest is {} KB".format(
-            2 * need // 1024, largest_block() // 1024)
-        return False
-    return True
-
-
-def largest_block():
-    0
-
-    low, high = 0, gc.mem_free()
-    while high - low > 1024:
-        mid = (low + high) // 2
-        try:
-            block = bytearray(mid)
-            del block
-            low = mid
-        except MemoryError:
-            high = mid
-        gc.collect()
-    return low
-
-
 def reversed_wave(ctx):
     0
 
 
 
-    if ctx.reversed_wave is None:
-        began = time.monotonic()
-        buffer = ctx.backwards_buffer
-        try:
-            if buffer is not None:
-                n = autotune.reverse_into(ctx.current_path, buffer)
 
-                ctx.reversed_wave = audiocore.RawSample(
-                    memoryview(buffer)[0:n], channel_count=1, sample_rate=RATE
-                )
-                ctx.reversed_data = buffer
-            else:
-                gc.collect()
-                ctx.reversed_data = autotune.load_reversed(ctx.current_path)
-                ctx.reversed_wave = audiocore.RawSample(
-                    ctx.reversed_data, channel_count=1, sample_rate=RATE
-                )
-        except (MemoryError, OSError, ValueError) as error:
-            ctx.reversed_wave = ctx.reversed_data = None
+
+
+
+
+    if ctx.reversed_wave is None and ctx.backwards_stream is None:
+        began = time.monotonic()
+        try:
+            gc.collect()
+            ctx.reversed_data = autotune.load_reversed(ctx.current_path)
+            ctx.reversed_wave = audiocore.RawSample(
+                ctx.reversed_data, channel_count=1, sample_rate=RATE
+            )
+            print("{} turned round in {:.0f} ms".format(
+                ctx.current_path, (time.monotonic() - began) * 1000))
+        except MemoryError:
+            ctx.reversed_data = None
+            gc.collect()
+            try:
+                ctx.backwards_stream = autotune.BackwardsStream(ctx.current_path, RATE)
+            except (MemoryError, OSError, ValueError) as error:
+                print("{} can't play backwards: {}".format(ctx.current_path, error))
+                return None
+            print("{} too long to turn round in RAM: streaming it backwards".format(
+                ctx.current_path))
+        except (OSError, ValueError) as error:
+            ctx.reversed_data = None
             print("{} can't play backwards: {}".format(ctx.current_path, error))
             gc.collect()
             return None
-        print("{} turned round in {:.0f} ms".format(
-            ctx.current_path, (time.monotonic() - began) * 1000))
-    return ctx.reversed_wave
+    return ctx.reversed_wave if ctx.reversed_wave is not None else ctx.backwards_stream
 
 
 def shake_echo(ctx):
@@ -1210,19 +1122,28 @@ def start_sample(ctx, reverse=False):
     wave = reversed_wave(ctx) if reverse else None
     if wave is None:
         wave = ctx.current_wave
+    stream = ctx.backwards_stream
+    if stream is not None:
+        stream.stop()
+
+
+    looped = wave is stream
+    if looped:
+        stream.start(time.monotonic())
+        wave = stream.sample
     source = wave
     if ctx.current_effects:
 
-        ctx.current_effects[0].play(wave)
+        ctx.current_effects[0].play(wave, loop=looped)
         source = ctx.current_source
     if shake_echo(ctx) is not None:
 
 
-        source = ctx.shake_fx.play(source)
+        source = ctx.shake_fx.play(source, loop=looped and source is wave)
     try:
         voice = sample_voice(ctx)
         voice.level = SAMPLE_LEVEL
-        voice.play(source)
+        voice.play(source, loop=looped and source is wave)
     except (ValueError, RuntimeError) as error:
         print("{} can't play: {}".format(ctx.current_path, error))
 
@@ -1234,6 +1155,8 @@ def stop_current_wave(ctx):
     sample_voice(ctx).stop()
     if ctx.shake_fx is not None:
         ctx.shake_fx.stop()
+    if ctx.backwards_stream is not None:
+        ctx.backwards_stream.stop()
     ctx.wave_playing = False
 
 
@@ -1435,16 +1358,6 @@ if shake_meter is not None:
         shake_meter.name, shake.describe(SHAKE)))
 
 
-if not EFFECTS_ONLY:
-    reserve_backwards(data_context)
-    if data_context.backwards_buffer is not None:
-        print("backwards: {} KB set aside, for samples up to {:.1f} s".format(
-            2 * len(data_context.backwards_buffer) // 1024,
-            len(data_context.backwards_buffer) / RATE))
-    else:
-        print("backwards: no room set aside ({})".format(data_context.backwards_why))
-
-
 update_white_leds(data_context)
 if not EFFECTS_ONLY:
     load_selected_wave_sample(data_context)
@@ -1610,6 +1523,12 @@ try:
             ):
                 vocoder.squeeze(not vocoder.squeezed)
                 print("vocoder chord now {}".format(vocoder.chord or "one note"))
+
+
+
+        stream = data_context.backwards_stream
+        if stream is not None and stream.playing and not stream.update(now):
+            stop_current_wave(data_context)
 
 
 

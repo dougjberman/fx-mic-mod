@@ -130,14 +130,14 @@ the file position, so it adds no audio work to the autotune pass.
   `DOUBLE_TAP_MS` to match. Timing uses keypad's own event timestamps, so a slow loop pass doesn't
   skew it.
 - **Backwards samples:** off autotune, the first double tap loads the WAV backwards into RAM and
-  prints `turned round in N ms`; that delay is heard once per slot. It needs one unbroken block as
-  big as the file (a 4 s take is 192 KB), and a while after power-on the heap rarely has one: a 3 s
-  take (144 KB) failed with 256 KB free. So since 1.7.1 a block for the longest slot's sample is set
-  aside at power-on (`backwards: N KB set aside`) and every slot turns round in it. Record mode
-  borrows it, and so does a preset left with under 48 KB free (`backwards: buffer lent to the
-  preset`); it's taken back on the next switch that leaves room (`backwards: buffer back`). Check
-  that it comes back after record mode and after the heavy presets, and that presets with it held
-  don't overflow more than in 1.7. Through autotune it streams backwards from flash, one seek per 16 ms block:
+  prints `turned round in N ms`; that delay is heard once per slot. That takes one unbroken block
+  as big as the file, and on the device the biggest is 123 KB even at power-on (a 3 s take, 140 KB,
+  never fit). A sample that doesn't fit streams backwards from the drive instead (`too long to turn
+  round in RAM: streaming it backwards`): autotune.BackwardsStream, a looped double-buffered
+  RawSample of two 4096-sample halves (170 ms each), refilled by the main loop by the clock, each
+  half way through the other's turn. Listen for a stutter or repeated piece while one streams,
+  above all on a busy preset or when switching presets mid-sample (a main loop pass more than
+  85 ms late repeats a piece), and for a click where the halves meet. Through autotune it streams backwards from flash, one seek per 16 ms block:
   watch for `overflow` or crackle while a sample plays backwards on a harmonizer or vocoder preset,
   where the pass is tightest.
 - **Accelerometer:** the board says only "accelerometer at 0x18". shake.py speaks the LIS3DH

@@ -307,8 +307,8 @@ class ShakeFX:
         )
         self.on = False
 
-    def play(self, source):
-        self.echo.play(source)
+    def play(self, source, loop=False):
+        self.echo.play(source, loop=loop)
         return self.echo
 
     def stop(self):

@@ -232,6 +232,7 @@ def main():
             for v in vocoders
         ],
         "plays": script.plays,
+        "looped": script.looped,
         # the shake Echo: the one whose delay is an LFO
         "shake_echo": next((
             {"freq_shift": e.kwargs.get("freq_shift"),
