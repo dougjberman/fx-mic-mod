@@ -882,7 +882,7 @@ class DeviceScenarioTests(unittest.TestCase):
         # 2 s needs 94 KB, and with room to spare that's more than is free:
         # the sample is turned round in RAM on the double tap, as before
         root, out, s = run("auto", tone=(340.0, 2.0))
-        self.assertIn("backwards: no room set aside", out)
+        self.assertIn("backwards: no room set aside (93 KB needed, 120 KB free)", out)
         self.assertIn("/1.wav turned round in", out)
         # and when the heap has no block that big, it plays forwards
         root, out, s = run("auto", tone=(340.0, 2.0), env={"FAKE_REVERSE_FAILS": "9"})

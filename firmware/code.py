@@ -349,6 +349,7 @@ class DataContext:
         # RAM set aside for turning samples round (see reserve_backwards()),
         # or None while it's lent out or there was no room for it.
         self.backwards_buffer = None
+        self.backwards_why = ""
         # The shake effect on samples the native mixer plays (a
         # shake.ShakeFX), and the stutter roll for samples autotune streams
         # (a shake.Roll). None with the shake off or no accelerometer.
@@ -1112,22 +1113,44 @@ def release_backwards(ctx):
 
 def reserve_backwards(ctx):
     """Set aside the backwards buffer, sized for the longest slot's sample,
-    if it isn't already and the heap can spare it. True if it was."""
+    if it isn't already and the heap can spare it. True if it was, else
+    False, with why in ``ctx.backwards_why``."""
     need = longest_sample()
     buffer = ctx.backwards_buffer
     if buffer is not None and len(buffer) >= need:
         return False
     release_backwards(ctx)
     if not need:
+        ctx.backwards_why = "no samples"
         return False
     gc.collect()
     if gc.mem_free() < 2 * need + BACKWARDS_MARGIN:
+        ctx.backwards_why = "{} KB needed, {} KB free".format(
+            2 * need // 1024, gc.mem_free() // 1024)
         return False
     try:
         ctx.backwards_buffer = autotune.int16_buffer(need)
     except MemoryError:
+        ctx.backwards_why = "{} KB needed in one piece, the largest is {} KB".format(
+            2 * need // 1024, largest_block() // 1024)
         return False
     return True
+
+
+def largest_block():
+    """The biggest single allocation the heap can make now, in bytes, to
+    1 KB. For the console only: it takes a few allocations to find."""
+    low, high = 0, gc.mem_free()
+    while high - low > 1024:
+        mid = (low + high) // 2
+        try:
+            block = bytearray(mid)
+            del block
+            low = mid
+        except MemoryError:
+            high = mid
+        gc.collect()
+    return low
 
 
 def reversed_wave(ctx):
@@ -1419,7 +1442,7 @@ if not EFFECTS_ONLY:
             2 * len(data_context.backwards_buffer) // 1024,
             len(data_context.backwards_buffer) / RATE))
     else:
-        print("backwards: no room set aside, {} bytes free".format(gc.mem_free()))
+        print("backwards: no room set aside ({})".format(data_context.backwards_why))
 
 # Initialize the first LED and load its wave file.
 update_white_leds(data_context)

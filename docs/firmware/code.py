@@ -349,6 +349,7 @@ class DataContext:
 
 
         self.backwards_buffer = None
+        self.backwards_why = ""
 
 
 
@@ -1113,21 +1114,43 @@ def release_backwards(ctx):
 def reserve_backwards(ctx):
     0
 
+
     need = longest_sample()
     buffer = ctx.backwards_buffer
     if buffer is not None and len(buffer) >= need:
         return False
     release_backwards(ctx)
     if not need:
+        ctx.backwards_why = "no samples"
         return False
     gc.collect()
     if gc.mem_free() < 2 * need + BACKWARDS_MARGIN:
+        ctx.backwards_why = "{} KB needed, {} KB free".format(
+            2 * need // 1024, gc.mem_free() // 1024)
         return False
     try:
         ctx.backwards_buffer = autotune.int16_buffer(need)
     except MemoryError:
+        ctx.backwards_why = "{} KB needed in one piece, the largest is {} KB".format(
+            2 * need // 1024, largest_block() // 1024)
         return False
     return True
+
+
+def largest_block():
+    0
+
+    low, high = 0, gc.mem_free()
+    while high - low > 1024:
+        mid = (low + high) // 2
+        try:
+            block = bytearray(mid)
+            del block
+            low = mid
+        except MemoryError:
+            high = mid
+        gc.collect()
+    return low
 
 
 def reversed_wave(ctx):
@@ -1419,7 +1442,7 @@ if not EFFECTS_ONLY:
             2 * len(data_context.backwards_buffer) // 1024,
             len(data_context.backwards_buffer) / RATE))
     else:
-        print("backwards: no room set aside, {} bytes free".format(gc.mem_free()))
+        print("backwards: no room set aside ({})".format(data_context.backwards_why))
 
 
 update_white_leds(data_context)
