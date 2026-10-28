@@ -1318,6 +1318,19 @@ function setEffectsOnly(on){
   selected = Math.min(selected, Math.max(0, config.presets.length-1));
   delete config.effects_only; changed(); track("effects-only-off");
 }
+const SHAKE_TEXT = {
+  zip: "Shake the mic while a sample plays and its echoes come faster and faster, each one higher than the last, so the sound zips up. It eases off once you hold still.",
+  warble: "Shake the mic while a sample plays and it wobbles in pitch like a worn tape. The harder you shake, the more it bends.",
+  glitch: "Shake the mic while a sample plays and it stutters, chopping the loop shorter and shorter until it buzzes into a tone.",
+  off: "Shaking the mic does nothing to samples.",
+};
+// The "shake" style: a name, or an object with a "style" (firmware 1.6 also takes the numbers there)
+function shakeStyle(){
+  const v = config.shake;
+  if (v === false) return "off";
+  const style = typeof v === "string" ? v : (v && typeof v === "object" ? v.style || "zip" : "zip");
+  return SHAKE_TEXT[style] ? style : "zip";
+}
 function renderSamples(){
   renderMoreFx();
   // "sample_fx": "preset" plays samples dry into the selected preset; "own" (or unset) gives each slot its own effects
@@ -1329,6 +1342,11 @@ function renderSamples(){
     h("p",{class:"small muted"}, through
       ? "Samples play dry into whichever effect preset is selected on the mic right now (the one the orange button picked), the same chain your voice goes through, autotune included. On Clean and in Record mode they play dry."
       : "Each slot gets its own effects below, whichever effect preset is selected on the mic. This is how Adafruit's packs work.")),
+    // "shake": what shaking the mic does to a sample while it plays (firmware shake.py); unset zips
+    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Shake while a sample plays"),
+      h("div",{class:"seg", role:"group", "aria-label":"Shake while a sample plays"},
+        [["zip","Zip"],["warble","Warble"],["glitch","Glitch"],["off","Off"]].map(([v,l])=>h("button",{"aria-pressed":String(shakeStyle()===v), onclick:()=>{ if (v==="zip") delete config.shake; else config.shake=v; changed(); }}, l)))),
+    h("p",{class:"small muted"}, SHAKE_TEXT[shakeStyle()] + (through && shakeStyle()!=="off" ? " Played through an autotune preset, the sample stutters instead, whichever style is picked." : ""))),
     // "trim_takes": false keeps the silence around takes recorded on the mic (firmware TRIM_TAKES)
     h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Takes recorded on the mic"),
       h("div",{class:"seg", role:"group", "aria-label":"Takes recorded on the mic"},

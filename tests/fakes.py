@@ -25,7 +25,8 @@ class Clock:
 class Script:
     """What the 'user' does, as a function of fake time."""
 
-    def __init__(self, presses=(), paddle=(), end=10.0, readonly=False, tone_hz=207.0):
+    def __init__(self, presses=(), paddle=(), end=10.0, readonly=False, tone_hz=207.0,
+                 shakes=None):
         self.clock = Clock()
         self.presses = sorted(presses)  # (time, key_number, pressed)
         self.paddle = paddle            # [(start, end)] squeezed intervals
@@ -40,6 +41,14 @@ class Script:
         self.synths = []
         self.plays = []
         self.mic_reads = 0
+        # [(start, end)] shaken intervals, or None for a board without an
+        # accelerometer (what every other scenario runs on).
+        self.shakes = shakes
+        self.echoes = []
+
+    def shaking(self):
+        t = self.clock.t
+        return any(a <= t < b for a, b in self.shakes or ())
 
     def paddle_held(self):
         t = self.clock.t
@@ -225,6 +234,56 @@ class GranularPitchShift(_Obj):
             self.semitone_log.append(value)
 
 
+class Echo(_Obj):
+    """audiodelays.Echo, logging each mix it is set to."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.mix_log = []
+        self.clears = 0
+        SCRIPT.echoes.append(self)
+
+    def __setattr__(self, name, value):
+        if name == "mix" and "mix_log" in self.__dict__:
+            self.mix_log.append(value)
+        if name == "freq_shift" and "clears" in self.__dict__ and value != self.freq_shift:
+            self.__dict__["clears"] += 1
+        object.__setattr__(self, name, value)
+
+
+class LFO(_Obj):
+    def retrigger(self):
+        self.retriggered = getattr(self, "retriggered", 0) + 1
+
+
+class I2C:
+    """The board's I2C bus: the codec (ignored) and, when the script shakes,
+    a LIS3DH at 0x18 reading 1 g down, plus +-2 g side to side at 6 Hz
+    while shaken."""
+
+    def try_lock(self):
+        return True
+
+    def unlock(self):
+        pass
+
+    def writeto(self, address, data):
+        if address == 0x18 and SCRIPT.shakes is None:
+            raise OSError(19, "No such device")
+
+    def writeto_then_readfrom(self, address, out, into):
+        self.writeto(address, out)
+        register = out[0] & 0x7F
+        if register == 0x0F:
+            into[0] = 0x33
+            return
+        t = SCRIPT.clock.t
+        x = 2.0 * math.sin(2 * math.pi * 6 * t) if SCRIPT.shaking() else 0.0
+        for i, g in enumerate((x, 0.0, 1.0)):
+            value = int(g * 8192) & 0xFFFF
+            into[2 * i], into[2 * i + 1] = value & 0xFF, value >> 8
+
+
 class WaveFile(_Obj):
     def __init__(self, path):
         import os
@@ -333,7 +392,8 @@ def install(script, root):
             return pins.setdefault(name, _Pin(name))
 
     board = _Board("board")
-    board.I2C = lambda: None
+    bus = I2C()
+    board.I2C = lambda: bus
     sys.modules["board"] = board
 
     _module("digitalio", DigitalInOut=DigitalInOut,
@@ -346,11 +406,11 @@ def install(script, root):
     _module("audiocore", RawSample=_Obj, WaveFile=WaveFile)
     _module("audiomixer", Mixer=Mixer)
     _module("audiodelays", GranularPitchShift=GranularPitchShift, PitchShift=_Obj,
-            Chorus=_Obj, Echo=_Obj, MultiTapDelay=_Obj)
+            Chorus=_Obj, Echo=Echo, MultiTapDelay=_Obj)
     _module("audiofilters", Distortion=_Obj, Filter=_Obj, Phaser=_Obj,
             DistortionMode=_Enum())
     _module("audiofreeverb", Freeverb=_Obj)
-    _module("synthio", Math=Math, LFO=_Obj, Biquad=_Obj, Note=Note, Synthesizer=Synthesizer,
+    _module("synthio", Math=Math, LFO=LFO, Biquad=_Obj, Note=Note, Synthesizer=Synthesizer,
             MathOperation=_Enum(), FilterMode=_Enum())
     _module("storage", getmount=lambda path: _Mount(script.readonly),
             remount=lambda *a, **k: None)

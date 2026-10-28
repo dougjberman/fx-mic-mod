@@ -13,6 +13,8 @@ fx-mic-mod fork of Adafruit's demo, adding:
   device (see recorder.py and boot.py).
 * an effects-only mode (``"effects_only": true``): no samples and no record
   mode, and up to four pages of four presets instead, MIDDLE stepping the page.
+* a shake effect on sample playback (``"shake"``, see shake.py): shake the
+  mic while a sample plays and it zips, warbles or glitches.
 
 Up to four presets are used (one per red LED). Only one chain exists at a time:
 switching tears the old chain down and builds the new one.
@@ -107,6 +109,7 @@ from config_loader import (
     sample_routing,
 )
 from recorder import Recorder, drive_free
+import shake
 
 # The firmware's release number. The editor reads this line from the mic's
 # code.py before Save to mic, to check the presets only use settings this
@@ -114,7 +117,7 @@ from recorder import Recorder, drive_free
 # release that adds a config setting, add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number, and add a row for the release to
 # the "What's new" table on the install page, which its update check lists.
-FIRMWARE_VERSION = "1.5"
+FIRMWARE_VERSION = "1.6"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -343,6 +346,11 @@ class DataContext:
         # RawSample and the array it plays), or None.
         self.reversed_wave = None
         self.reversed_data = None
+        # The shake effect on samples the native mixer plays (a
+        # shake.ShakeFX), and the stutter roll for samples autotune streams
+        # (a shake.Roll). None with the shake off or no accelerometer.
+        self.shake_fx = None
+        self.shake_roll = None
 
         # Whether TOP / MIDDLE are currently held down, for the shutdown combo.
         self.top_held = False
@@ -453,6 +461,10 @@ if isinstance(_sample_level, (int, float)) and not isinstance(_sample_level, boo
 else:
     print("sample_level must be a number from 0 to 1; using {}".format(SAMPLE_LEVEL))
 
+# "shake": what shaking the mic does to a sample as it plays (see shake.py).
+# None for off; effects-only mode has no samples to shake.
+SHAKE = None if EFFECTS_ONLY else shake.settings(CONFIG)
+
 # The cycle position of record mode: one past the last preset. None in
 # effects-only mode, which has no record mode.
 RECORD_SPOT = None if EFFECTS_ONLY else len(PRESETS) + 1
@@ -526,6 +538,10 @@ def make_mixer(fmt):
 
 mixer = make_mixer(FORMAT)
 i2s.play(mixer, loop=True)
+
+# The accelerometer shares the codec's I2C bus. Looked for only with the
+# shake on.
+shake_meter = shake.ShakeMeter.find(board.I2C()) if SHAKE else None
 
 # --- Chain switching ---
 
@@ -1077,6 +1093,10 @@ def start_sample(ctx, reverse=False):
         # Re-hand the wave to the head of the chain so the press restarts it.
         ctx.current_effects[0].play(wave)
         source = ctx.current_source
+    if ctx.shake_fx is not None:
+        # Last on the sample's way to the mixer: its own effects, or the
+        # preset it plays into, take the shaken sound.
+        source = ctx.shake_fx.play(source)
     try:
         voice = sample_voice(ctx)
         voice.level = SAMPLE_LEVEL
@@ -1090,6 +1110,8 @@ def stop_current_wave(ctx):
     if ctx.tune is not None:
         ctx.tune.stop_sample()
     sample_voice(ctx).stop()
+    if ctx.shake_fx is not None:
+        ctx.shake_fx.stop()
     ctx.wave_playing = False
 
 
@@ -1282,6 +1304,15 @@ def learn_handle_open():
 
 data_context = DataContext()
 data_context.paddle_held = paddle.value
+if shake_meter is not None:
+    try:
+        data_context.shake_fx = shake.ShakeFX(SHAKE, FORMAT)
+        data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
+        print("shake: {} found; shaking a sample plays it {}".format(
+            shake_meter.name, shake.describe(SHAKE)))
+    except (ValueError, MemoryError) as error:
+        print("shake: off ({})".format(error))
+        shake_meter = None
 
 # Initialize the first LED and load its wave file.
 update_white_leds(data_context)
@@ -1450,6 +1481,26 @@ try:
                 vocoder.squeeze(not vocoder.squeezed)
                 print("vocoder chord now {}".format(vocoder.chord or "one note"))
 
+        # Shaking the mic while a sample plays. The accelerometer is read
+        # only then. Through autotune the sample streams from the drive, so
+        # the shake rolls it there; elsewhere it mixes in the shake Echo.
+        # (A tap leaves wave_playing set after the sample ends; the Echo's
+        # own playing goes off then, but a shake under way rings out.)
+        if shake_meter is not None:
+            tune = data_context.tune
+            shake_fx = data_context.shake_fx
+            if THROUGH_PRESET and tune is not None:
+                if tune.sample is not None:
+                    data_context.shake_roll.update(tune.sample, shake_meter.update(now), now)
+                elif shake_meter.amount:
+                    shake_meter.reset()
+                    data_context.shake_roll.reset()
+            elif data_context.wave_playing and (shake_fx.echo.playing or shake_fx.on):
+                shake_fx.set_amount(shake_meter.update(now))
+            elif shake_meter.amount or shake_fx.on:
+                shake_meter.reset()
+                shake_fx.set_amount(0.0)
+
         # Reading .overflow clears it. It trips if the playback side falls
         # behind the mic, which should not happen here. Both run off the
         # same BCLK, so a report means the DSP chain can't keep up.
@@ -1493,6 +1544,8 @@ except KeyboardInterrupt:
     stop_current_wave(data_context)
     for effect in data_context.current_effects:
         effect.deinit()
+    if data_context.shake_fx is not None:
+        data_context.shake_fx.deinit()
     if data_context.current_wave is not None:
         data_context.current_wave.deinit()
     mixer.deinit()

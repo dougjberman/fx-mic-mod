@@ -33,6 +33,14 @@ parameter names and types) and the demo `config.json`.
   back. Only the selected preset's effects are built, so 16 presets cost the mic only their JSON.
   Firmware before 1.4 reads the first four presets and keeps its samples, so Save to mic won't
   write `effects_only` to it.
+- `shake` **(new, optional, firmware 1.6)**: what shaking the mic does to a sample while it plays.
+  `"zip"` (the default when the key is missing) speeds the echoes up so the sound zips,
+  `"warble"` wobbles its pitch like worn tape, `"glitch"` stutters it shorter and shorter, and
+  `"off"` (or `false`) does nothing. An object tunes a style:
+  `{"style": "zip", "rate": 2.4, "feedback": 0.6, "mix": 0.5, "shortest_ms": 22, "longest_ms": 240}`
+  (sweeps a second, echo feedback 0 to 0.95, echo mix at a full shake 0 to 1, and the delay's range).
+  Played through an autotune preset (`"sample_fx": "preset"`), any style is a stutter roll over the
+  same range. Firmware before 1.6 ignores it.
 - `sample_fx` **(new, optional)**: where samples get their effects.
   - `"own"` (default, Adafruit's behaviour): each sample runs through its own `effects`.
   - `"preset"`: samples play dry into the effect preset currently selected on the mic (TOP button), mixed with the mic ahead of the

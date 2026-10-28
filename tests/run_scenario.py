@@ -84,6 +84,27 @@ SCENARIOS = {
         paddle=[],
         end=5.8,
     ),
+    # The clean spot: tap the sample, shake the mic for 0.6 s while it plays,
+    # then hold still.
+    "shake": dict(
+        presses=tap(0.5, BOTTOM),
+        paddle=[],
+        shakes=[(1.0, 1.6)],
+        end=2.5,
+    ),
+    # The same shake on an autotune preset that the sample plays through.
+    "shake_through": dict(
+        presses=tap(0.5, TOP) + tap(1.0, BOTTOM),
+        paddle=[],
+        shakes=[(1.3, 2.0)],
+        end=2.8,
+    ),
+    # A tap and a shake on a board where nothing answers at 0x18.
+    "shake_no_chip": dict(
+        presses=tap(0.5, BOTTOM),
+        paddle=[],
+        end=1.5,
+    ),
     "through": dict(
         presses=tap(0.5, TOP) + tap(1.0, BOTTOM) + tap(3.0, TOP) + tap(3.5, BOTTOM),
         paddle=[],
@@ -112,11 +133,26 @@ def track_vocoders():
     return made
 
 
+def track_rolls():
+    """Every WaveReader.roll() call, as its block count."""
+    import autotune
+    rolls = []
+    roll = autotune.WaveReader.roll
+
+    def tracked(self, blocks):
+        rolls.append(blocks)
+        roll(self, blocks)
+
+    autotune.WaveReader.roll = tracked
+    return rolls
+
+
 def main():
     name, root = sys.argv[1], sys.argv[2]
     script = fakes.Script(**SCENARIOS[name])
     fakes.install(script, root)
     vocoders = track_vocoders()
+    rolls = track_rolls()
     env = runpy.run_path(os.path.join(FIRMWARE, "code.py"), run_name="__main__")
     ctx = env["data_context"]
     summary = {
@@ -160,6 +196,18 @@ def main():
             for v in vocoders
         ],
         "plays": script.plays,
+        # the shake Echo: the one whose delay is an LFO
+        "shake_echo": next((
+            {"freq_shift": e.kwargs.get("freq_shift"),
+             "max_delay_ms": e.kwargs.get("max_delay_ms"),
+             "mix_max": max(e.mix_log) if e.mix_log else None,
+             "mix_last": e.mix_log[-1] if e.mix_log else None,
+             "clears": e.clears,
+             "retriggered": getattr(e.delay_ms, "retriggered", 0),
+             "playing": type(e.playing).__name__}
+            for e in script.echoes
+            if type(e.kwargs.get("delay_ms")).__name__ == "LFO"), None),
+        "rolls": rolls,
         # the vocoder's mixer: the voice on voice 0, the synth on voice 1
         "vocoder_mixer": next((
             {"playing": [type(v.playing).__name__ for v in m.voice],
