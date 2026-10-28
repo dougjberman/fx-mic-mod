@@ -1130,10 +1130,8 @@ function vocoderCard(p, fx){
   body.append(h("p",{class:"small muted"}, "If the synth hums with no one singing, raise the gate until it stays quiet. If word ends get cut off, lower it."));
   // The vocoder plays at 100%: blending your voice back in needs its own pitch
   // shifter, and that overflowed the mic even at 7 bands.
-  body.append(h("p",{class:"small muted"}, "The vocoder replaces your voice completely. Mixing your voice back in took more than the mic can run."));
-  body.append(h("p",{class:"small muted"}, tune
-    ? "The carrier plays the note autotune snaps you to, so the robot is always in key."
-    : "The carrier plays the note you sing. Add autotune to keep it in key."));
+  body.append(h("p",{class:"small muted"}, "The vocoder replaces your voice completely. Mixing your voice back in took more CPU than the mic can run."));
+  if (!tune) body.append(h("p",{class:"small muted"}, "The carrier plays the note you sing. Add autotune to keep it in key."));
   return h("div",{class:"fx tune"+(fx.enabled===false?" off":"")},
     fxHead("Vocoder", "Your words on a synth that follows your note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
 }
