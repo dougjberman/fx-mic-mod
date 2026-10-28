@@ -75,6 +75,8 @@
 
 
 
+
+
 import gc
 import json
 import os
@@ -354,6 +356,9 @@ class DataContext:
 
         self.top_held = False
         self.middle_held = False
+
+
+        self.loaded_at = 0
 
         self.combo_since = None
 
@@ -677,6 +682,13 @@ def select_preset(ctx, index):
 
 
 
+
+
+
+    if index != RECORD_SPOT:
+        for _index, _led in enumerate(red_leds):
+            _led.value = _index < index
+
     muted = codec.dac_soft_mute
     codec.dac_soft_mute = True
     teardown(ctx)
@@ -725,6 +737,7 @@ def select_preset(ctx, index):
 
 
     mic.overflow
+    ctx.loaded_at = now_ms()
 
 
 
@@ -1151,6 +1164,20 @@ def ms_between(earlier, later):
     return (later - earlier) & TICKS_MASK
 
 
+def now_ms():
+    0
+    if supervisor is not None:
+        return supervisor.ticks_ms() & TICKS_MASK
+    return int(time.monotonic() * 1000) & TICKS_MASK
+
+
+def pressed_while_loading(ctx, event):
+    0
+
+
+    return 0 < ms_between(event_ms(event), ctx.loaded_at) < TICKS_MASK // 2
+
+
 def next_page(ctx):
     0
 
@@ -1375,7 +1402,9 @@ try:
                 data_context.top_held = event.pressed
             if event.key_number == MIDDLE:
                 data_context.middle_held = event.pressed
-            if event.pressed and event.key_number == TOP:
+            if event.pressed and event.key_number == TOP and pressed_while_loading(data_context, event):
+                print("TOP pressed while a preset loaded: ignored")
+            elif event.pressed and event.key_number == TOP:
 
 
 

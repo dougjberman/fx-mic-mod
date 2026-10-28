@@ -23,7 +23,9 @@ Controls:
 
 * TOP side button -- steps to the next spot in the preset cycle. The cycle is the
                      configured presets plus a "clean" spot with no effects at
-                     all, where the mic feeds the output directly.
+                     all, where the mic feeds the output directly. The LEDs
+                     change at once; a press while a preset is still loading
+                     is ignored rather than stepping on again.
 * Handle          -- gates the mic output. It starts muted; the DAC un-mutes
                      while the paddle is squeezed and mutes again on release.
 * Volume knob     -- sets the DAC digital volume, continuously. Fully anti-
@@ -354,6 +356,9 @@ class DataContext:
         # Whether TOP / MIDDLE are currently held down, for the shutdown combo.
         self.top_held = False
         self.middle_held = False
+        # When the last preset switch finished, in ms as `event_ms()` gives
+        # them. A TOP press from before then came in while the preset loaded.
+        self.loaded_at = 0
         # the `time.monotonic()` the combo started, or None while it is not both-down.
         self.combo_since = None
         # board.POWER_HOLD, claimed the first time the combo fires
@@ -677,6 +682,13 @@ def select_preset(ctx, index):
     :param ctx: The mutable state container.
     :param index: The preset position to activate.
     """
+    # Light the new spot's LEDs first: a heavy preset (the vocoder) takes
+    # most of a second to build, and dark LEDs meanwhile look like a missed
+    # press. Record mode's flashing waits for its own setup.
+    if index != RECORD_SPOT:
+        for _index, _led in enumerate(red_leds):
+            _led.value = _index < index
+
     muted = codec.dac_soft_mute
     codec.dac_soft_mute = True
     teardown(ctx)
@@ -725,6 +737,7 @@ def select_preset(ctx, index):
     # overflows once during a switch. Reading .overflow clears that, so the
     # console only reports overflows while a preset is actually running.
     mic.overflow
+    ctx.loaded_at = now_ms()
 
 
 # --- Record mode ---
@@ -1151,6 +1164,20 @@ def ms_between(earlier, later):
     return (later - earlier) & TICKS_MASK
 
 
+def now_ms():
+    """The time now, on the same clock as `event_ms()`."""
+    if supervisor is not None:
+        return supervisor.ticks_ms() & TICKS_MASK
+    return int(time.monotonic() * 1000) & TICKS_MASK
+
+
+def pressed_while_loading(ctx, event):
+    """Whether a press came in while the last preset switch was loading.
+    Its LEDs were already lit, so such a press is a repeat of the one being
+    loaded, not a step on from it."""
+    return 0 < ms_between(event_ms(event), ctx.loaded_at) < TICKS_MASK // 2
+
+
 def next_page(ctx):
     """Handle a MIDDLE press in effects-only mode: step to the next page,
     keeping the slot (or the page's last preset, on a shorter page). From
@@ -1375,7 +1402,9 @@ try:
                 data_context.top_held = event.pressed
             if event.key_number == MIDDLE:
                 data_context.middle_held = event.pressed
-            if event.pressed and event.key_number == TOP:
+            if event.pressed and event.key_number == TOP and pressed_while_loading(data_context, event):
+                print("TOP pressed while a preset loaded: ignored")
+            elif event.pressed and event.key_number == TOP:
                 # Step to the next spot in the cycle, wrapping around. The
                 # cycle is two longer than the page's preset count: spot 0 is
                 # clean and the last spot is record mode (none in
