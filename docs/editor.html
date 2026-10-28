@@ -647,7 +647,7 @@ STARTERS.push(
   {name:"Night call", list:[{effect:"autotune",key:"C",scale:"minor",speed:.95,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:11,octave:0,breath:.8,mix:1,gate:-60,squeeze_chord:"key_triad"}]},
   // a hard-tuned one-note robot, after Daft Punk's "Harder, Better, Faster, Stronger"
   {name:"Harder better faster stronger", level:.45, list:[{effect:"autotune",key:"F#",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:11,octave:0,breath:.4,mix:1,gate:-55}]});
-const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[["Squeeze for backups",1],["Night call",.7],["Dream swirl",.4],["Squeeze monster",.25]].map(([n,lv])=>[STARTERS.find(s=>s.name===n),lv]).map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
+const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[["Squeeze for backups",1],["Night call",.7],["Dream swirl",.6],["Squeeze monster",.25]].map(([n,lv])=>[STARTERS.find(s=>s.name===n),lv]).map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
   samples:[{file:"1.wav",playmode:"auto"},{file:"2.wav",playmode:"auto"},{file:"3.wav",playmode:"auto"},{file:"4.wav",playmode:"auto"}]};
 
 /* ------------------------------ state ------------------------------ */
@@ -1932,6 +1932,9 @@ for (const [i, json] of OLD_DEFAULTS)
 // Then 11 bands at 100%, before Doug's speed 95% and breath 80%.
 { const p = config.presets[1], old = {name:"Night call", level:.7, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:11,octave:0,breath:.7,mix:1,gate:-60,squeeze_chord:"key_triad"}]};
   if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
+// Dream swirl played at 40% until Doug brought it up to 60%. An untouched copy at 40% moves up.
+{ const p = config.presets[2];
+  if (p && (p.level ?? 1)===.4 && withoutLevel(p)===withoutLevel(DEFAULT_CONFIG.presets[2])){ config.presets[2] = clone(DEFAULT_CONFIG.presets[2]); save(); } }
 // A vocoder's Amount (your voice blended back in) overflowed the mic even at 7 bands, so the
 // mic plays every vocoder at 100%; drop the old Amount here to match, with 11 bands back on offer.
 dropVocoderVoice(config);
