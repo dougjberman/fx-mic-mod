@@ -24,22 +24,25 @@ autotune in the preset the stage runs with no correction (and skips pitch detect
 chord needs the note).
 
 ## How the vocoder runs
-A `vocoder` effect also joins the autotune stage. On the blocks between pitch searches Python
-takes the newest power-of-two samples of the pitch window (512 at 16 or 24 kHz), runs a ulab FFT
-and sums the bins of each band into a level. A channel vocoder is the carrier through each band's
-band-pass at that band's level; the carrier repeats at the note, so the sum is one waveform too.
-Since 1.5 Python works that waveform out: each of the carrier's 48 harmonics times the bands'
-`synthio` band-pass response at that harmonic (worked out again only when the note moves 1%),
-weighted by the levels, then a 256-point ulab inverse FFT into one of two tables, and one plain
-`synthio.Note` per carrier note plays it at the tracked note. The breath noise loops, so its
-high-pass is run once at load and baked into its table. So the synth runs no `Biquad` at all:
-on a Ting a Note and Biquad per band (1.1 to 1.4) beside the voice's pitch shifter overflowed at
-8 bands. `VOCODER_FILTERS = True` in autotune.py plays it that way still, to compare.
-With `mix` 1 nothing plays the voice, so the stage builds no shifter and the synth heads the
-chain; otherwise a two-voice mixer sums voice and synth. A `chord` carrier is a note per chord
-note, in just intonation (minor is 10:12:15 of a lower note), each with its own waveform from the
-same band levels. A key chord (`key_triad`, `key_seventh`) picks the chord the scale gives the
-snapped note on each pitch search, pressing or letting go of notes as the chord's size changes.
+A `vocoder` effect also joins the autotune stage. Its carrier is a `synthio.Synthesizer` with one
+`Note` per band: a band-limited saw / square / pulse / saw+square table through that note's own band-pass
+`synthio.Biquad`, all at the tracked note (the corrected note when the preset has autotune).
+Python only measures the voice: on the blocks between pitch searches it takes the newest
+power-of-two samples of the pitch window (512 at 16 or 24 kHz), runs a ulab FFT, sums the bins of
+each band and sets each band note's amplitude. The breath noise loops, so its high-pass is run once
+at load and baked into its table (1.6): one note, no Biquad. With `mix` 1 nothing plays the voice,
+so the stage builds no shifter and the synth heads the chain; otherwise a two-voice mixer sums
+voice and synth, and the voice's shifter runs one grain (`VOCODER_VOICE_DENSITY`, 1.6; a preset's
+`density` on autotune wins). A `chord` carrier costs nothing extra: the chord's notes are
+whole-number multiples of a lower note (minor is 10:12:15), so one longer table holds the whole
+chord and each band note plays it at the sung note divided by the root's multiple. A key chord
+(`key_triad`, `key_seventh`) builds every chord its key can ask for when the preset loads, and on
+each pitch search sets the band notes' `waveform` to the chord the scale gives the snapped note.
+
+1.5 tried the other way round (`VOCODER_FILTERS = False`): Python summed the filtered bands into one
+waveform per carrier note with a ulab inverse FFT, so the synth ran no Biquad. On a Ting
+`bench_vocoder()` gave 5 ms a block and 11 ms on a new note, and Night call overflowed on most
+blocks, far worse than 1.4. It stays in autotune.py, off.
 
 ## Needs checking on the device
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
@@ -50,10 +53,9 @@ snapped note on each pitch search, pressing or letting go of notes as the chord'
   `overflow` with a four-note chord, and try `density` 1 on autotune if it can't keep up.
 - **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for
   flamming or a comb sound on the harmony; if so, the shifters may need one shared feed.
-- **Vocoder CPU:** `import autotune; autotune.bench_vocoder()` on the serial console times the
-  Python side of one block on a held note and on a new note (`bench_vocoder(chord="minor")` for
-  three notes). Both should stay under the pitch search (`autotune.bench()`). The synth side is
-  one plain note per carrier note plus breath. Watch for `overflow` on Night call, squeezed and not.
+- **Vocoder CPU:** `import autotune; autotune.bench_vocoder()` at the REPL (Ctrl-C, Enter
+  first) times the Python side of one block on a held note and on a new note. The synth side is a
+  note and Biquad per band, plus breath. Watch for `overflow` on Night call, squeezed and not.
 - **Vocoder APIs:** written for CircuitPython 10's `synthio`, `ulab.utils.spectrogram` (or
   `ulab.numpy.fft.fft`) and `ulab.numpy.fft.ifft` (either the (real, imaginary) pair CircuitPython
   builds have, or complex numbers). Without `ifft` the vocoder falls back to a Biquad per band.
@@ -64,8 +66,8 @@ snapped note on each pitch search, pressing or letting go of notes as the chord'
 - **Vocoder gate:** -50 dB (`VOCODER_GATE`) is a starting guess, tried only in the preview with a
   synthetic hum. Check that the mic's own noise floor sits well under it, and that quiet singing
   still opens it.
-- **Waveform swaps:** each band update writes a new 256-sample table and points the note at it
-  (`Note.waveform`) every 32 ms. Listen for zipper noise or clicks on held vowels against 1.4.
+- **Voice grains:** the voice beside a vocoder shifts one grain at a time. Listen for a
+  fluttery voice trace under the synth; `"density": 2` on the preset's autotune puts it back.
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.

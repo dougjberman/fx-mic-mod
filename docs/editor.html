@@ -619,11 +619,10 @@ const CHORD_NOTES = {
 const HARMONY_VOICE_COST = 17;
 // Effects that run inside the autotune stage, so they sit at the top of the chain.
 const STAGE_FX = ["autotune", "harmonizer", "vocoder"];
-// The vocoder, from firmware 1.5: Python measures the bands and works out the waveform (a base cost,
-// a little per band), and the synth plays one plain note per chord note, plus one for breath. With the
-// voice in the mix its pitch shifter runs too, as much as a Grain shift. On 1.4 (a note and a filter per
-// band) Night call, 8 bands with the voice, overflowed: these keep it, squeezed, under 85.
-const VOCODER_COST = 10, VOCODER_BAND_COST = .5, VOCODER_NOTE_COST = 3, VOCODER_VOICE_COST = 21;
+// The vocoder: a synth note and band-pass filter per band, plus a plain note for breath. With the voice
+// in the mix its pitch shifter runs too, at one grain from firmware 1.6 (half a Grain shift). Fitted to a
+// Ting: 11 bands alone ran clean, 8 bands beside a two-grain voice shifter overflowed every half second.
+const VOCODER_COST = 0, VOCODER_BAND_COST = 5, VOCODER_NOTE_COST = 2, VOCODER_VOICE_COST = 11;
 // A preset estimated over this crackles; the editor won't add an effect past it.
 const LOAD_LIMIT = 100;
 const VOCODER_WAVES = [["saw","Saw (buzzy)"],["square","Square (hollow)"],["saw_square","Saw + square (full)"],["pulse","Pulse (nasal)"]];
@@ -1063,15 +1062,11 @@ function harmonizerCard(p, fx){
     fxHead("Harmonizer", "Sings a chord with you, built on every note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
 }
 
-// Notes in each vocoder chord, as firmware/autotune.py plays them: one per chord note.
-const VOCODER_CHORD_NOTES = {key_triad:3, key_seventh:4, major:3, minor:3, power:3, dim:3, "7":4, maj7:4, m7:4, m7b5:4};
 function vocoderCost(fx){
   const bands = typeof fx.bands==="number" ? fx.bands : 8;
   // with no voice in the mix (a fixed Amount of 1) the mic drops the voice's pitch shifter
   const voiceless = fx.mix===undefined || (typeof fx.mix==="number" && fx.mix>=1);
-  // the bigger of the chord and the squeeze chord: a full squeeze plays that one
-  const notes = Math.max(VOCODER_CHORD_NOTES[fx.chord]||1, VOCODER_CHORD_NOTES[fx.squeeze_chord]||1) + ((fx.breath||0)>0 ? 1 : 0);
-  return Math.round(VOCODER_COST + VOCODER_BAND_COST*bands + VOCODER_NOTE_COST*notes + (voiceless ? 0 : VOCODER_VOICE_COST));
+  return Math.round(VOCODER_COST + VOCODER_BAND_COST*bands + ((fx.breath||0)>0 ? VOCODER_NOTE_COST : 0) + (voiceless ? 0 : VOCODER_VOICE_COST));
 }
 const VOCODER_CHORD_CHOICES = [["","One note"],["key_triad","In key"],["key_seventh","In key 7th"],["major","Major"],["minor","Minor"],["7","7"],["maj7","maj7"],["m7","m7"],["power","Power"]];
 const VOCODER_KEY_CHORDS = {key_triad:"Your note's chord in the autotune key: major, minor or diminished as the scale makes it.", key_seventh:"Your note's 7th chord in the autotune key."};

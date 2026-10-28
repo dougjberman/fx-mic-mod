@@ -129,6 +129,7 @@ def main():
              "max": max(s.semitone_log) if s.semitone_log else None,
              "kwargs": sorted(k for k in s.kwargs),
              "grain_size": s.kwargs.get("grain_size"),
+             "density": s.kwargs.get("density"),
              "sample_rate": s.kwargs.get("sample_rate")}
             for s in script.shifters
         ],
