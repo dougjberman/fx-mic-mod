@@ -138,8 +138,8 @@ the file position, so it adds no audio work to the autotune pass.
 - **Shake feel:** `SHAKE_FROM_G` (0.5 g off gravity) and `SHAKE_FULL_G` (1.6 g) are guesses. Check that
   pressing BOTTOM, squeezing and walking around don't trigger it, and that a firm shake reaches
   full. The amount rises in 30 ms and falls over 250 ms (`ATTACK_SECONDS` / `RELEASE_SECONDS`).
-- **Shake CPU:** a freq_shift Echo writes longest / shortest buffer cells per output sample (about
-  11 at zip's shortest), only while shaken. Watch for `overflow` shaking a sample into Dream swirl,
+- **Shake CPU:** a freq_shift Echo writes longest / shortest buffer cells per output sample (7 at
+  zip's shortest), only while shaken. Watch for `overflow` shaking a sample into Dream swirl,
   the heaviest native preset. Each shake clears the Echo's buffer by flipping `freq_shift` and back
   (12 KB memset); listen for a click at the start of a shake.
 - **Shake roll on autotune:** listen for crackle as the file seeks back each stretch, and check that a

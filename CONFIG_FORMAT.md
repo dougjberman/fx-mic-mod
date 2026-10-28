@@ -37,7 +37,8 @@ parameter names and types) and the demo `config.json`.
   `"zip"` (the default when the key is missing) speeds the echoes up so the sound zips,
   `"warble"` wobbles its pitch like worn tape, `"glitch"` stutters it shorter and shorter, and
   `"off"` (or `false`) does nothing. An object tunes a style:
-  `{"style": "zip", "rate": 2.4, "feedback": 0.6, "mix": 0.5, "shortest_ms": 22, "longest_ms": 240}`
+  `{"style": "zip", "rate": 2.4, "feedback": 0.8, "mix": 0.3, "shortest_ms": 20, "longest_ms": 140}`
+  (zip's own numbers)
   (sweeps a second, echo feedback 0 to 0.95, echo mix at a full shake 0 to 1, and the delay's range).
   Played through an autotune preset (`"sample_fx": "preset"`), any style is a stutter roll over the
   same range. Firmware before 1.6 ignores it.

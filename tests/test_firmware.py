@@ -1066,13 +1066,13 @@ class DeviceScenarioTests(unittest.TestCase):
         root, out, s = run("shake", tone=(340.0, 3.0))
         self.assertIn("shake: LIS3DH found; shaking a sample plays it zip", out)
         echo = s["shake_echo"]
-        self.assertEqual((echo["freq_shift"], echo["max_delay_ms"]), (True, 240))
+        self.assertEqual((echo["freq_shift"], echo["max_delay_ms"]), (True, 140))
         # the sample (through its own reverb) plays through the Echo
         self.assertIn(["Echo", "_Obj"], [list(p) for p in s["plays"]])
-        # mixed in up to the style's 0.5 while shaken, out again once still,
+        # mixed in up to the style's 0.3 while shaken, out again once still,
         # and a fresh sweep on a cleared buffer for the shake
-        self.assertGreater(echo["mix_max"], 0.4)
-        self.assertLessEqual(echo["mix_max"], 0.5)
+        self.assertGreater(echo["mix_max"], 0.25)
+        self.assertLessEqual(echo["mix_max"], 0.3)
         self.assertEqual(echo["mix_last"], 0.0)
         self.assertEqual((echo["clears"], echo["retriggered"]), (2, 1))
 

@@ -176,7 +176,7 @@ class ShakeMeter:
 # delay runs between "shortest_ms" and "longest_ms" (also the buffer: 24 kHz
 # is 48 bytes a ms).
 STYLES = {
-    "zip": {"rate": 2.4, "feedback": 0.6, "mix": 0.5, "shortest_ms": 22, "longest_ms": 240},
+    "zip": {"rate": 2.4, "feedback": 0.8, "mix": 0.3, "shortest_ms": 20, "longest_ms": 140},
     "warble": {"rate": 5.5, "feedback": 0.0, "mix": 1.0, "shortest_ms": 42, "longest_ms": 56},
     "glitch": {"rate": 1.7, "feedback": 0.82, "mix": 0.85, "shortest_ms": 32, "longest_ms": 300},
 }
