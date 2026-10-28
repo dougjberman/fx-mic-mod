@@ -861,69 +861,42 @@ class DeviceScenarioTests(unittest.TestCase):
             "playing 1",
             "playing 1",                          # 500 ms apart: two taps
         ])
-        # streamed from the copy written at power-on: nothing to wait for
-        self.assertEqual(out.count("backwards copy written"), 1)
-        self.assertNotIn("turned round", out)
+        self.assertEqual(out.count("turned round"), 1)  # built once, then kept
         # with the sample's own effects, the backwards copy feeds their chain
         config["samples"][0]["effects"] = [{"effect": "freeverb", "mix": 0.4}]
         root, out, s = run("auto", config, tone=(340.0, 1.0))
-        self.assertIn(["_Obj", "WaveFile"], [list(p) for p in s["plays"]])
+        self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])
         self.assertIn("playing 1 (double tap: backwards)", out)
 
-    def backwards_frames(self, root, name):
-        """The sample ``name`` on drive ``root`` and its backwards copy, as
-        lists of samples."""
-        frames = []
-        for path in (name, ".backwards-" + name):
-            with wave.open(os.path.join(root, path)) as file:
-                self.assertEqual((file.getframerate(), file.getnchannels(), file.getsampwidth()),
-                                 (24000, 1, 2))
-                data = file.readframes(file.getnframes())
-            frames.append([int.from_bytes(data[i:i + 2], "little", signed=True)
-                           for i in range(0, len(data), 2)])
-        return frames
-
-    def test_double_tap_backwards_streams_a_copy_from_the_drive(self):
-        # a long take needs more unbroken RAM than the mic has to turn round
-        # whole, so a copy written at power-on plays instead
+    def test_double_tap_backwards_uses_ram_set_aside_at_power_on(self):
+        # after a while the heap has no free block as big as a long take,
+        # so one is set aside at power-on and every slot turns round in it
         root, out, s = run("auto", tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "9"})
-        self.assertIn("/1.wav backwards copy written in", out)
-        self.assertLess(out.index("backwards copy written"), out.index("playing 1"))
+        self.assertIn("backwards: 46 KB set aside, for samples up to 1.0 s", out)
+        self.assertLess(out.index("set aside"), out.index("loaded /1.wav"))
         self.assertIn("playing 1 (double tap: backwards)", out)
+        self.assertIn("/1.wav turned round in", out)
         self.assertNotIn("can't", out)
-        self.assertNotIn("turned round", out)
-        self.assertNotIn(".backwards-1.wav.tmp", s["files"])
-        forwards, backwards = self.backwards_frames(root, "1.wav")
-        self.assertEqual(backwards, forwards[::-1])
-        # the next power-on finds it up to date and writes nothing
-        root, out, s = run("auto", root=root)
-        self.assertNotIn("backwards copy written", out)
-        # a sample changed in edit mode isn't played from the stale copy
-        write_tone(os.path.join(root, "1.wav"), 220.0, 0.5)
-        root, out, s = run("auto_readonly", root=root)
-        self.assertIn("/1.wav turned round in", out)
-        # and the next power-on writes it a fresh one
-        root, out, s = run("auto", root=root)
-        self.assertIn("/1.wav backwards copy written in", out)
-        forwards, backwards = self.backwards_frames(root, "1.wav")
-        self.assertEqual(backwards, forwards[::-1])
 
-    def test_saving_a_take_writes_its_backwards_copy(self):
-        root, out, s = run("record")
-        for name in ("1.wav", "2.wav"):
-            forwards, backwards = self.backwards_frames(root, name)
-            self.assertEqual(backwards, forwards[::-1])
-        self.assertNotIn("backwards copy not written", out)
-
-    def test_double_tap_backwards_in_edit_mode_turns_round_in_ram(self):
-        root, out, s = run("auto_readonly", tone=(340.0, 1.0))
+    def test_double_tap_backwards_with_no_room_set_aside(self):
+        # 2 s needs 94 KB, and with room to spare that's more than is free:
+        # the sample is turned round in RAM on the double tap, as before
+        root, out, s = run("auto", tone=(340.0, 2.0))
+        self.assertIn("backwards: no room set aside", out)
         self.assertIn("/1.wav turned round in", out)
-        self.assertNotIn(".backwards-1.wav", s["files"])
-        self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])  # a RawSample
-        # too long for RAM: it plays forwards
-        root, out, s = run("auto_readonly", tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "9"})
+        # and when the heap has no block that big, it plays forwards
+        root, out, s = run("auto", tone=(340.0, 2.0), env={"FAKE_REVERSE_FAILS": "9"})
         self.assertIn("/1.wav can't play backwards: memory allocation failed", out)
         self.assertIn("playing 1 (double tap: backwards)", out)
+
+    def test_a_full_preset_borrows_the_backwards_buffer(self):
+        # a preset that leaves too little free takes the buffer, stopping the
+        # backwards sample it held; it comes back once the preset is gone
+        root, out, s = run("auto_preset", tone=(340.0, 1.0),
+                           env={"FAKE_MEM_LOW_AFTER": "1.45", "FAKE_REVERSE_FAILS": "9"})
+        self.assertIn("backwards: buffer lent to the preset", out)
+        self.assertNotIn("Traceback", out)
+        self.assertEqual(out.count("turned round"), 1)
 
     def test_double_tap_backwards_through_autotune(self):
         config = json.loads(json.dumps(THROUGH_CONFIG))

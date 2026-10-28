@@ -65,14 +65,13 @@ SCENARIOS = {
         paddle=[],
         end=6.0,
     ),
-    # The same taps in edit mode, where the drive can't be written.
-    "auto_readonly": dict(
-        presses=tap(1.0, BOTTOM) + tap(2.0, BOTTOM) + tap(2.2, BOTTOM)
-        + [(3.0, BOTTOM, True), (3.6, BOTTOM, False)]
-        + tap(5.0, BOTTOM) + tap(5.5, BOTTOM),
+    # A double tap, then TOP to preset 1 while it plays backwards, then
+    # back to clean and another double tap.
+    "auto_preset": dict(
+        presses=tap(1.0, BOTTOM) + tap(1.2, BOTTOM) + tap(1.5, TOP)
+        + tap(2.5, TOP) + tap(2.8, TOP) + tap(3.5, BOTTOM) + tap(3.7, BOTTOM),
         paddle=[],
-        readonly=True,
-        end=6.0,
+        end=4.5,
     ),
     # The same double tap on an autotune preset with samples through it.
     "auto_through": dict(

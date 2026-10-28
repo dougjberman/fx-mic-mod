@@ -108,7 +108,7 @@ from config_loader import (
     preset_level,
     sample_routing,
 )
-from recorder import Recorder, drive_free, wav_header, _exists, _remove
+from recorder import Recorder, drive_free
 import shake
 
 # The firmware's release number. The editor reads this line from the mic's
@@ -346,6 +346,9 @@ class DataContext:
         # RawSample and the array it plays), or None.
         self.reversed_wave = None
         self.reversed_data = None
+        # RAM set aside for turning samples round (see reserve_backwards()),
+        # or None while it's lent out or there was no room for it.
+        self.backwards_buffer = None
         # The shake effect on samples the native mixer plays (a
         # shake.ShakeFX), and the stutter roll for samples autotune streams
         # (a shake.Roll). None with the shake off or no accelerometer.
@@ -685,14 +688,32 @@ def select_preset(ctx, index):
     ctx.active = index
     try:
         if index == RECORD_SPOT:
+            # Takes get all the RAM there is; the buffer comes back after.
+            release_backwards(ctx)
             enter_record_mode(ctx)
         else:
-            build(ctx, page_presets(ctx)[index - 1] if index else [])
+            try:
+                build(ctx, page_presets(ctx)[index - 1] if index else [])
+            except MemoryError:
+                if ctx.backwards_buffer is None:
+                    raise
+                # The preset comes first: lend it the backwards buffer.
+                teardown(ctx)
+                release_backwards(ctx)
+                build(ctx, page_presets(ctx)[index - 1] if index else [])
     except (ValueError, MemoryError) as error:
         print("preset {} failed: {}".format(index, error))
         teardown(ctx)
         ctx.active = 0
         build(ctx, [])
+    if ctx.active != RECORD_SPOT:
+        gc.collect()
+        if ctx.backwards_buffer is not None and gc.mem_free() < BACKWARDS_MARGIN:
+            # A preset this close to full would collect garbage too often.
+            release_backwards(ctx)
+            print("backwards: buffer lent to the preset")
+        elif reserve_backwards(ctx):
+            print("backwards: buffer back, {} KB".format(2 * len(ctx.backwards_buffer) // 1024))
 
     update_red_leds(ctx)
     update_white_leds(ctx)
@@ -773,16 +794,9 @@ def save_take(ctx):
     path = "/{}".format(sample["file"])
     # The slot's WaveFile holds the file open; release it before replacing it.
     unload_wave_sample(ctx)
-    # The old take's backwards copy goes first, which also makes room.
-    _remove(backwards_path(path))
     waterfall = SaveWaterfall()
     try:
         frames = ctx.recorder.save(path, tick=waterfall.step)
-        if frames:
-            try:
-                write_backwards(path, tick=waterfall.step)
-            except OSError as error:
-                print("{} backwards copy not written: {}".format(path, error))
         print("saved {} ({:.2f} s), {} KB left on the drive".format(
             path, frames / RATE, (drive_free() or 0) // 1024))
     except OSError as error:
@@ -1060,118 +1074,91 @@ def set_gate(ctx, held):
     ctx.gate_open = held
 
 
-def backwards_path(path):
-    """The hidden file beside the sample at ``path`` that holds it
-    backwards: "/3.wav" -> "/.backwards-3.wav"."""
-    folder, _, name = path.rpartition("/")
-    return "{}/.backwards-{}".format(folder, name)
+# A sample is turned round into one unbroken block of RAM as big as the file
+# (48 KB a second), and once the mic has been running a while the heap
+# rarely has one that big, even with plenty free in total: a 3 s take failed
+# with 256 KB free. So a block for the longest slot's sample is set aside at
+# power-on, while the heap is still in one piece, and every slot is turned
+# round into it. A preset or record mode that needs the RAM borrows it; it
+# is taken back once the heap can spare it with this much left over.
+BACKWARDS_MARGIN = 48 * 1024
 
 
-def backwards_matches(path, copy):
-    """Whether ``copy`` is the sample at ``path`` backwards: the same length,
-    and its last block is the sample's first, turned round. Reads two
-    blocks, so checking every slot at power-on is quick."""
-    try:
-        forwards = autotune.WaveReader(path)
-    except (OSError, ValueError):
-        return False
-    try:
-        backwards = autotune.WaveReader(copy, reverse=True)
-    except (OSError, ValueError):
-        forwards.close()
-        return False
-    try:
-        if forwards.size != backwards.size:
-            return False
-        got = forwards.read()
-        return (backwards.read() == got
-                and bytes(forwards.buf)[0:2 * got] == bytes(backwards.buf)[0:2 * got])
-    finally:
-        forwards.close()
-        backwards.close()
-
-
-def write_backwards(path, tick=None):
-    """Write the sample at ``path`` backwards to its hidden copy, a block at
-    a time, so it takes no more RAM than playing it. A double tap then
-    streams the copy like any sample, with no wait and no big block of RAM.
-    Raises OSError if the drive can't take it. ``tick``, if given, is called
-    between writes, for the save animation."""
-    copy = backwards_path(path)
-    tmp = copy + ".tmp"
-    _remove(tmp)
-    reader = autotune.WaveReader(path, reverse=True, block=2048)
-    try:
-        with open(tmp, "wb") as file:
-            file.write(wav_header(reader.size, RATE))
-            while True:
-                if tick is not None:
-                    tick()
-                got = reader.read()
-                if not got:
-                    break
-                file.write(memoryview(reader.buf)[0:got])
-    except OSError:
-        _remove(tmp)
-        raise
-    finally:
-        reader.close()
-    _remove(copy)
-    os.rename(tmp, copy)
-    if hasattr(os, "sync"):
-        os.sync()
-
-
-def prepare_backwards(tick=None):
-    """Make sure every slot's sample has an up-to-date backwards copy, at
-    power-on. Only samples that are new or changed since the last run (say,
-    copied over in edit mode) are written; the rest are just checked."""
+def longest_sample():
+    """The longest slot's sample, in samples (0 with none)."""
+    longest = 0
     for slot in range(1, len(white_leds) + 1):
-        path = "/{}".format(sample_for_slot(slot)["file"])
-        if not _exists(path) or backwards_matches(path, backwards_path(path)):
-            continue
-        began = time.monotonic()
         try:
-            write_backwards(path, tick)
-        except (OSError, ValueError) as error:
-            print("{} backwards copy not written: {}".format(path, error))
+            reader = autotune.WaveReader("/{}".format(sample_for_slot(slot)["file"]))
+        except (OSError, ValueError):
             continue
-        print("{} backwards copy written in {:.0f} ms".format(
-            path, (time.monotonic() - began) * 1000))
+        longest = max(longest, reader.size)
+        reader.close()
+    return longest
+
+
+def release_backwards(ctx):
+    """Give up the backwards buffer, and the backwards sample playing from
+    it, so something else can have the RAM."""
+    if ctx.backwards_buffer is None:
+        return
+    if ctx.reversed_data is ctx.backwards_buffer:
+        stop_current_wave(ctx)
+        ctx.reversed_wave.deinit()
+        ctx.reversed_wave = ctx.reversed_data = None
+    ctx.backwards_buffer = None
+    gc.collect()
+
+
+def reserve_backwards(ctx):
+    """Set aside the backwards buffer, sized for the longest slot's sample,
+    if it isn't already and the heap can spare it. True if it was."""
+    need = longest_sample()
+    buffer = ctx.backwards_buffer
+    if buffer is not None and len(buffer) >= need:
+        return False
+    release_backwards(ctx)
+    if not need:
+        return False
+    gc.collect()
+    if gc.mem_free() < 2 * need + BACKWARDS_MARGIN:
+        return False
+    try:
+        ctx.backwards_buffer = autotune.int16_buffer(need)
+    except MemoryError:
+        return False
+    return True
 
 
 def reversed_wave(ctx):
-    """The loaded sample backwards, or None if it can't be had. Opened on the
-    first double tap and kept until the sample is unloaded.
-
-    It streams from the backwards copy beside the sample, written when the
-    take was saved or at power-on. With none (edit mode, where the code
-    can't write the drive, or the drive full) the whole sample is turned
-    round in RAM, which needs one unbroken block as big as the file and so
-    can fail for long takes. (Through autotune the sample streams backwards
-    from the file itself, so none of this is needed there.)"""
+    """The loaded sample backwards, as a RawSample, or None if it won't fit
+    in RAM. Built on the first double tap and kept until the sample is
+    unloaded. (Through autotune the sample streams backwards from flash
+    instead, so this isn't needed there.)"""
     if ctx.reversed_wave is None:
         began = time.monotonic()
-        path = ctx.current_path
-        copy = backwards_path(path)
+        buffer = ctx.backwards_buffer
         try:
-            # Checked, since in edit mode the sample may have changed since
-            # the copy was written.
-            if backwards_matches(path, copy):
-                ctx.reversed_wave = audiocore.WaveFile(copy)
+            if buffer is not None:
+                n = autotune.reverse_into(ctx.current_path, buffer)
+                # The block is longer than most samples: play only this one.
+                ctx.reversed_wave = audiocore.RawSample(
+                    memoryview(buffer)[0:n], channel_count=1, sample_rate=RATE
+                )
+                ctx.reversed_data = buffer
             else:
                 gc.collect()
-                ctx.reversed_data = autotune.load_reversed(path)
+                ctx.reversed_data = autotune.load_reversed(ctx.current_path)
                 ctx.reversed_wave = audiocore.RawSample(
                     ctx.reversed_data, channel_count=1, sample_rate=RATE
                 )
-                print("{} turned round in {:.0f} ms".format(
-                    path, (time.monotonic() - began) * 1000))
         except (MemoryError, OSError, ValueError) as error:
             ctx.reversed_wave = ctx.reversed_data = None
-            print("{} can't play backwards: {}".format(path, error))
+            print("{} can't play backwards: {}".format(ctx.current_path, error))
             gc.collect()
             return None
+        print("{} turned round in {:.0f} ms".format(
+            ctx.current_path, (time.monotonic() - began) * 1000))
     return ctx.reversed_wave
 
 
@@ -1424,10 +1411,15 @@ if shake_meter is not None:
     print("shake: {} found; shaking a sample plays it {}".format(
         shake_meter.name, shake.describe(SHAKE)))
 
-# Backwards copies for samples that are new since the last run, so a double
-# tap never waits on the drive. Usually there are none to write.
-if CAN_RECORD and not EFFECTS_ONLY:
-    prepare_backwards()
+# The backwards buffer first, while the heap is still in one piece.
+if not EFFECTS_ONLY:
+    reserve_backwards(data_context)
+    if data_context.backwards_buffer is not None:
+        print("backwards: {} KB set aside, for samples up to {:.1f} s".format(
+            2 * len(data_context.backwards_buffer) // 1024,
+            len(data_context.backwards_buffer) / RATE))
+    else:
+        print("backwards: no room set aside, {} bytes free".format(gc.mem_free()))
 
 # Initialize the first LED and load its wave file.
 update_white_leds(data_context)

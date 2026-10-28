@@ -728,28 +728,49 @@ def _reverse(buf, n):
         j -= 1
 
 
-def load_reversed(path):
-    """The WAV at ``path`` backwards, whole, in one int16 array that an
-    audiocore.RawSample can play. For playing a sample backwards on the
-    native mixer, which can only play a file forwards. Raises MemoryError
-    if it doesn't fit."""
+def reverse_into(path, out):
+    """Fill the start of ``out`` (an int16 array) with the WAV at ``path``
+    backwards, and return how many samples that took. Raises MemoryError
+    if the file is longer than ``out``."""
     reader = WaveReader(path, reverse=True, block=2048)
     try:
         n = reader.size
-        out = np.zeros(n, dtype=np.int16) if np is not None else array.array("h", bytes(2 * n))
+        if n > len(out):
+            raise MemoryError("{} samples, the buffer holds {}".format(n, len(out)))
+        ulab_out = np is not None and not isinstance(out, array.array)
         done = 0
         while True:
             got = reader.read()
             if not got:
                 break
-            if np is not None:
+            if ulab_out:
                 out[done:done + got] = np.frombuffer(reader.buf, dtype=np.int16)[0:got]
             else:
                 out[done:done + got] = reader.buf[0:got]
             done += got
-        return out
+        return done
     finally:
         reader.close()
+
+
+def int16_buffer(n):
+    """A zeroed int16 array of ``n`` samples, in one allocation."""
+    if np is not None:
+        return np.zeros(n, dtype=np.int16)
+    return array.array("h", bytes(2 * n))
+
+
+def load_reversed(path):
+    """The WAV at ``path`` backwards, whole, in one int16 array that an
+    audiocore.RawSample can play. For playing a sample backwards on the
+    native mixer, which can only play a file forwards. Raises MemoryError
+    if it doesn't fit."""
+    reader = WaveReader(path)
+    n = reader.size
+    reader.close()
+    out = int16_buffer(n)
+    reverse_into(path, out)
+    return out
 
 
 def _value(param):

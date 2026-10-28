@@ -728,28 +728,49 @@ def _reverse(buf, n):
         j -= 1
 
 
-def load_reversed(path):
+def reverse_into(path, out):
     0
-
 
 
     reader = WaveReader(path, reverse=True, block=2048)
     try:
         n = reader.size
-        out = np.zeros(n, dtype=np.int16) if np is not None else array.array("h", bytes(2 * n))
+        if n > len(out):
+            raise MemoryError("{} samples, the buffer holds {}".format(n, len(out)))
+        ulab_out = np is not None and not isinstance(out, array.array)
         done = 0
         while True:
             got = reader.read()
             if not got:
                 break
-            if np is not None:
+            if ulab_out:
                 out[done:done + got] = np.frombuffer(reader.buf, dtype=np.int16)[0:got]
             else:
                 out[done:done + got] = reader.buf[0:got]
             done += got
-        return out
+        return done
     finally:
         reader.close()
+
+
+def int16_buffer(n):
+    0
+    if np is not None:
+        return np.zeros(n, dtype=np.int16)
+    return array.array("h", bytes(2 * n))
+
+
+def load_reversed(path):
+    0
+
+
+
+    reader = WaveReader(path)
+    n = reader.size
+    reader.close()
+    out = int16_buffer(n)
+    reverse_into(path, out)
+    return out
 
 
 def _value(param):
