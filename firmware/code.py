@@ -1544,10 +1544,12 @@ try:
                 tune = data_context.tune
                 # The pass before: its work, its wait for the chain, the
                 # time it had spare in mic.record, and the loop's time
-                # outside autotune before it.
-                print("overflow (autotune took {:.1f} ms of 16, plus {:.1f} waiting for the chain; "
+                # outside autotune before it. With a sample playing through
+                # it, the part of the work that read and mixed the sample.
+                sample = ", {:.1f} of it the sample".format(tune.sample_ms) if tune.sample_ms else ""
+                print("overflow (autotune took {:.1f} ms of 16{}, plus {:.1f} waiting for the chain; "
                       "{:.1f} spare, {:.1f} outside)".format(
-                          tune.busy_ms, tune.wait_ms, tune.idle_ms, tune.outside_ms))
+                          tune.busy_ms, sample, tune.wait_ms, tune.idle_ms, tune.outside_ms))
             else:
                 print("overflow")
 

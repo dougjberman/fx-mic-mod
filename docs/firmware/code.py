@@ -1545,9 +1545,11 @@ try:
 
 
 
-                print("overflow (autotune took {:.1f} ms of 16, plus {:.1f} waiting for the chain; "
+
+                sample = ", {:.1f} of it the sample".format(tune.sample_ms) if tune.sample_ms else ""
+                print("overflow (autotune took {:.1f} ms of 16{}, plus {:.1f} waiting for the chain; "
                       "{:.1f} spare, {:.1f} outside)".format(
-                          tune.busy_ms, tune.wait_ms, tune.idle_ms, tune.outside_ms))
+                          tune.busy_ms, sample, tune.wait_ms, tune.idle_ms, tune.outside_ms))
             else:
                 print("overflow")
 

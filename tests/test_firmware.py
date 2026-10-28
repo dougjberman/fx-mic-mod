@@ -539,6 +539,50 @@ class LoaderTests(unittest.TestCase):
             self.assertEqual(got, forwards[::-1], block)
         self.assertEqual(list(autotune.load_reversed(path)), forwards[::-1])
 
+    def test_wave_reader_reads_across_chunks(self):
+        # Blocks that straddle the drive chunks, forwards and backwards, and
+        # a header that puts the data off a sector boundary.
+        import autotune
+        root = tempfile.mkdtemp()
+        path = os.path.join(root, "long.wav")
+        n = 3 * autotune.SAMPLE_CHUNK + 123
+        with wave.open(path, "wb") as out:
+            out.setnchannels(1)
+            out.setsampwidth(2)
+            out.setframerate(autotune.SAMPLE_RATE)
+            out.writeframes(b"".join(int(i % 30000).to_bytes(2, "little", signed=True) for i in range(n)))
+        forwards = [i % 30000 for i in range(n)]
+        for reverse in (False, True):
+            for block in (None, 100, 700, 2500):
+                reader = autotune.WaveReader(path, reverse=reverse, block=block)
+                got = []
+                while True:
+                    count = reader.read()
+                    if not count:
+                        break
+                    got.extend(reader.buf[0:count])
+                reader.close()
+                self.assertEqual(got, forwards[::-1] if reverse else forwards, (reverse, block))
+        # looping goes back to the top
+        reader = autotune.WaveReader(path, loop=True, block=1000)
+        got = []
+        for _ in range(5):
+            got.extend(reader.buf[0:reader.read()])
+        reader.close()
+        self.assertEqual(got, forwards + forwards[0:1000])  # the last block is short
+
+    def test_mixing_a_sample_clips_and_allocates_little(self):
+        import array
+        import autotune
+        block = array.array("h", [30000, -30000, 100, 0])
+        mixer = autotune._Mixer(block)
+        mixer.add(array.array("h", [10000, -10000, 50, 7]), 4)
+        self.assertEqual(list(block), [32767, -32768, 150, 7])
+        mixer.add(array.array("h", [1, 2, 3, 4]), 2)  # a short last block
+        self.assertEqual(list(block), [32767, -32766, 150, 7])
+        mixer.copy(array.array("h", [5, 6, 7, 8]), 3)
+        self.assertEqual(list(block), [5, 6, 7, 7])
+
     def test_feed_window_holds_the_last_two_blocks_in_order(self):
         # feed_phase null: after every write the buffer reads oldest block first.
         import array

@@ -117,9 +117,13 @@ the file position, so it adds no audio work to the autotune pass.
   sits at -3 dBFS (`NORMALIZE_PEAK`), boosting by at most +12 dB (`NORMALIZE_MAX_GAIN`). It runs
   before saving, so check the save time on a 4 s take; it uses ulab when the build has it.
 - **Samples through the preset** (`"sample_fx": "preset"`): non-autotune presets get a second
-  `audiomixer.Mixer` at the chain input. Autotune presets stream the WAV from flash 512 bytes per
-  block and mix it in Python before pitch detection. Check for crackle or `overflow` while a
-  sample plays on an autotune preset, and that a 1024-byte effect chain accepts the mixer.
+  `audiomixer.Mixer` at the chain input. Autotune presets stream the WAV from flash and mix it in
+  Python before pitch detection: a sector-aligned 2 KB read every two or three blocks
+  (`SAMPLE_CHUNK`), into buffers kept from the start, and a mix that allocates nothing unless the
+  sum clips (1.7 read every block, unaligned, and made about 5 KB of new arrays a block to mix).
+  An `overflow` line says how much of the pass was the sample (`N of it the sample`). Check for
+  crackle or `overflow` while a sample plays on an autotune preset, and that a 1024-byte effect
+  chain accepts the mixer.
 - **Sample button timing:** `TAP_HOLD_SECONDS` (0.25) and `DOUBLE_TAP_SECONDS` (0.3) in code.py
   are first guesses. The console prints `stopped 1 (held N ms)` on a hold, so try quick taps (they
   must keep playing), short deliberate holds (they must stop), and relaxed double taps (they must
@@ -129,7 +133,7 @@ the file position, so it adds no audio work to the autotune pass.
 - **Backwards samples:** off autotune, the first double tap loads the WAV backwards into RAM and
   prints `turned round in N ms`; that delay is heard once per slot. A 4 s take is 192 KB at 24 kHz,
   so check it fits next to a busy preset (`can't play backwards: memory` means it didn't, and it
-  plays forwards). Through autotune it streams backwards from flash, one seek per 16 ms block:
+  plays forwards). Through autotune it streams backwards from flash, a chunk at a time:
   watch for `overflow` or crackle while a sample plays backwards on a harmonizer or vocoder preset,
   where the pass is tightest.
 - **Accelerometer:** the board says only "accelerometer at 0x18". shake.py speaks the LIS3DH
