@@ -776,10 +776,11 @@ VOCODER_WAVEFORMS = ("saw", "square", "pulse", "saw_square")
 # 40 ms of Python a block, and over 100 ms on a new note: far worse.
 VOCODER_FILTERS = True
 VOCODER_MAX_BANDS = 11          # synthio plays 12 notes; one is kept for breath
-# With the voice in the mix its pitch shifter runs too, and on a Ting 11 bands
-# plus the shifter overflowed while 8 plus the shifter ran clean (and 11
-# alone ran clean); so with the voice in, bands stop here.
-VOCODER_VOICE_MAX_BANDS = 8
+# With the voice in the mix its pitch shifter runs too. On a Ting that
+# overflowed at 11, 8 and 7 bands, while 11 bands alone ran clean; so the
+# voice is left out and a vocoder always plays at 100%. True brings it back.
+VOCODER_VOICE = False
+VOCODER_VOICE_MAX_BANDS = 8     # bands with the voice in, when VOCODER_VOICE
 VOCODER_VOICE_DENSITY = 1       # the voice's shifter grains beside a vocoder, unless the preset sets "density"
 VOCODER_LOW_HZ = 180.0          # centre of the lowest band
 VOCODER_HIGH_HZ = 5000.0        # centre of the highest band (at most 0.4 x the rate)
@@ -1414,7 +1415,8 @@ class Autotune:
       vocoder_bands, vocoder_octave, vocoder_breath, vocoder_chord,
       vocoder_gate, vocoder_squeeze_chord   see Vocoder
       vocoder_mix      vocoder against the voice, 0..1 (number or block); a
-                       plain 1 drops the voice and its shifter altogether
+                       plain 1 drops the voice and its shifter altogether,
+                       and so does anything else unless VOCODER_VOICE
     fmt is the shared audio format dict (sample_rate, bits_per_sample,
     samples_signed, channel_count, buffer_size). All but grain_size, density
     and engine can be changed later through the attributes / set_key_scale().
@@ -1433,6 +1435,9 @@ class Autotune:
             raise ValueError("a preset can have a harmonizer or a vocoder, not both")
         # Vocoder alone: nothing plays the voice, so it needs no shifter.
         voiceless = vocoder is not None and not hasattr(vocoder_mix, "value") and vocoder_mix >= 1
+        if vocoder is not None and not voiceless and not VOCODER_VOICE:
+            print("vocoder: the mic can't run your voice beside it; playing it at 100%")
+            voiceless, vocoder_mix = True, 1.0
         if density is None:
             # Beside a vocoder the shifter only plays a trace of the voice,
             # so one grain at a time is enough, at half the CPU of two.

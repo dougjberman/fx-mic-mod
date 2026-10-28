@@ -30,10 +30,11 @@ A `vocoder` effect also joins the autotune stage. Its carrier is a `synthio.Synt
 Python only measures the voice: on the blocks between pitch searches it takes the newest
 power-of-two samples of the pitch window (512 at 16 or 24 kHz), runs a ulab FFT, sums the bins of
 each band and sets each band note's amplitude. The breath noise loops, so its high-pass is run once
-at load and baked into its table (1.6): one note, no Biquad. With `mix` 1 nothing plays the voice,
-so the stage builds no shifter and the synth heads the chain; otherwise a two-voice mixer sums
-voice and synth, and the voice's shifter runs one grain (`VOCODER_VOICE_DENSITY`, 1.6; a preset's
-`density` on autotune wins). A `chord` carrier costs nothing extra: the chord's notes are
+at load and baked into its table (1.6): one note, no Biquad. Nothing plays the voice, so the
+stage builds no shifter and the synth heads the chain. A `mix` under 1 used to keep the voice in
+on a two-voice mixer, with its own shifter; on a Ting that overflowed at 8 and 7 bands while 11
+bands alone ran clean, so 1.6 plays every vocoder at 100% (`VOCODER_VOICE` = True brings the
+voice back, at up to 8 bands, its shifter one grain per `VOCODER_VOICE_DENSITY`). A `chord` carrier costs nothing extra: the chord's notes are
 whole-number multiples of a lower note (minor is 10:12:15), so one longer table holds the whole
 chord and each band note plays it at the sung note divided by the root's multiple. A key chord
 (`key_triad`, `key_seventh`) builds every chord its key can ask for when the preset loads, and on
@@ -66,8 +67,6 @@ blocks, far worse than 1.4. It stays in autotune.py, off.
 - **Vocoder gate:** -50 dB (`VOCODER_GATE`) is a starting guess, tried only in the preview with a
   synthetic hum. Check that the mic's own noise floor sits well under it, and that quiet singing
   still opens it.
-- **Voice grains:** the voice beside a vocoder shifts one grain at a time. Listen for a
-  fluttery voice trace under the synth; `"density": 2` on the preset's autotune puts it back.
 - **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.

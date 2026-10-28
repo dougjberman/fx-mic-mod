@@ -779,6 +779,7 @@ VOCODER_MAX_BANDS = 11
 
 
 
+VOCODER_VOICE = False
 VOCODER_VOICE_MAX_BANDS = 8
 VOCODER_VOICE_DENSITY = 1
 VOCODER_LOW_HZ = 180.0
@@ -1420,6 +1421,7 @@ class Autotune:
 
 
 
+
     def __init__(self, mic, fmt, key="C", scale="chromatic", speed=1.0,
                  humanize=0.0, mix=1.0, grain_size=None,
                  density=None, engine=SHIFT_ENGINE, harmony=None,
@@ -1433,6 +1435,9 @@ class Autotune:
             raise ValueError("a preset can have a harmonizer or a vocoder, not both")
 
         voiceless = vocoder is not None and not hasattr(vocoder_mix, "value") and vocoder_mix >= 1
+        if vocoder is not None and not voiceless and not VOCODER_VOICE:
+            print("vocoder: the mic can't run your voice beside it; playing it at 100%")
+            voiceless, vocoder_mix = True, 1.0
         if density is None:
 
 

@@ -51,7 +51,11 @@ def write_tone(path, hz, seconds, rate=24000):
         out.writeframes(frames)
 
 
-def run(scenario, config=TEST_CONFIG, tone=None, handle=None):
+# keeps the voice beside a vocoder (VOCODER_VOICE), which the mic leaves out
+VOICE = {"FAKE_VOCODER_VOICE": "1"}
+
+
+def run(scenario, config=TEST_CONFIG, tone=None, handle=None, env=None):
     root = tempfile.mkdtemp()
     with open(os.path.join(root, "config.json"), "w") as file:
         json.dump(config, file)
@@ -60,7 +64,7 @@ def run(scenario, config=TEST_CONFIG, tone=None, handle=None):
     out = subprocess.run(
         [sys.executable, os.path.join(HERE, "run_scenario.py"), scenario, root],
         capture_output=True, text=True, timeout=600, check=True,
-        env=dict(os.environ, FAKE_HANDLE="%d,%d" % handle) if handle else None,
+        env=dict(os.environ, **dict(env or {}, **({"FAKE_HANDLE": "%d,%d" % handle} if handle else {}))),
     ).stdout
     summary = json.loads(out.split("SUMMARY ", 1)[1])
     return root, out, summary
@@ -945,10 +949,21 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertIn("vocoder chord now minor", out)
         self.assertLess(out.index("vocoder chord now minor"), out.index("vocoder chord now major"))
 
+    def test_vocoder_drops_the_voice(self):
+        # the voice's shifter beside the vocoder overflowed a Ting, so it plays at 100%
+        for mix in (0.7, "$handle"):
+            config = {"name": "V", "presets": [{"list": [
+                {"effect": "vocoder", "bands": 11, "mix": mix}]}], "samples": []}
+            root, out, s = run("level", config)
+            self.assertIn("playing it at 100%", out)
+            self.assertIn("voice via no shifter, vocoder 11 bands", out)
+            self.assertEqual(s["shifters"], [])
+            self.assertIsNone(s["vocoder_mixer"])
+
     def test_vocoder_bands_cap_with_the_voice(self):
         config = {"name": "V", "presets": [{"list": [
             {"effect": "vocoder", "bands": 11, "mix": 0.9}]}], "samples": []}
-        root, out, s = run("level", config)
+        root, out, s = run("level", config, env=VOICE)
         self.assertIn("using 8", out)
         voc, = s["vocoders"]
         self.assertEqual(voc["bands"], 8)
@@ -956,7 +971,7 @@ class DeviceScenarioTests(unittest.TestCase):
     def test_vocoder_with_the_voice(self):
         config = {"name": "V", "presets": [{"list": [
             {"effect": "vocoder", "waveform": "pulse", "mix": "$handle"}]}], "samples": []}
-        root, out, s = run("level", config)
+        root, out, s = run("level", config, env=VOICE)
         self.assertIn("voice via GranularPitchShift, vocoder 8 bands", out)
         # the voice stays untuned and the carrier plays it as sung; it is
         # only a trace beside the vocoder, so its shifter runs one grain

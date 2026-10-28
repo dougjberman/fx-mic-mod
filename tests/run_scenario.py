@@ -109,6 +109,8 @@ def track_vocoders():
         self.level_log.append(list(self.levels))
 
     autotune.Vocoder.__init__, autotune.Vocoder.update = tracked_init, tracked_update
+    # FAKE_VOCODER_VOICE=1 keeps the voice beside a vocoder, as VOCODER_VOICE does
+    autotune.VOCODER_VOICE = os.environ.get("FAKE_VOCODER_VOICE") == "1"
     return made
 
 
