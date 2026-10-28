@@ -260,6 +260,7 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
           <thead><tr><th>Version</th><th>Date</th><th>What changed</th></tr></thead>
           <tbody id="fwLog">
             <!-- One row per FIRMWARE_VERSION in firmware/code.py, newest first. The update check lists the rows newer than the mic's. -->
+            <tr data-version="1.7"><td>1.7</td><td>2026-10-28</td><td>Shake the mic while a sample plays and the sample zips up, warbles or glitches. Pick the style in the editor, or turn it off.</td></tr>
             <tr data-version="1.6"><td>1.6</td><td>2026-10-28</td><td>The vocoder goes back to a filter per band (1.5's way cost the mic more, not less), with the breath noise filtered once at load. The vocoder now always plays at 100%: blending your voice back in overflowed the mic even at 7 bands, so presets get all 11 bands instead.</td></tr>
             <tr data-version="1.5"><td>1.5</td><td>2026-10-27</td><td>The vocoder works out its bands in Python and plays them as plain synth notes, with no filters for the audio side to run, so Night call stops overflowing. Same sound.</td></tr>
             <tr data-version="1.4"><td>1.4</td><td>2026-10-27</td><td>Effects-only mode: trade the samples and record mode for up to 16 effect presets, in pages of four.</td></tr>
@@ -413,7 +414,7 @@ picotool save -a ting-full-flash.bin</pre>
     <!-- 05 -->
     <section class="step" id="install" data-step="install">
       <div class="step-head"><span class="step-num">05</span><h2>Install fx-mic-mod</h2><label class="mark"><input type="checkbox" data-done="install"> Done</label></div>
-      <p>This copies the fx-mic-mod files to CIRCUITPY: <code>code.py</code> and its modules (<code>autotune.py</code>, <code>recorder.py</code>, <code>config_loader.py</code>), <code>boot.py</code>, and a starter <code>config.json</code> with four presets. The copies on the mic leave out the source comments, which saves about 50 KB for recordings. The commented source is in the project repository.</p>
+      <p>This copies the fx-mic-mod files to CIRCUITPY: <code>code.py</code> and its modules (<code>autotune.py</code>, <code>recorder.py</code>, <code>config_loader.py</code>, <code>shake.py</code>), <code>boot.py</code>, and a starter <code>config.json</code> with four presets. The copies on the mic leave out the source comments, which saves about 50 KB for recordings. The commented source is in the project repository.</p>
       <p>It also needs Adafruit's driver for the mic's audio chip, <code>adafruit_nau88l21.mpy</code>. Choose the <code>lib</code> folder from the 10.x library bundle you unzipped in <a href="#stock">step 02</a>. Only the driver and the <code>adafruit_register</code> folder it needs are copied from it. You can skip this if both are already on the drive.</p>
       <div class="tool">
         <div class="row">
@@ -444,7 +445,7 @@ picotool save -a ting-full-flash.bin</pre>
         <div style="display: grid; gap: 10px; margin-top: 10px;">
           <p>Download these files and copy them to the root of CIRCUITPY, with <code>code.py</code> last:</p>
           <ul class="how">
-            <li><a href="firmware/config_loader.py" download>config_loader.py</a>, <a href="firmware/autotune.py" download>autotune.py</a>, <a href="firmware/recorder.py" download>recorder.py</a></li>
+            <li><a href="firmware/config_loader.py" download>config_loader.py</a>, <a href="firmware/autotune.py" download>autotune.py</a>, <a href="firmware/recorder.py" download>recorder.py</a>, <a href="firmware/shake.py" download>shake.py</a></li>
             <li><a href="firmware/config.json" download>config.json</a> (starter presets; skip it to keep yours)</li>
             <li><a href="firmware/boot.py" download>boot.py</a></li>
             <li><a href="firmware/code.py" download>code.py</a></li>
@@ -814,7 +815,7 @@ while True:
   // ---------- 05 install ----------
   // The fx-mic-mod files are served next to this page in firmware/. code.py goes last,
   // so CircuitPython's auto-reload starts it with everything else already in place.
-  const FIRMWARE = ["config_loader.py", "autotune.py", "recorder.py", "config.json", "boot.py", "code.py"];
+  const FIRMWARE = ["config_loader.py", "autotune.py", "recorder.py", "shake.py", "config.json", "boot.py", "code.py"];
   // The audio chip's driver, and the adafruit_register package it imports.
   // adafruit_bus_device, its other import, is built into CircuitPython.
   const DRIVER = "adafruit_nau88l21.mpy";

@@ -603,6 +603,21 @@ class WaveReader:
         self.left = self.size
         self.file.seek(self.start)
 
+
+        self._roll_at = None
+        self._roll_blocks = 0
+        self._rolled = 0
+
+    def roll(self, blocks):
+        0
+
+        if not blocks:
+            self._roll_at = None
+            return
+        if self._roll_at is None:
+            self._roll_at, self._rolled = self.left, 0
+        self._roll_blocks = blocks
+
     def _find_data(self):
         f = self.file
         head = f.read(12)
@@ -629,6 +644,13 @@ class WaveReader:
 
         if self.done:
             return 0
+        if self._roll_at is not None:
+            if self._rolled >= self._roll_blocks or self.left <= 0:
+                self._rolled = 0
+                self.left = self._roll_at
+                if not self.reverse:
+                    self.file.seek(self.start + 2 * (self.size - self.left))
+            self._rolled += 1
         if self.left <= 0:
             if not self.loop:
                 self.done = True

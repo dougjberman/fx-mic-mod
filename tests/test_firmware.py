@@ -469,6 +469,53 @@ class LoaderTests(unittest.TestCase):
         # older playmodes still load (code.py reads them and plays every slot the same way)
         self.assertEqual([s["playmode"] for s in samples], ["auto", "hold", "oneshot"])
 
+    def test_shake_settings(self):
+        import shake
+        self.assertEqual(shake.settings({})["style"], "zip")  # on, zipping, by default
+        self.assertIsNone(shake.settings({"shake": "off"}))
+        self.assertIsNone(shake.settings({"shake": False}))
+        self.assertEqual(shake.settings({"shake": "glitch"}), dict(shake.STYLES["glitch"], style="glitch"))
+        tuned = shake.settings({"shake": {"style": "warble", "rate": 3, "mix": 7}})
+        self.assertEqual((tuned["rate"], tuned["mix"]), (3, 1.0))  # a bad mix keeps the style's
+        self.assertEqual(shake.settings({"shake": "wobble"})["style"], "zip")
+        # a sweep the freq_shift Echo would have to write too fast is narrowed
+        wide = shake.settings({"shake": {"style": "zip", "shortest_ms": 5, "longest_ms": 400}})
+        self.assertEqual(wide["shortest_ms"], 400 / shake.MAX_SWEEP_RATIO)
+
+    def test_shake_waveforms_sweep_the_delay(self):
+        import shake
+        zip_wave = list(shake._waveform("zip"))
+        self.assertEqual((zip_wave[0], zip_wave[-1]), (32767, -32767))  # longest down to shortest
+        self.assertEqual(zip_wave, sorted(zip_wave, reverse=True))
+        self.assertEqual(len(set(shake._waveform("glitch"))), 6)  # six steps
+        self.assertAlmostEqual(sum(shake._waveform("warble")) / 32767, 0, delta=0.01)
+
+    def test_wave_reader_rolls(self):
+        import autotune
+        root = tempfile.mkdtemp()
+        rate = autotune.SAMPLE_RATE
+        with wave.open(os.path.join(root, "ramp.wav"), "wb") as out:
+            out.setnchannels(1)
+            out.setsampwidth(2)
+            out.setframerate(rate)
+            out.writeframes(b"".join(int(i).to_bytes(2, "little", signed=True) for i in range(4096)))
+        for reverse in (False, True):
+            reader = autotune.WaveReader(os.path.join(root, "ramp.wav"), reverse=reverse, block=4)
+            reader.read()
+            reader.roll(2)  # the next two blocks, over and over
+            firsts = []
+            for _ in range(6):
+                reader.read()
+                firsts.append(reader.buf[0])
+            reader.roll(0)
+            reader.read()
+            firsts.append(reader.buf[0])
+            reader.close()
+            if reverse:
+                self.assertEqual(firsts, [4091, 4087] * 3 + [4083])
+            else:
+                self.assertEqual(firsts, [4, 8] * 3 + [12])
+
     def test_wave_reader_plays_backwards(self):
         import autotune
         root = tempfile.mkdtemp()
@@ -1033,6 +1080,42 @@ class DeviceScenarioTests(unittest.TestCase):
         root, out, s = run("pages", dict(config, effects_only=False))
         self.assertIn("4 preset(s)", out)
         self.assertEqual(s["record_spot"], 5)
+
+    def test_shaking_a_sample(self):
+        root, out, s = run("shake", tone=(340.0, 3.0))
+        self.assertIn("shake: LIS3DH found; shaking a sample plays it zip", out)
+        echo = s["shake_echo"]
+        self.assertEqual((echo["freq_shift"], echo["max_delay_ms"]), (True, 140))
+        # the sample (through its own reverb) plays through the Echo
+        self.assertIn(["Echo", "_Obj"], [list(p) for p in s["plays"]])
+        # mixed in up to the style's 0.3 while shaken, out again once still,
+        # and a fresh sweep on a cleared buffer for the shake
+        self.assertGreater(echo["mix_max"], 0.25)
+        self.assertLessEqual(echo["mix_max"], 0.3)
+        self.assertEqual(echo["mix_last"], 0.0)
+        self.assertEqual((echo["clears"], echo["retriggered"]), (2, 1))
+
+    def test_shaking_a_sample_through_autotune_rolls_it(self):
+        root, out, s = run("shake_through", THROUGH_CONFIG, tone=(340.0, 3.0))
+        self.assertEqual(s["shake_echo"]["mix_max"], 0.0)  # the Echo isn't in this path
+        rolls = s["rolls"]
+        self.assertTrue(rolls and rolls[-1] == 0, rolls)  # rolled, then let go
+        sweep = rolls[rolls.index(0, 1) + 1:]
+        sweep = sweep[:sweep.index(0)]
+        self.assertEqual(sweep, sorted(sweep, reverse=True))  # each stretch shorter
+        self.assertGreater(sweep[0], 3 * sweep[-1])
+
+    def test_shake_without_an_accelerometer(self):
+        root, out, s = run("shake_no_chip", tone=(340.0, 1.0))
+        self.assertIn("shake: no accelerometer", out)
+        self.assertIsNone(s["shake_echo"])
+        self.assertIn(["_Obj", "WaveFile"], [list(p) for p in s["plays"]])
+
+    def test_shake_off(self):
+        config = dict(TEST_CONFIG, shake="off")
+        root, out, s = run("shake", config, tone=(340.0, 3.0))
+        self.assertNotIn("shake:", out)
+        self.assertIsNone(s["shake_echo"])
 
     def test_shutdown_combo_over_usb_keeps_running(self):
         root, out, s = run("shutdown_on_usb")

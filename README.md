@@ -34,6 +34,7 @@ instructions to match your mic.
 | BOTTOM | Play the selected sample: a tap plays it through, a hold plays it until you let go, and a double tap plays it backwards. In config, you can decide if you want samples to play through the currently selected effect preset, (`"sample_fx": "preset"`) or hardcode the sample's own effects. |
 | Effects only | With **Give me more effects instead of samples** on in the editor (`"effects_only": true`), there are no samples or record mode: TOP steps preset 1..4 of the page and round, MIDDLE turns the page (up to four pages, sixteen presets, counted on the white LEDs), and BOTTOM goes to clean with every LED off. From clean, TOP or MIDDLE goes to page 1, preset 1. |
 | Squeeze handle | Turns the mic on. Its travel is also `"$handle"` in presets (0 = just squeezed enough to open the mic, 1 = fully in). Effects parameters can be mapped to the squeeze, such as an autotune preset that switches key on a full squeeze (`squeeze_key` / `squeeze_scale`). |
+| Shake | While a sample plays, shaking the mic zips it up (the default), warbles it or glitches it: `"shake": "zip"`, `"warble"`, `"glitch"` or `"off"`. Played through an autotune preset, the sample stutters instead. |
 | Volume knob | Output level. |
 | TOP + MIDDLE 0.8 s | Power off. |
 

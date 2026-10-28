@@ -73,6 +73,8 @@
 
 
 
+
+
 import gc
 import json
 import os
@@ -107,6 +109,7 @@ from config_loader import (
     sample_routing,
 )
 from recorder import Recorder, drive_free
+import shake
 
 
 
@@ -114,7 +117,7 @@ from recorder import Recorder, drive_free
 
 
 
-FIRMWARE_VERSION = "1.6"
+FIRMWARE_VERSION = "1.7"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 
@@ -345,6 +348,11 @@ class DataContext:
         self.reversed_data = None
 
 
+
+        self.shake_fx = None
+        self.shake_roll = None
+
+
         self.top_held = False
         self.middle_held = False
 
@@ -455,6 +463,10 @@ else:
 
 
 
+SHAKE = None if EFFECTS_ONLY else shake.settings(CONFIG)
+
+
+
 RECORD_SPOT = None if EFFECTS_ONLY else len(PRESETS) + 1
 
 
@@ -526,6 +538,10 @@ def make_mixer(fmt):
 
 mixer = make_mixer(FORMAT)
 i2s.play(mixer, loop=True)
+
+
+
+shake_meter = shake.ShakeMeter.find(board.I2C()) if SHAKE else None
 
 
 
@@ -1077,6 +1093,10 @@ def start_sample(ctx, reverse=False):
 
         ctx.current_effects[0].play(wave)
         source = ctx.current_source
+    if ctx.shake_fx is not None:
+
+
+        source = ctx.shake_fx.play(source)
     try:
         voice = sample_voice(ctx)
         voice.level = SAMPLE_LEVEL
@@ -1090,6 +1110,8 @@ def stop_current_wave(ctx):
     if ctx.tune is not None:
         ctx.tune.stop_sample()
     sample_voice(ctx).stop()
+    if ctx.shake_fx is not None:
+        ctx.shake_fx.stop()
     ctx.wave_playing = False
 
 
@@ -1282,6 +1304,15 @@ def learn_handle_open():
 
 data_context = DataContext()
 data_context.paddle_held = paddle.value
+if shake_meter is not None:
+    try:
+        data_context.shake_fx = shake.ShakeFX(SHAKE, FORMAT)
+        data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
+        print("shake: {} found; shaking a sample plays it {}".format(
+            shake_meter.name, shake.describe(SHAKE)))
+    except (ValueError, MemoryError) as error:
+        print("shake: off ({})".format(error))
+        shake_meter = None
 
 
 update_white_leds(data_context)
@@ -1455,6 +1486,26 @@ try:
 
 
 
+        if shake_meter is not None:
+            tune = data_context.tune
+            shake_fx = data_context.shake_fx
+            if THROUGH_PRESET and tune is not None:
+                if tune.sample is not None:
+                    data_context.shake_roll.update(tune.sample, shake_meter.update(now), now)
+                elif shake_meter.amount:
+                    shake_meter.reset()
+                    data_context.shake_roll.reset()
+            elif data_context.wave_playing and (shake_fx.echo.playing or shake_fx.on):
+                shake_fx.set_amount(shake_meter.update(now))
+            elif shake_meter.amount or shake_fx.on:
+                shake_meter.reset()
+                shake_fx.set_amount(0.0)
+
+
+
+
+
+
         recorder = data_context.recorder
         idle = data_context.active == RECORD_SPOT and not (
             recorder is not None and recorder.recording
@@ -1493,6 +1544,8 @@ except KeyboardInterrupt:
     stop_current_wave(data_context)
     for effect in data_context.current_effects:
         effect.deinit()
+    if data_context.shake_fx is not None:
+        data_context.shake_fx.deinit()
     if data_context.current_wave is not None:
         data_context.current_wave.deinit()
     mixer.deinit()

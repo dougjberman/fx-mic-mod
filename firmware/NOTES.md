@@ -6,6 +6,7 @@
 - `autotune.py`: pitch detect + snap + native shifter stage (from this project's autotune firmware).
 - `recorder.py`: RAM recorder and WAV writer.
 - `boot.py`: picks record mode or edit mode at power-on.
+- `shake.py`: the accelerometer, and the shake effect on sample playback.
 - `selftest.py`: on-device checks for `tools/ting_test.py`; never runs at power-on.
 
 ## How an autotune preset runs
@@ -44,6 +45,18 @@ each pitch search sets the band notes' `waveform` to the chord the scale gives t
 waveform per carrier note with a ulab inverse FFT, so the synth ran no Biquad. On a Ting
 `bench_vocoder()` gave 5 ms a block and 11 ms on a new note, and Night call overflowed on most
 blocks, far worse than 1.4. It stays in autotune.py, off.
+
+## How the shake runs
+Shaking the mic while a sample plays mixes in one `audiodelays.Echo` (`"shake"` in config.json:
+`zip` by default, `warble`, `glitch` or `off`). It sits last on the sample's way to its mixer voice,
+after the sample's own effects and before the preset it plays into, and never in the mic's chain.
+A `synthio.LFO` sweeps its delay; Python only sets its mix from the shake (0 when still, where the
+Echo copies the sample straight through). Zip and warble use `freq_shift`, so a changing delay
+bends the repeats' pitch instead of clicking; glitch is a plain Echo whose delay steps down.
+The Shake FX Lab (a page made in the project thread) runs the same Echo step for step at 24 kHz.
+Through an autotune preset the sample is streamed by Python, so there the shake is a stutter roll:
+`WaveReader.roll()` repeats the last stretch of the file, shorter on each sweep. That only moves
+the file position, so it adds no audio work to the autotune pass.
 
 ## Needs checking on the device
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
@@ -119,6 +132,19 @@ blocks, far worse than 1.4. It stays in autotune.py, off.
   plays forwards). Through autotune it streams backwards from flash, one seek per 16 ms block:
   watch for `overflow` or crackle while a sample plays backwards on a harmonizer or vocoder preset,
   where the pass is tightest.
+- **Accelerometer:** the board says only "accelerometer at 0x18". shake.py speaks the LIS3DH
+  register set (WHO_AM_I 0x33, also LIS2DH12) and Silan's SC7A20 (0x11), which copies it. The
+  console prints `shake: LIS3DH found` or `shake: no accelerometer (...)` with the id it read; an
+  unknown id leaves the shake off and everything else as it was.
+- **Shake feel:** `SHAKE_FROM_G` (0.5 g off gravity) and `SHAKE_FULL_G` (1.6 g) are guesses. Check that
+  pressing BOTTOM, squeezing and walking around don't trigger it, and that a firm shake reaches
+  full. The amount rises in 30 ms and falls over 250 ms (`ATTACK_SECONDS` / `RELEASE_SECONDS`).
+- **Shake CPU:** a freq_shift Echo writes longest / shortest buffer cells per output sample (7 at
+  zip's shortest), only while shaken. Watch for `overflow` shaking a sample into Dream swirl,
+  the heaviest native preset. Each shake clears the Echo's buffer by flipping `freq_shift` and back
+  (12 KB memset); listen for a click at the start of a shake.
+- **Shake roll on autotune:** listen for crackle as the file seeks back each stretch, and check that a
+  roll on a harmonizer or vocoder preset doesn't overflow.
 - **Squeeze key threshold:** check the handle really reaches 0.67 travel on a firm squeeze
   (`handle_control.a` on the serial console). Lower `SQUEEZE_KEY_ON` / `SQUEEZE_KEY_OFF` if not.
 - **Effects-only pages** (`"effects_only": true`): MIDDLE rebuilds the preset at the same slot on
