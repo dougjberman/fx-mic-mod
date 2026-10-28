@@ -51,7 +51,11 @@ def write_tone(path, hz, seconds, rate=24000):
         out.writeframes(frames)
 
 
-def run(scenario, config=TEST_CONFIG, tone=None, handle=None):
+# keeps the voice beside a vocoder (VOCODER_VOICE), which the mic leaves out
+VOICE = {"FAKE_VOCODER_VOICE": "1"}
+
+
+def run(scenario, config=TEST_CONFIG, tone=None, handle=None, env=None):
     root = tempfile.mkdtemp()
     with open(os.path.join(root, "config.json"), "w") as file:
         json.dump(config, file)
@@ -60,7 +64,7 @@ def run(scenario, config=TEST_CONFIG, tone=None, handle=None):
     out = subprocess.run(
         [sys.executable, os.path.join(HERE, "run_scenario.py"), scenario, root],
         capture_output=True, text=True, timeout=600, check=True,
-        env=dict(os.environ, FAKE_HANDLE="%d,%d" % handle) if handle else None,
+        env=dict(os.environ, **dict(env or {}, **({"FAKE_HANDLE": "%d,%d" % handle} if handle else {}))),
     ).stdout
     summary = json.loads(out.split("SUMMARY ", 1)[1])
     return root, out, summary
@@ -225,8 +229,7 @@ class LoaderTests(unittest.TestCase):
         voc.update(array.array("h", [0] * autotune.BUFFER_SIZE), 220.0)
         voc.squeeze(True)
         self.assertEqual(voc.chord, "minor")
-        # a note on each note of the chord, in just intonation (10:12:15)
-        self.assertEqual([n.frequency for n in voc.notes], [220.0, 264.0, 330.0])
+        self.assertAlmostEqual(voc.notes[0].frequency, 22.0)  # 220 / 10
         voc.squeeze(False)
         self.assertEqual(voc.chord, "major")
         # one note, squeezing into a key chord
@@ -291,26 +294,21 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(names, {60: "maj7", 62: "m7", 67: "7", 71: "m7b5", 61: "7"})
         voc = autotune.Vocoder(rate, chord="key_triad")
         self.assertEqual(voc.chord, "major")
-        voc.start()
         voc.update(array.array("h", [0] * autotune.BUFFER_SIZE), 220.0)
-        self.assertEqual([n.frequency for n in voc.notes], [220.0, 275.0, 330.0])  # 4:5:6
+        self.assertAlmostEqual(voc.notes[0].frequency, 55.0)  # 220 / 4
         voc.set_chord("dim")
-        self.assertEqual([n.frequency for n in voc.notes], [220.0, 264.0, 308.0])  # 5:6:7
-        self.assertEqual(len(voc.notes[0].waveform), autotune.VOCODER_TABLE)
-        self.assertEqual(len(voc.synth.pressed), 3)
-        voc = autotune.Vocoder(rate, chord="m7", squeeze_chord="none")
-        voc.start()
-        voc.squeeze(True)
-        self.assertEqual(voc.synth.pressed, voc.notes)  # the other three are let go
+        self.assertAlmostEqual(voc.notes[0].frequency, 44.0)  # 220 / 5, the 5:6:7 sub-note
+        self.assertEqual(len(voc.notes[0].waveform), autotune.VOCODER_CHORD_SAMPLES * 7)
+        voc = autotune.Vocoder(rate, chord="minor")
+        voc.update(array.array("h", [0] * autotune.BUFFER_SIZE), 220.0)
+        self.assertAlmostEqual(voc.notes[0].frequency, 22.0)  # 220 / 10, the minor chord's sub-note
         with self.assertRaises(ValueError):
             autotune.Vocoder(rate, bands=12)
         voc = autotune.Vocoder(rate, bands=8, breath=0.5)
-        self.assertEqual(len(voc.levels), 8)
-        # no filters for the synth to run: one plain note plays the bands
-        self.assertEqual(len(voc.notes), 1)
-        self.assertIsNone(getattr(voc.notes[0], "filter", None))
+        self.assertEqual(len(voc.notes), 8)
+        # the breath noise is high-passed once, at load: no Biquad to run
         self.assertIsNone(getattr(voc.noise, "filter", None))
-        centres = voc.centres
+        centres = [n.filter.kwargs["frequency"] for n in voc.notes]
         self.assertAlmostEqual(centres[0], autotune.VOCODER_LOW_HZ)
         self.assertAlmostEqual(centres[-1], autotune.VOCODER_HIGH_HZ)
 
@@ -322,7 +320,7 @@ class LoaderTests(unittest.TestCase):
         for band in (2, 5):
             voc.levels[:] = [0.0] * 8
             voc.update(tone(centres[band]), 150.0)
-            levels = voc.levels
+            levels = [n.amplitude for n in voc.notes]
             self.assertEqual(levels.index(max(levels)), band)
             self.assertLess(sorted(levels)[-3], 0.05 * max(levels))
         # the carrier plays the note, and holds it through unvoiced blocks
@@ -332,11 +330,10 @@ class LoaderTests(unittest.TestCase):
         # silence closes every band, after the release
         for _ in range(20):
             voc.update(array.array("h", [0] * autotune.BUFFER_SIZE), 0.0)
-        self.assertTrue(all(level < 1e-6 for level in voc.levels))
-        self.assertLess(voc.notes[0].amplitude, 1e-6)
+        self.assertTrue(all(n.amplitude < 1e-6 for n in voc.notes))
         # a band under the note stays shut: the carrier has nothing there
         voc.update(tone(centres[0]), 400.0)
-        self.assertEqual(voc.levels[0], 0.0)
+        self.assertEqual(voc.notes[0].amplitude, 0.0)
         # breath follows the highs
         voc.update(tone(5500), 150.0)
         self.assertGreater(voc.noise.amplitude, 0.0)
@@ -345,18 +342,17 @@ class LoaderTests(unittest.TestCase):
         hum = tone(centres[3], 25)
         for _ in range(autotune.VOCODER_GATE_HOLD + 16):
             voc.update(hum, 150.0)
-        self.assertTrue(all(level < 1e-6 for level in voc.levels))
-        self.assertEqual(voc.notes[0].amplitude, 0.0)
+        self.assertTrue(all(n.amplitude < 1e-6 for n in voc.notes))
         self.assertEqual(voc.noise.amplitude, 0.0)
         open_voc = autotune.Vocoder(rate, bands=8, gate=autotune.VOCODER_GATE_OFF)
         open_voc.update(hum, 150.0)
-        self.assertGreater(open_voc.levels[3], 0.0)
+        self.assertGreater(open_voc.notes[3].amplitude, 0.0)
         voc.update(tone(centres[3]), 150.0)
         voc.update(hum, 150.0)
-        self.assertGreater(voc.levels[3], 0.0)
+        self.assertGreater(voc.notes[3].amplitude, 0.0)
         for _ in range(autotune.VOCODER_GATE_HOLD + 6):
             voc.update(hum, 150.0)
-        self.assertLess(voc.levels[3], 1e-3)
+        self.assertLess(voc.notes[3].amplitude, 1e-3)
         voc.update(tone(300), 150.0)
         self.assertLess(voc.noise.amplitude, 0.001)
 
@@ -391,6 +387,8 @@ class LoaderTests(unittest.TestCase):
         voice = array.array("h", [int(6000 * math.sin(2 * math.pi * 700 * i / rate)
                                       + 3000 * math.sin(2 * math.pi * 2200 * i / rate))
                                   for i in range(autotune.BUFFER_SIZE)])
+        autotune.VOCODER_FILTERS = False
+        self.addCleanup(setattr, autotune, "VOCODER_FILTERS", True)
         for chord, hz in ((None, 196.0), ("minor", 147.0)):
             voc = autotune.Vocoder(rate, waveform="pulse", bands=8, chord=chord,
                                    gate=autotune.VOCODER_GATE_OFF)
@@ -406,12 +404,21 @@ class LoaderTests(unittest.TestCase):
             window = numpy.hanning(len(a))
             sa, sb = abs(numpy.fft.rfft(a * window)), abs(numpy.fft.rfft(b * window))
             self.assertLess(numpy.linalg.norm(sa - sb) / numpy.linalg.norm(sa), 0.1, chord)
-        # VOCODER_FILTERS plays it the old way, a Note and Biquad per band
+        # a note per chord note, pressed and let go as the chord changes
+        voc = autotune.Vocoder(rate, chord="key_triad", breath=0.5)
+        voc.start()
+        voc.update(voice, 220.0)
+        self.assertEqual([n.frequency for n in voc.notes], [220.0, 275.0, 330.0])  # 4:5:6
+        voc.set_chord("dim")
+        self.assertEqual([n.frequency for n in voc.notes], [220.0, 264.0, 308.0])  # 5:6:7
+        self.assertIsNone(getattr(voc.notes[0], "filter", None))
+        voc = autotune.Vocoder(rate, chord="m7", squeeze_chord="none")
+        voc.start()
+        voc.squeeze(True)
+        self.assertEqual(voc.synth.pressed, voc.notes)  # the other three are let go
+        # VOCODER_FILTERS (the default) plays it a Note and Biquad per band
         autotune.VOCODER_FILTERS = True
-        try:
-            voc = autotune.Vocoder(rate, bands=6, breath=0.5)
-        finally:
-            autotune.VOCODER_FILTERS = False
+        voc = autotune.Vocoder(rate, bands=6, breath=0.5)
         self.assertEqual(len(voc.notes), 6)
         self.assertEqual([n.filter.kwargs["frequency"] for n in voc.notes], voc.centres)
         voc.update(voice, 196.0)
@@ -976,10 +983,9 @@ class DeviceScenarioTests(unittest.TestCase):
         root, out, s = run("level", config)
         voc, = s["vocoders"]
         # 207 Hz snaps to G, and G in A minor is G B D F, a dominant 7th
-        # (4:5:6:7): a carrier note on each, from 98 Hz (an octave down)
-        self.assertEqual(voc["chord"], "7")
-        self.assertEqual([round(hz, 1) for hz in voc["hz"]], [98.0, 122.5, 147.0, 171.5])
-        self.assertEqual(voc["table"], 256)  # VOCODER_TABLE: each note's own waveform
+        # (4:5:6:7): the carrier plays its sub-note, two octaves under 98 Hz
+        self.assertAlmostEqual(voc["hz"][0], 24.5, delta=0.2)
+        self.assertEqual(voc["table"], 128 * 7)  # VOCODER_CHORD_SAMPLES per multiple
 
     def test_vocoder_squeeze_switches_chord(self):
         config = dict(TEST_CONFIG, presets=[{"list": [
@@ -990,10 +996,21 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertIn("vocoder chord now minor", out)
         self.assertLess(out.index("vocoder chord now minor"), out.index("vocoder chord now major"))
 
+    def test_vocoder_drops_the_voice(self):
+        # the voice's shifter beside the vocoder overflowed a Ting, so it plays at 100%
+        for mix in (0.7, "$handle"):
+            config = {"name": "V", "presets": [{"list": [
+                {"effect": "vocoder", "bands": 11, "mix": mix}]}], "samples": []}
+            root, out, s = run("level", config)
+            self.assertIn("playing it at 100%", out)
+            self.assertIn("voice via no shifter, vocoder 11 bands", out)
+            self.assertEqual(s["shifters"], [])
+            self.assertIsNone(s["vocoder_mixer"])
+
     def test_vocoder_bands_cap_with_the_voice(self):
         config = {"name": "V", "presets": [{"list": [
             {"effect": "vocoder", "bands": 11, "mix": 0.9}]}], "samples": []}
-        root, out, s = run("level", config)
+        root, out, s = run("level", config, env=VOICE)
         self.assertIn("using 8", out)
         voc, = s["vocoders"]
         self.assertEqual(voc["bands"], 8)
@@ -1001,10 +1018,12 @@ class DeviceScenarioTests(unittest.TestCase):
     def test_vocoder_with_the_voice(self):
         config = {"name": "V", "presets": [{"list": [
             {"effect": "vocoder", "waveform": "pulse", "mix": "$handle"}]}], "samples": []}
-        root, out, s = run("level", config)
+        root, out, s = run("level", config, env=VOICE)
         self.assertIn("voice via GranularPitchShift, vocoder 8 bands", out)
-        # the voice stays untuned and the carrier plays it as sung
+        # the voice stays untuned and the carrier plays it as sung; it is
+        # only a trace beside the vocoder, so its shifter runs one grain
         lead, = s["shifters"]
+        self.assertEqual(lead["density"], 1)
         self.assertEqual((lead["min"], lead["max"]), (0.0, 0.0))
         voc, = s["vocoders"]
         self.assertAlmostEqual(voc["hz"][0], 207.0, delta=1.0)

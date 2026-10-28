@@ -619,11 +619,10 @@ const CHORD_NOTES = {
 const HARMONY_VOICE_COST = 17;
 // Effects that run inside the autotune stage, so they sit at the top of the chain.
 const STAGE_FX = ["autotune", "harmonizer", "vocoder"];
-// The vocoder, from firmware 1.5: Python measures the bands and works out the waveform (a base cost,
-// a little per band), and the synth plays one plain note per chord note, plus one for breath. With the
-// voice in the mix its pitch shifter runs too, as much as a Grain shift. On 1.4 (a note and a filter per
-// band) Night call, 8 bands with the voice, overflowed: these keep it, squeezed, under 85.
-const VOCODER_COST = 10, VOCODER_BAND_COST = .5, VOCODER_NOTE_COST = 3, VOCODER_VOICE_COST = 21;
+// The vocoder: a synth note and band-pass filter per band, plus a plain note for breath. With the voice
+// in the mix its pitch shifter runs too, at one grain from firmware 1.6 (half a Grain shift). Fitted to a
+// Ting: 11 bands alone ran clean, 8 bands beside a two-grain voice shifter overflowed every half second.
+const VOCODER_COST = 0, VOCODER_BAND_COST = 5, VOCODER_NOTE_COST = 2;
 // A preset estimated over this crackles; the editor won't add an effect past it.
 const LOAD_LIMIT = 100;
 const VOCODER_WAVES = [["saw","Saw (buzzy)"],["square","Square (hollow)"],["saw_square","Saw + square (full)"],["pulse","Pulse (nasal)"]];
@@ -644,7 +643,7 @@ STARTERS.push(
   {name:"Dream swirl", list:[{effect:"phaser",frequency:{block:"lfo",waveform:"sine",rate:{block:"math",operation:"constrained_lerp",a:0.25,b:0.8,c:"$handle"},scale:{block:"math",operation:"constrained_lerp",a:300,b:1150,c:"$handle"},offset:{block:"math",operation:"constrained_lerp",a:900,b:1850,c:"$handle"}},feedback:{block:"math",operation:"constrained_lerp",a:0.4,b:0.85,c:"$handle"},mix:{block:"math",operation:"constrained_lerp",a:0.25,b:0.5,c:"$handle"},stages:8},{effect:"echo",delay_ms:330,decay:.35,mix:.22,freq_shift:false,max_delay_ms:400},{effect:"freeverb",roomsize:.7,damp:.4,mix:.2}]},
   {name:"Choir of you", list:[{effect:"autotune",key:"C",scale:"major",speed:.8,humanize:.2,mix:1},{effect:"harmonizer",chord:"key_triad",inversion:0,octave:0,level:.7},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.59,damp:.5,mix:.41}]},
   {name:"Squeeze for minor", list:[{effect:"autotune",key:"C",scale:"chromatic",speed:.9,humanize:0,mix:1},{effect:"vocoder",waveform:"saw_square",chord:"major",squeeze_chord:"minor",bands:10,octave:-1,breath:.3},{effect:"chorus",max_delay_ms:50,delay_ms:18,voices:2,mix:.3},{effect:"freeverb",roomsize:.5,damp:.5,mix:.25}]},
-  {name:"Night call", list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:8,octave:0,breath:.7,mix:.85,gate:-60,squeeze_chord:"key_triad"}]},
+  {name:"Night call", list:[{effect:"autotune",key:"C",scale:"minor",speed:.95,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:11,octave:0,breath:.8,mix:1,gate:-60,squeeze_chord:"key_triad"}]},
   // a hard-tuned one-note robot, after Daft Punk's "Harder, Better, Faster, Stronger"
   {name:"Harder better faster stronger", level:.45, list:[{effect:"autotune",key:"F#",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"saw",bands:11,octave:0,breath:.4,mix:1,gate:-55}]});
 const DEFAULT_CONFIG = {name:"FXMICMOD", sample_fx:"preset", presets:[["Squeeze for backups",1],["Night call",.7],["Dream swirl",.4],["Squeeze monster",.25]].map(([n,lv])=>[STARTERS.find(s=>s.name===n),lv]).map(([p,lv])=>lv<1 ? Object.assign(clone(p),{level:lv}) : clone(p)), // levels matched to Clean from recordings of a Ting
@@ -871,7 +870,7 @@ function loadMeter(p){
     h("div",{class:"row spread small"}, h("span",{}, h("b",{},"Estimated load "), h("span",{class:"mono"}, cost+"%")),
       h("span",{class:"muted"}, ramKB ? "Delay memory "+Math.round(ramKB)+" KB · " : "", "Estimate, from tests on a Ting")),
     h("div",{class:"bar "+cls}, h("i",{style:"width:"+pct+"%"})),
-    cost>LOAD_LIMIT ? h("p",{class:"small", style:"color:var(--bad)"},"This chain is likely too heavy for the mic and will crackle. Try removing an effect; the reverb costs the most"+(p.list.some(fx=>fx.effect==="vocoder" && fx.enabled!==false) ? ", then the vocoder's voice (set its Amount to 100%)." : ".")) : null);
+    cost>LOAD_LIMIT ? h("p",{class:"small", style:"color:var(--bad)"},"This chain is likely too heavy for the mic and will crackle. Try removing an effect; the reverb costs the most.") : null);
 }
 
 function fxHead(title, what, list, i, fx, extra){
@@ -1063,15 +1062,9 @@ function harmonizerCard(p, fx){
     fxHead("Harmonizer", "Sings a chord with you, built on every note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
 }
 
-// Notes in each vocoder chord, as firmware/autotune.py plays them: one per chord note.
-const VOCODER_CHORD_NOTES = {key_triad:3, key_seventh:4, major:3, minor:3, power:3, dim:3, "7":4, maj7:4, m7:4, m7b5:4};
 function vocoderCost(fx){
   const bands = typeof fx.bands==="number" ? fx.bands : 8;
-  // with no voice in the mix (a fixed Amount of 1) the mic drops the voice's pitch shifter
-  const voiceless = fx.mix===undefined || (typeof fx.mix==="number" && fx.mix>=1);
-  // the bigger of the chord and the squeeze chord: a full squeeze plays that one
-  const notes = Math.max(VOCODER_CHORD_NOTES[fx.chord]||1, VOCODER_CHORD_NOTES[fx.squeeze_chord]||1) + ((fx.breath||0)>0 ? 1 : 0);
-  return Math.round(VOCODER_COST + VOCODER_BAND_COST*bands + VOCODER_NOTE_COST*notes + (voiceless ? 0 : VOCODER_VOICE_COST));
+  return Math.round(VOCODER_COST + VOCODER_BAND_COST*bands + ((fx.breath||0)>0 ? VOCODER_NOTE_COST : 0));
 }
 const VOCODER_CHORD_CHOICES = [["","One note"],["key_triad","In key"],["key_seventh","In key 7th"],["major","Major"],["minor","Minor"],["7","7"],["maj7","maj7"],["m7","m7"],["power","Power"]];
 const VOCODER_KEY_CHORDS = {key_triad:"Your note's chord in the autotune key: major, minor or diminished as the scale makes it.", key_seventh:"Your note's 7th chord in the autotune key."};
@@ -1108,7 +1101,7 @@ function vocoderCard(p, fx){
   // squeeze_chord: a full squeeze switches to another chord (the handle can only do one job)
   const keyJob = tune && (tune.squeeze_key!=null || tune.squeeze_scale!=null);
   const sq = typeof fx.squeeze_chord==="string" ? fx.squeeze_chord : null;
-  const sqBusy = keyJob || fx.mix==="$handle";
+  const sqBusy = keyJob;
   const sqId = nid("vsc");
   body.append(h("label",{class:"switch", for:sqId},
     h("input",{type:"checkbox", id:sqId, checked:sq?true:null, disabled:(sqBusy && !sq)||null,
@@ -1125,36 +1118,20 @@ function vocoderCard(p, fx){
     box.append(h("p",{class:"small muted"}, "Sing with a light squeeze for "+name(chord||"none")+". Squeeze past about two-thirds for "+name(sq)+". Ease off to halfway to go back."));
     body.append(box);
   }
-  else if (sqBusy) body.append(h("p",{class:"small muted"}, keyJob ? "The squeeze already changes the autotune key, so it can't switch the chord too." : "The squeeze already brings in the vocoder, so it can't switch the chord too."));
+  else if (sqBusy) body.append(h("p",{class:"small muted"}, "The squeeze already changes the autotune key, so it can't switch the chord too."));
   const oct = typeof fx.octave==="number" ? fx.octave : 0;
   body.append(h("div",{class:"field"}, h("label",{}, "Octave"),
     h("div",{class:"seg", role:"group", "aria-label":"Carrier octave"},
       [[-2,"−2"],[-1,"−1"],[0,"As sung"],[1,"+1"],[2,"+2"]].map(([v,l])=>h("button",{"aria-pressed":String(oct===v), onclick:()=>{ fx.octave=v; changed(); }}, l)))));
-  // with your voice in the mix its pitch shifter runs too, and the mic can only run 8 bands beside it
-  const voiced = !(typeof (fx.mix ?? 1)==="number" && (fx.mix ?? 1) >= 1);
-  const maxBands = voiced ? 8 : 11;
-  if (typeof fx.bands==="number" && fx.bands > maxBands) fx.bands = maxBands;
-  body.append(sliderEl({label:"Bands",min:4,max:maxBands,step:1,ends:["Smooth, lo-fi","Clear words"]}, typeof fx.bands==="number"?fx.bands:8, v=>{ fx.bands=v; changed(); }));
-  if (voiced) body.append(h("p",{class:"small muted"}, "Up to 8 bands while your voice is in the mix. Set Amount to 100% for up to 11."));
+  body.append(sliderEl({label:"Bands",min:4,max:11,step:1,ends:["Smooth, lo-fi","Clear words"]}, typeof fx.bands==="number"?fx.bands:8, v=>{ fx.bands=v; changed(); }));
   body.append(sliderEl({label:"Breath",min:0,max:1,step:.01,ends:["Off","Hissy s and t"]}, typeof fx.breath==="number"?fx.breath:0, v=>{ fx.breath=v; changedQuiet(); }));
   // noise gate: room noise (a fan, an air conditioner) shouldn't play the synth
   body.append(sliderEl({label:"Noise gate",min:-80,max:-20,step:1,unit:"dB",offAt:-80,ends:["Off","Only loud singing"]}, typeof fx.gate==="number"?fx.gate:-50, v=>{ if (v===-50) delete fx.gate; else fx.gate=v; changedQuiet(); }));
   body.append(h("p",{class:"small muted"}, "If the synth hums with no one singing, raise the gate until it stays quiet. If word ends get cut off, lower it."));
-  // amount: fixed, or brought in by the squeeze
-  if (fx.mix==="$handle") body.append(h("div",{class:"squeeze"},
-    h("div",{class:"row spread"}, h("b",{class:"small"}, "The robot comes in as you squeeze"),
-      h("button",{class:"btn small ghost", onclick:()=>{ fx.mix=1; changed(); }}, "Use a fixed amount")),
-    h("p",{class:"small muted"}, "A light squeeze is your own voice, a full squeeze is all vocoder.")));
-  else {
-    body.append(sliderEl({label:"Amount",min:0,max:1,step:.01,ends:["Your voice","All vocoder"]}, typeof fx.mix==="number" ? fx.mix : 1, v=>{ if (v>=1) delete fx.mix; else fx.mix=v; if ((v<1) !== voiced) changed(); else changedQuiet(); }));
-    const id = nid("vsq");
-    body.append(h("label",{class:"switch small", for:id, style:"margin-left:2px"},
-      h("input",{type:"checkbox", id, disabled:(keyJob||sq)||null, onchange:()=>{ fx.mix="$handle"; changed(); }}), h("span",{class:"track"}),
-      h("span",{class:"muted"}, keyJob ? "Squeeze for the vocoder (the squeeze already changes the key)" : sq ? "Squeeze for the vocoder (the squeeze already switches the chord)" : "Squeeze to bring in the vocoder")));
-  }
-  body.append(h("p",{class:"small muted"}, tune
-    ? "The carrier plays the note autotune snaps you to, so the robot is always in key."
-    : "The carrier plays the note you sing. Add autotune to keep it in key."));
+  // The vocoder plays at 100%: blending your voice back in needs its own pitch
+  // shifter, and that overflowed the mic even at 7 bands.
+  body.append(h("p",{class:"small muted"}, "The vocoder replaces your voice completely. Mixing your voice back in took more CPU than the mic can run."));
+  if (!tune) body.append(h("p",{class:"small muted"}, "The carrier plays the note you sing. Add autotune to keep it in key."));
   return h("div",{class:"fx tune"+(fx.enabled===false?" off":"")},
     fxHead("Vocoder", "Your words on a synth that follows your note.", p.list, null, fx, h("span",{class:"pin"}, tune ? "With autotune" : "Runs first")), body);
 }
@@ -1324,7 +1301,7 @@ const SHAKE_TEXT = {
   glitch: "Shake the mic while a sample plays and it stutters, chopping the loop shorter and shorter until it buzzes into a tone.",
   off: "Shaking the mic does nothing to samples.",
 };
-// The "shake" style: a name, or an object with a "style" (firmware 1.6 also takes the numbers there)
+// The "shake" style: a name, or an object with a "style" (firmware 1.7 also takes the numbers there)
 function shakeStyle(){
   const v = config.shake;
   if (v === false) return "off";
@@ -1463,6 +1440,11 @@ function renderSlotsLight(){ renderSlots(); const m=$("#editor .meter"); if (m &
 
 /* ---------------------------- storage ------------------------------ */
 const KEY = "ting-preset-editor-draft";
+function dropVocoderVoice(c){
+  let dropped = false;
+  (c.presets||[]).forEach(p => (p.list||[]).forEach(fx => { if (fx.effect==="vocoder" && fx.mix!==undefined && fx.mix!==1){ delete fx.mix; dropped = true; } }));
+  if (dropped) save();
+}
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(serialize())); } catch(e){} }
 function restore(){ try { const t = localStorage.getItem(KEY); if (t) return normalizeConfig(JSON.parse(t)); } catch(e){} return null; }
 
@@ -1474,7 +1456,7 @@ function markSynced(){ try { localStorage.setItem(SYNC_KEY, formatJSON(serialize
 function synced(){ try { return localStorage.getItem(SYNC_KEY); } catch(e){ return null; } }
 function serializeOf(c){ const keep = config; config = c; try { return serialize(); } finally { config = keep; } }
 function adoptText(text, source){
-  try { config = normalizeConfig(JSON.parse(text)); selected = 0; changed(); notice(""); toast("Opened "+source); markSynced(); }
+  try { config = normalizeConfig(JSON.parse(text)); dropVocoderVoice(config); selected = 0; changed(); notice(""); toast("Opened "+source); markSynced(); }
   catch(e){ notice("Couldn't open "+source+": "+e.message, "bad"); }
 }
 $("#file-open").addEventListener("change", async (e)=>{ const f=e.target.files[0]; if(!f) return; track("load-file"); adoptText(await f.text(), f.name); e.target.value=""; });
@@ -1625,7 +1607,7 @@ async function openSharedLink(){
   history.replaceState(null, "", location.pathname + location.search);
   try {
     const before = formatJSON(serialize());
-    config = normalizeConfig(JSON.parse(await readShared(m[1]))); selected = 0; changed();
+    config = normalizeConfig(JSON.parse(await readShared(m[1]))); dropVocoderVoice(config); selected = 0; changed();
     track("shared-link-opened"); toast("Opened shared presets");
     notice("Opened shared presets. They replaced the draft you had here.", "ok");
     const undo = h("button",{class:"btn small", style:"margin-left:10px", onclick:()=>{ adoptText(before, "your earlier draft"); }}, "Bring my draft back");
@@ -1818,8 +1800,6 @@ function squeezeJob(p){
   if (!p || !JSON.stringify(p).includes("$handle")) return null;
   const at = p.list.find(f=>f.effect==="autotune"), hz = p.list.find(f=>f.effect==="harmonizer");
   if (hz && hz.enabled!==false && JSON.stringify(hz).includes("$handle")) return "the backing vocals come in";
-  const vo = p.list.find(f=>f.effect==="vocoder");
-  if (vo && vo.enabled!==false && JSON.stringify(vo).includes("$handle")) return "the robot voice come in";
   if (at && at.speed==="$handle") return "the tuning tighten up";
   if (at && (at.squeeze_key!=null || at.squeeze_scale!=null)) return "the key change";
   const moved = p.list.find(f=>f.enabled!==false && f.effect!=="autotune" && JSON.stringify(f).includes("$handle"));
@@ -1945,6 +1925,15 @@ for (const [i, json] of OLD_DEFAULTS)
 // Then 8 bands at 90%, before the voice came down to 85%.
 { const p = config.presets[1], old = {name:"Night call", level:.7, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:8,octave:0,breath:.7,mix:.9,gate:-60,squeeze_chord:"key_triad"}]};
   if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
+// Then 8 bands at 85%, which still overflowed on a Ting: the voice's pitch shifter was the difference.
+{ const p = config.presets[1], old = {name:"Night call", level:.7, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:8,octave:0,breath:.7,mix:.85,gate:-60,squeeze_chord:"key_triad"}]};
+  if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
+// Then 11 bands at 100%, before Doug's speed 95% and breath 80%.
+{ const p = config.presets[1], old = {name:"Night call", level:.7, list:[{effect:"autotune",key:"C",scale:"minor",speed:1,humanize:0,mix:1},{effect:"vocoder",waveform:"pulse",bands:11,octave:0,breath:.7,mix:1,gate:-60,squeeze_chord:"key_triad"}]};
+  if (p && canon(p)===canon(old)){ config.presets[1] = clone(DEFAULT_CONFIG.presets[1]); save(); } }
+// A vocoder's Amount (your voice blended back in) overflowed the mic even at 7 bands, so the
+// mic plays every vocoder at 100%; drop the old Amount here to match, with 11 bands back on offer.
+dropVocoderVoice(config);
 try { setMode(localStorage.getItem(KEY+"-mode")==="adv"); } catch(e){ setMode(false); }
 render();
 renderSqueezeHint();
