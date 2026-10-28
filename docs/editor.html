@@ -379,6 +379,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       </div>
       <label class="btn ghost" for="file-open" title="Pick a config.json from the mic's CIRCUITPY drive or your computer">Open a config.json</label>
       <input id="file-open" type="file" accept=".json,application/json" hidden>
+      <button class="btn ghost" id="btn-reset" title="Replace your effects presets and sample settings with the editor's defaults">Reset to defaults</button>
       <button class="btn" id="btn-copy">Copy</button>
       <button class="btn" id="btn-download">Download</button>
       <button class="btn" id="btn-share">Share via URL</button>
@@ -456,7 +457,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <section class="panel" style="display:grid;gap:14px">
     <div class="row spread">
       <h2>Presets · orange button</h2>
-      <div class="row small muted"><button class="btn small ghost" id="btn-reset" title="Replace your presets and samples with the editor's defaults">Reset to defaults</button><span class="adv">Pack name</span><input id="pack-name" class="text mono adv" maxlength="16" aria-label="Pack name"></div>
+      <div class="row small muted"><span class="adv">Pack name</span><input id="pack-name" class="text mono adv" maxlength="16" aria-label="Pack name"></div>
     </div>
     <div class="slots" id="slots"></div>
     <p class="small muted" id="slots-help">The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic.</p>
@@ -1708,7 +1709,7 @@ async function tryStart(kind){
 }
 $("#btn-reset").addEventListener("click", ()=>{
   if (!confirm("Replace all your presets and sample settings with the editor's defaults? Save or download your config.json first if you want to keep it.")) return;
-  config = clone(DEFAULT_CONFIG); selected = 0; addOpen = false; changed(); toast("Back to the default presets.");
+  config = clone(DEFAULT_CONFIG); selected = 0; addOpen = false; changed(); toast("Back to the default presets and samples.");
 });
 
 // The sample singer: a real a cappella recording, or the synthetic one if the file can't load.
