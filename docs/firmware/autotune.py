@@ -771,12 +771,17 @@ def key_by_name(name):
 
 
 VOCODER_WAVEFORMS = ("saw", "square", "pulse", "saw_square")
-VOCODER_FILTERS = False
+
+
+
+VOCODER_FILTERS = True
 VOCODER_MAX_BANDS = 11
 
 
 
+VOCODER_VOICE = False
 VOCODER_VOICE_MAX_BANDS = 8
+VOCODER_VOICE_DENSITY = 1
 VOCODER_LOW_HZ = 180.0
 VOCODER_HIGH_HZ = 5000.0
 VOCODER_BREATH_HZ = 4000.0
@@ -1153,14 +1158,12 @@ class Vocoder:
             level = 17320.0 * math.sqrt(1.0 - cut / (rate / 2.0))
             self._noise_bins = (int(cut * n / rate + 0.5), n // 2)
             self._noise_k = self.breath * VOCODER_GAIN * math.sqrt(psd) / level
-            hpf = synthio.Biquad(synthio.FilterMode.HIGH_PASS, frequency=cut, Q=0.7071)
-            if not self.filters:
 
-                noise, scale = _high_passed(noise, cut / rate, 0.7071)
-                self._noise_k /= scale
-                hpf = None
+
+            noise, scale = _high_passed(noise, cut / rate, 0.7071)
+            self._noise_k /= scale
             self.noise = synthio.Note(
-                frequency=rate / VOCODER_NOISE, waveform=noise, amplitude=0.0, filter=hpf)
+                frequency=rate / VOCODER_NOISE, waveform=noise, amplitude=0.0)
         self.synth = synthio.Synthesizer(sample_rate=rate, channel_count=1)
         self.output = self.synth
 
@@ -1418,9 +1421,10 @@ class Autotune:
 
 
 
+
     def __init__(self, mic, fmt, key="C", scale="chromatic", speed=1.0,
                  humanize=0.0, mix=1.0, grain_size=None,
-                 density=GRAIN_DENSITY, engine=SHIFT_ENGINE, harmony=None,
+                 density=None, engine=SHIFT_ENGINE, harmony=None,
                  inversion=0, harmony_octave=0, harmony_level=0.7, correct=True,
                  harmony_double=None, vocoder=None, vocoder_bands=8, vocoder_octave=0,
                  vocoder_breath=0.0, vocoder_mix=1.0, vocoder_chord=None,
@@ -1431,6 +1435,13 @@ class Autotune:
             raise ValueError("a preset can have a harmonizer or a vocoder, not both")
 
         voiceless = vocoder is not None and not hasattr(vocoder_mix, "value") and vocoder_mix >= 1
+        if vocoder is not None and not voiceless and not VOCODER_VOICE:
+            print("vocoder: the mic can't run your voice beside it; playing it at 100%")
+            voiceless, vocoder_mix = True, 1.0
+        if density is None:
+
+
+            density = VOCODER_VOICE_DENSITY if vocoder is not None else GRAIN_DENSITY
 
         if grain_size is None:
             grain_size = GRAIN_SIZE

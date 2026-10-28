@@ -114,7 +114,7 @@ from recorder import Recorder, drive_free
 
 
 
-FIRMWARE_VERSION = "1.5"
+FIRMWARE_VERSION = "1.6"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 
