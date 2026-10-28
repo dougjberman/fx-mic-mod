@@ -129,10 +129,13 @@ the file position, so it adds no audio work to the autotune pass.
   play backwards); move the numbers to whatever feels natural and the editor's `TAP_HOLD_MS` /
   `DOUBLE_TAP_MS` to match. Timing uses keypad's own event timestamps, so a slow loop pass doesn't
   skew it.
-- **Backwards samples:** off autotune, the first double tap loads the WAV backwards into RAM and
-  prints `turned round in N ms`; that delay is heard once per slot. A 4 s take is 192 KB at 24 kHz,
-  so check it fits next to a busy preset (`can't play backwards: memory` means it didn't, and it
-  plays forwards). Through autotune it streams backwards from flash, one seek per 16 ms block:
+- **Backwards samples:** off autotune, the first double tap after a power-on writes the WAV
+  backwards to a hidden `.backwards-<name>` beside it and streams it like any sample (`turned round
+  in N ms`; the flash write is heard once per slot per run, then the copy is reused). Turning it
+  round in RAM, as before 1.7.1, needs one unbroken block as big as the file, and the heap often
+  hasn't one: a 3 s take (144 KB) failed with 256 KB free. That RAM path is now only for edit mode,
+  where the code can't write the drive. Check how long the first double tap on a long take stalls,
+  and whether the flash write drops out the audio. Through autotune it streams backwards from flash, one seek per 16 ms block:
   watch for `overflow` or crackle while a sample plays backwards on a harmonizer or vocoder preset,
   where the pass is tightest.
 - **Accelerometer:** the board says only "accelerometer at 0x18". shake.py speaks the LIS3DH

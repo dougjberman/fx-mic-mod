@@ -108,7 +108,7 @@ from config_loader import (
     preset_level,
     sample_routing,
 )
-from recorder import Recorder, drive_free
+from recorder import Recorder, drive_free, wav_header, _exists, _remove
 import shake
 
 # The firmware's release number. The editor reads this line from the mic's
@@ -773,6 +773,9 @@ def save_take(ctx):
     path = "/{}".format(sample["file"])
     # The slot's WaveFile holds the file open; release it before replacing it.
     unload_wave_sample(ctx)
+    # Its backwards copy is now stale; the next double tap writes it again.
+    BACKWARDS_WRITTEN.discard(path)
+    _remove(backwards_path(path))
     waterfall = SaveWaterfall()
     try:
         frames = ctx.recorder.save(path, tick=waterfall.step)
@@ -1053,36 +1056,81 @@ def set_gate(ctx, held):
     ctx.gate_open = held
 
 
+# Backwards copies written to the drive this run, by sample path. Saving a
+# take drops its slot's copy, and a file copied over from a computer comes
+# with a reboot (edit mode and back), so every copy is written fresh once a
+# run and kept on the drive between loads.
+BACKWARDS_WRITTEN = set()
+
+
+def backwards_path(path):
+    """The hidden file beside the sample at ``path`` that holds it
+    backwards: "/3.wav" -> "/.backwards-3.wav"."""
+    folder, _, name = path.rpartition("/")
+    return "{}/.backwards-{}".format(folder, name)
+
+
+def write_backwards(path):
+    """Write the sample at ``path`` backwards to its hidden copy, unless this
+    run already has, and return the copy's path. Streams a block at a time,
+    so it takes no more RAM than playing the sample."""
+    copy = backwards_path(path)
+    if path in BACKWARDS_WRITTEN and _exists(copy):
+        return copy
+    tmp = copy + ".tmp"
+    reader = autotune.WaveReader(path, reverse=True, block=2048)
+    try:
+        with open(tmp, "wb") as file:
+            file.write(wav_header(reader.size, RATE))
+            while True:
+                got = reader.read()
+                if not got:
+                    break
+                file.write(memoryview(reader.buf)[0:got])
+    except OSError:
+        _remove(tmp)
+        raise
+    finally:
+        reader.close()
+    _remove(copy)
+    os.rename(tmp, copy)
+    if hasattr(os, "sync"):
+        os.sync()
+    BACKWARDS_WRITTEN.add(path)
+    return copy
+
+
 def reversed_wave(ctx):
-    """The loaded sample backwards, as a RawSample, or None if it won't fit
-    in RAM. Built on the first double tap and kept until the sample is
-    unloaded. (Through autotune the sample streams backwards from flash
-    instead, so this isn't needed there.)"""
+    """The loaded sample backwards, or None if it can't be had. Opened on the
+    first double tap and kept until the sample is unloaded.
+
+    With the drive writable it streams from a backwards copy on the drive,
+    like any sample. Otherwise (edit mode, or the drive full) the whole
+    sample is turned round in RAM, which needs one unbroken block as big as
+    the file and so fails for long takes. (Through autotune the sample
+    streams backwards from the file itself, so this isn't needed there.)"""
     if ctx.reversed_wave is None:
         began = time.monotonic()
+        path = ctx.current_path
         try:
-            gc.collect()
-            try:
-                ctx.reversed_data = autotune.load_reversed(ctx.current_path)
-            except MemoryError:
-                # The copy needs one unbroken block as big as the file, and
-                # the shake Echo's buffer can sit in the middle of the free
-                # RAM. Free it and try once more; start_sample builds it
-                # again afterwards, in whatever room is left.
-                if ctx.shake_fx is None:
-                    raise
-                drop_shake_echo(ctx)
-                ctx.reversed_data = autotune.load_reversed(ctx.current_path)
-            ctx.reversed_wave = audiocore.RawSample(
-                ctx.reversed_data, channel_count=1, sample_rate=RATE
-            )
+            if CAN_RECORD:
+                try:
+                    ctx.reversed_wave = audiocore.WaveFile(write_backwards(path))
+                except OSError as error:
+                    print("{} backwards copy not written: {}".format(path, error))
+            if ctx.reversed_wave is None:
+                gc.collect()
+                ctx.reversed_data = autotune.load_reversed(path)
+                ctx.reversed_wave = audiocore.RawSample(
+                    ctx.reversed_data, channel_count=1, sample_rate=RATE
+                )
         except (MemoryError, OSError, ValueError) as error:
             ctx.reversed_data = None
-            print("{} can't play backwards: {}".format(ctx.current_path, error))
+            print("{} can't play backwards: {}".format(path, error))
             gc.collect()
             return None
         print("{} turned round in {:.0f} ms".format(
-            ctx.current_path, (time.monotonic() - began) * 1000))
+            path, (time.monotonic() - began) * 1000))
     return ctx.reversed_wave
 
 
@@ -1097,14 +1145,6 @@ def shake_echo(ctx):
             print("shake: off ({})".format(error))
             shake_meter = None
     return ctx.shake_fx
-
-
-def drop_shake_echo(ctx):
-    """Free the shake Echo, to make room. shake_echo() builds it again."""
-    sample_voice(ctx).stop()
-    ctx.shake_fx.deinit()
-    ctx.shake_fx = None
-    gc.collect()
 
 
 def start_sample(ctx, reverse=False):

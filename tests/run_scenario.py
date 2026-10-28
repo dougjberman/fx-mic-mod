@@ -65,14 +65,13 @@ SCENARIOS = {
         paddle=[],
         end=6.0,
     ),
-    # The same taps with an accelerometer on board (held still), so the
-    # shake Echo is built before the double tap.
-    "auto_shake": dict(
+    # The same taps in edit mode, where the drive can't be written.
+    "auto_readonly": dict(
         presses=tap(1.0, BOTTOM) + tap(2.0, BOTTOM) + tap(2.2, BOTTOM)
         + [(3.0, BOTTOM, True), (3.6, BOTTOM, False)]
         + tap(5.0, BOTTOM) + tap(5.5, BOTTOM),
         paddle=[],
-        shakes=[],
+        readonly=True,
         end=6.0,
     ),
     # The same double tap on an autotune preset with samples through it.

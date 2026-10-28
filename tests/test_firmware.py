@@ -864,22 +864,39 @@ class DeviceScenarioTests(unittest.TestCase):
         # with the sample's own effects, the backwards copy feeds their chain
         config["samples"][0]["effects"] = [{"effect": "freeverb", "mix": 0.4}]
         root, out, s = run("auto", config, tone=(340.0, 1.0))
-        self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])
+        self.assertIn(["_Obj", "WaveFile"], [list(p) for p in s["plays"]])
         self.assertIn("playing 1 (double tap: backwards)", out)
 
-    def test_double_tap_backwards_frees_the_shake_echo_when_ram_is_tight(self):
-        # the first copy doesn't fit: the shake Echo is freed, the copy is
-        # tried again, and the Echo comes back for the backwards play
-        root, out, s = run("auto_shake", tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "1"})
+    def test_double_tap_backwards_streams_a_copy_from_the_drive(self):
+        # a long take needs more unbroken RAM than the mic has to turn round
+        # whole, so it's written backwards beside the sample instead
+        root, out, s = run("auto", tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "9"})
         self.assertIn("playing 1 (double tap: backwards)", out)
-        self.assertNotIn("can't play backwards", out)
+        self.assertNotIn("can't", out)
         self.assertEqual(out.count("turned round"), 1)
-        self.assertEqual(s["plays"][-1][0], "Echo")
-        self.assertEqual(s["shake_echo"]["max_delay_ms"], 140)
-        # still too tight: it plays forwards, as before
-        root, out, s = run("auto_shake", tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "2"})
+        self.assertIn(".backwards-1.wav", s["files"])
+        self.assertNotIn(".backwards-1.wav.tmp", s["files"])
+        frames = {}
+        for name in ("1.wav", ".backwards-1.wav"):
+            with wave.open(os.path.join(root, name)) as file:
+                self.assertEqual((file.getframerate(), file.getnchannels(), file.getsampwidth()),
+                                 (24000, 1, 2))
+                frames[name] = file.readframes(file.getnframes())
+        forwards = [int.from_bytes(frames["1.wav"][i:i + 2], "little", signed=True)
+                    for i in range(0, len(frames["1.wav"]), 2)]
+        backwards = [int.from_bytes(frames[".backwards-1.wav"][i:i + 2], "little", signed=True)
+                     for i in range(0, len(frames[".backwards-1.wav"]), 2)]
+        self.assertEqual(backwards, forwards[::-1])
+
+    def test_double_tap_backwards_in_edit_mode_turns_round_in_ram(self):
+        root, out, s = run("auto_readonly", tone=(340.0, 1.0))
+        self.assertIn("/1.wav turned round in", out)
+        self.assertNotIn(".backwards-1.wav", s["files"])
+        self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])  # a RawSample
+        # too long for RAM: it plays forwards
+        root, out, s = run("auto_readonly", tone=(340.0, 1.0), env={"FAKE_REVERSE_FAILS": "9"})
         self.assertIn("/1.wav can't play backwards: memory allocation failed", out)
-        self.assertEqual(s["plays"][-1][0], "Echo")
+        self.assertIn("playing 1 (double tap: backwards)", out)
 
     def test_double_tap_backwards_through_autotune(self):
         config = json.loads(json.dumps(THROUGH_CONFIG))
