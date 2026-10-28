@@ -774,11 +774,15 @@ def save_take(ctx):
 
     unload_wave_sample(ctx)
 
-    BACKWARDS_WRITTEN.discard(path)
     _remove(backwards_path(path))
     waterfall = SaveWaterfall()
     try:
         frames = ctx.recorder.save(path, tick=waterfall.step)
+        if frames:
+            try:
+                write_backwards(path, tick=waterfall.step)
+            except OSError as error:
+                print("{} backwards copy not written: {}".format(path, error))
         print("saved {} ({:.2f} s), {} KB left on the drive".format(
             path, frames / RATE, (drive_free() or 0) // 1024))
     except OSError as error:
@@ -1056,13 +1060,6 @@ def set_gate(ctx, held):
     ctx.gate_open = held
 
 
-
-
-
-
-BACKWARDS_WRITTEN = set()
-
-
 def backwards_path(path):
     0
 
@@ -1070,19 +1067,46 @@ def backwards_path(path):
     return "{}/.backwards-{}".format(folder, name)
 
 
-def write_backwards(path):
+def backwards_matches(path, copy):
     0
 
 
+    try:
+        forwards = autotune.WaveReader(path)
+    except (OSError, ValueError):
+        return False
+    try:
+        backwards = autotune.WaveReader(copy, reverse=True)
+    except (OSError, ValueError):
+        forwards.close()
+        return False
+    try:
+        if forwards.size != backwards.size:
+            return False
+        got = forwards.read()
+        return (backwards.read() == got
+                and bytes(forwards.buf)[0:2 * got] == bytes(backwards.buf)[0:2 * got])
+    finally:
+        forwards.close()
+        backwards.close()
+
+
+def write_backwards(path, tick=None):
+    0
+
+
+
+
     copy = backwards_path(path)
-    if path in BACKWARDS_WRITTEN and _exists(copy):
-        return copy
     tmp = copy + ".tmp"
+    _remove(tmp)
     reader = autotune.WaveReader(path, reverse=True, block=2048)
     try:
         with open(tmp, "wb") as file:
             file.write(wav_header(reader.size, RATE))
             while True:
+                if tick is not None:
+                    tick()
                 got = reader.read()
                 if not got:
                     break
@@ -1096,8 +1120,24 @@ def write_backwards(path):
     os.rename(tmp, copy)
     if hasattr(os, "sync"):
         os.sync()
-    BACKWARDS_WRITTEN.add(path)
-    return copy
+
+
+def prepare_backwards(tick=None):
+    0
+
+
+    for slot in range(1, len(white_leds) + 1):
+        path = "/{}".format(sample_for_slot(slot)["file"])
+        if not _exists(path) or backwards_matches(path, backwards_path(path)):
+            continue
+        began = time.monotonic()
+        try:
+            write_backwards(path, tick)
+        except (OSError, ValueError) as error:
+            print("{} backwards copy not written: {}".format(path, error))
+            continue
+        print("{} backwards copy written in {:.0f} ms".format(
+            path, (time.monotonic() - began) * 1000))
 
 
 def reversed_wave(ctx):
@@ -1109,28 +1149,29 @@ def reversed_wave(ctx):
 
 
 
+
     if ctx.reversed_wave is None:
         began = time.monotonic()
         path = ctx.current_path
+        copy = backwards_path(path)
         try:
-            if CAN_RECORD:
-                try:
-                    ctx.reversed_wave = audiocore.WaveFile(write_backwards(path))
-                except OSError as error:
-                    print("{} backwards copy not written: {}".format(path, error))
-            if ctx.reversed_wave is None:
+
+
+            if backwards_matches(path, copy):
+                ctx.reversed_wave = audiocore.WaveFile(copy)
+            else:
                 gc.collect()
                 ctx.reversed_data = autotune.load_reversed(path)
                 ctx.reversed_wave = audiocore.RawSample(
                     ctx.reversed_data, channel_count=1, sample_rate=RATE
                 )
+                print("{} turned round in {:.0f} ms".format(
+                    path, (time.monotonic() - began) * 1000))
         except (MemoryError, OSError, ValueError) as error:
-            ctx.reversed_data = None
+            ctx.reversed_wave = ctx.reversed_data = None
             print("{} can't play backwards: {}".format(path, error))
             gc.collect()
             return None
-        print("{} turned round in {:.0f} ms".format(
-            path, (time.monotonic() - began) * 1000))
     return ctx.reversed_wave
 
 
@@ -1382,6 +1423,11 @@ if shake_meter is not None:
     data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
     print("shake: {} found; shaking a sample plays it {}".format(
         shake_meter.name, shake.describe(SHAKE)))
+
+
+
+if CAN_RECORD and not EFFECTS_ONLY:
+    prepare_backwards()
 
 
 update_white_leds(data_context)

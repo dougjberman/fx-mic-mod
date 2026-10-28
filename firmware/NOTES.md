@@ -129,13 +129,14 @@ the file position, so it adds no audio work to the autotune pass.
   play backwards); move the numbers to whatever feels natural and the editor's `TAP_HOLD_MS` /
   `DOUBLE_TAP_MS` to match. Timing uses keypad's own event timestamps, so a slow loop pass doesn't
   skew it.
-- **Backwards samples:** off autotune, the first double tap after a power-on writes the WAV
-  backwards to a hidden `.backwards-<name>` beside it and streams it like any sample (`turned round
-  in N ms`; the flash write is heard once per slot per run, then the copy is reused). Turning it
-  round in RAM, as before 1.7.1, needs one unbroken block as big as the file, and the heap often
-  hasn't one: a 3 s take (144 KB) failed with 256 KB free. That RAM path is now only for edit mode,
-  where the code can't write the drive. Check how long the first double tap on a long take stalls,
-  and whether the flash write drops out the audio. Through autotune it streams backwards from flash, one seek per 16 ms block:
+- **Backwards samples:** off autotune, a double tap streams a hidden `.backwards-<name>` copy
+  beside the sample, so it starts at once and takes no big block of RAM. Saving a take writes its
+  copy (the save takes about twice as long), and power-on writes one for any slot's sample that is
+  new or changed (`backwards copy written in N ms`), checking the rest by length and first block.
+  Turning a sample round in RAM, as before 1.7.1, needs one unbroken block as big as the file, and
+  the heap often hasn't one: a 3 s take (144 KB) failed with 256 KB free. That is now only the
+  fallback for a sample with no up-to-date copy (changed in edit mode, or a full drive). Check how long a save of a long
+  take takes now, and the power-on after copying new WAVs over. Through autotune it streams backwards from flash, one seek per 16 ms block:
   watch for `overflow` or crackle while a sample plays backwards on a harmonizer or vocoder preset,
   where the pass is tightest.
 - **Accelerometer:** the board says only "accelerometer at 0x18". shake.py speaks the LIS3DH
