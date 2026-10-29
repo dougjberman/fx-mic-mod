@@ -575,6 +575,15 @@ def _make_native_shifter(audiodelays, fmt, mix, grain_size, density):
     return None, None
 
 
+
+
+
+
+
+
+SAMPLE_CHUNK = 1024
+
+
 class WaveReader:
     0
 
@@ -594,6 +603,13 @@ class WaveReader:
         self.block = block or BLOCK_SIZE
         self.buf = array.array("h", bytes(2 * self.block))
         self._view = memoryview(self.buf)
+        self._chunk = array.array("h", bytes(2 * SAMPLE_CHUNK))
+        self._chunk_view = memoryview(self._chunk)
+        if _NP_VIEWS:
+            self._np_buf = np.frombuffer(self.buf, dtype=np.int16)
+            self._np_chunk = np.frombuffer(self._chunk, dtype=np.int16)
+
+        self._c0 = self._c1 = 0
         self.file = open(path, "rb")
         try:
             self.start, self.size = self._find_data()
@@ -601,7 +617,7 @@ class WaveReader:
             self.file.close()
             raise
         self.left = self.size
-        self.file.seek(self.start)
+        self._at = -1
 
 
         self._roll_at = None
@@ -639,6 +655,24 @@ class WaveReader:
             else:
                 f.seek(size + (size & 1), 1)
 
+    def _load(self, i):
+        0
+
+
+        start = self.start
+        if self.reverse:
+            end = (start + 2 * (i + 1) + 511) & ~511
+            c1 = min(self.size, (end - start) // 2)
+            c0 = max(0, c1 - SAMPLE_CHUNK)
+        else:
+            c0 = max(0, ((start + 2 * i) & ~511) - start) // 2
+            c1 = min(self.size, c0 + SAMPLE_CHUNK)
+        if self._at != c0:
+            self.file.seek(start + 2 * c0)
+        got = (self.file.readinto(self._chunk_view[0:c1 - c0]) or 0) // 2
+        self._c0, self._c1 = c0, c0 + got
+        self._at = c0 + got
+
     def read(self, gain=256):
         0
 
@@ -648,25 +682,46 @@ class WaveReader:
             if self._rolled >= self._roll_blocks or self.left <= 0:
                 self._rolled = 0
                 self.left = self._roll_at
-                if not self.reverse:
-                    self.file.seek(self.start + 2 * (self.size - self.left))
             self._rolled += 1
         if self.left <= 0:
             if not self.loop:
                 self.done = True
                 return 0
-            self.file.seek(self.start)
             self.left = self.size
         want = min(self.block, self.left)
-        if self.reverse:
-            self.file.seek(self.start + 2 * (self.left - want))
-        got = (self.file.readinto(self._view[0:want]) or 0) // 2
+        reverse = self.reverse
+
+
+        a = self.left - want if reverse else self.size - self.left
+        b = a + want
+        i = a
+        while i < b:
+            if not self._c0 <= i < self._c1:
+                self._load(i)
+                if not self._c0 <= i < self._c1:
+                    break
+            m = min(b, self._c1) - i
+            at = b - i - m if reverse else i - a
+            self._copy(at, i - self._c0, m)
+            i += m
+        got = i - a
+        if reverse and got < want:
+            self._view[0:got] = self._view[want - got:want]
         self.left = self.left - got if got else 0
-        if self.reverse and got:
-            _reverse(self.buf, got)
         if gain != 256 and got:
             _scale(self.buf, got, gain)
         return got
+
+    def _copy(self, at, src, m):
+        0
+        if not self.reverse:
+            self._view[at:at + m] = self._chunk_view[src:src + m]
+        elif _NP_VIEWS:
+            self._np_buf[at:at + m] = self._np_chunk[src:src + m][::-1]
+        else:
+            buf, chunk, last = self.buf, self._chunk, src + m - 1
+            for k in range(m):
+                buf[at + k] = chunk[last - k]
 
     def close(self):
         self.done = True
@@ -692,16 +747,68 @@ def _views_write_through():
 _NP_VIEWS = _views_write_through()
 
 
-def _mix_into(block, extra, n):
+def _adds_in_place():
     0
-    if _NP_VIEWS:
-        out = np.frombuffer(block, dtype=np.int16)
-        mixed = np.array(out[0:n], dtype=_FLOAT) + np.frombuffer(extra, dtype=np.int16)[0:n]
-        out[0:n] = np.array(np.clip(mixed, -32768, 32767), dtype=np.int16)
-        return
-    for i in range(n):
-        value = block[i] + extra[i]
-        block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
+
+    if not _NP_VIEWS:
+        return False
+    try:
+        out = np.array([1, 2], dtype=np.int16)
+        total = np.zeros(2, dtype=_FLOAT)
+        total[:] = out
+        total += out
+        out[:] = total
+        return out[1] == 4
+    except Exception:
+        return False
+
+
+_NP_IN_PLACE = _adds_in_place()
+
+
+class _Mixer:
+    0
+
+
+
+
+
+
+    def __init__(self, block):
+        self.block = block
+        self._view = memoryview(block)
+        if _NP_VIEWS:
+            self._out = np.frombuffer(block, dtype=np.int16)
+            self._sum = np.zeros(len(block), dtype=_FLOAT)
+
+    def add(self, extra, n):
+        0
+        if not _NP_VIEWS:
+            block = self.block
+            for i in range(n):
+                value = block[i] + extra[i]
+                block[i] = 32767 if value > 32767 else (-32768 if value < -32768 else value)
+            return
+        out = self._out
+        add = np.frombuffer(extra, dtype=np.int16)
+        if not _NP_IN_PLACE:
+            mixed = np.array(out[0:n], dtype=_FLOAT) + add[0:n]
+            out[0:n] = np.array(np.clip(mixed, -32768, 32767), dtype=np.int16)
+            return
+        whole = n == len(out)
+        total = self._sum if whole else self._sum[0:n]
+        total[:] = out if whole else out[0:n]
+        total += add if n == len(add) else add[0:n]
+        if np.max(total) > 32767 or np.min(total) < -32768:
+            total = np.clip(total, -32768, 32767)
+        if whole:
+            out[:] = total
+        else:
+            out[0:n] = total
+
+    def copy(self, extra, n):
+        0
+        self._view[0:n] = memoryview(extra)[0:n]
 
 
 def _scale(buf, n, gain):
@@ -715,41 +822,134 @@ def _scale(buf, n, gain):
         buf[i] = (buf[i] * gain) >> 8
 
 
-def _reverse(buf, n):
-    0
-    if _NP_VIEWS:
-        out = np.frombuffer(buf, dtype=np.int16)
-        out[0:n] = np.array(out[0:n][::-1], dtype=np.int16)
-        return
-    i, j = 0, n - 1
-    while i < j:
-        buf[i], buf[j] = buf[j], buf[i]
-        i += 1
-        j -= 1
-
-
-def load_reversed(path):
+class BackwardsStream:
     0
 
 
 
-    reader = WaveReader(path, reverse=True, block=2048)
-    try:
-        n = reader.size
-        out = np.zeros(n, dtype=np.int16) if np is not None else array.array("h", bytes(2 * n))
-        done = 0
-        while True:
-            got = reader.read()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    HALF = 4096
+    PIECE = 512
+
+    TAIL_SECONDS = 0.5
+
+    def __init__(self, path, sample_rate=SAMPLE_RATE, half=HALF, raw_sample=None):
+        if raw_sample is None:
+            import audiocore
+            raw_sample = audiocore.RawSample
+        self.path = path
+        self.half = half
+        self.seconds = half / sample_rate
+        self.buffer = array.array("h", bytes(4 * half))
+        self._piece = array.array("h", bytes(2 * self.PIECE))
+        self._piece_view = memoryview(self._piece)
+        if _NP_VIEWS:
+            self._np_buffer = np.frombuffer(self.buffer, dtype=np.int16)
+            self._np_piece = np.frombuffer(self._piece, dtype=np.int16)
+        self.sample = raw_sample(self.buffer, channel_count=1,
+                                 sample_rate=sample_rate, single_buffer=False)
+        self.reader = None
+        self.playing = False
+        self._started = 0.0
+        self._next = 0
+        self._blocks = 0
+        self._left = 0
+
+        self.worst_ms = 0.0
+
+    def start(self, now):
+        0
+
+        self._close_reader()
+        self.reader = WaveReader(self.path)
+        self._left = self.reader.size
+        self._blocks = (self.reader.size + self.half - 1) // self.half
+        self.worst_ms = 0.0
+        self._fill(0)
+        self._fill(1)
+        self._next = 2
+        self._started = now
+        self.playing = True
+
+    def _fill(self, index):
+        0
+        began = time.monotonic()
+        at = (index % 2) * self.half
+        end = at + self.half
+        reader = self.reader
+        while at < end:
+            want = min(self.PIECE, end - at, self._left if reader is not None else 0)
+            got = 0
+            if want > 0:
+                self._left -= want
+                reader.file.seek(reader.start + 2 * self._left)
+                got = (reader.file.readinto(self._piece_view[0:want]) or 0) // 2
             if not got:
+
+                self._write_silence(at, end)
                 break
-            if np is not None:
-                out[done:done + got] = np.frombuffer(reader.buf, dtype=np.int16)[0:got]
-            else:
-                out[done:done + got] = reader.buf[0:got]
-            done += got
-        return out
-    finally:
-        reader.close()
+            self._write_reversed(at, got)
+            at += got
+        self.worst_ms = max(self.worst_ms, (time.monotonic() - began) * 1000)
+
+    def _write_reversed(self, at, n):
+        if _NP_VIEWS:
+            self._np_buffer[at:at + n] = self._np_piece[0:n][::-1]
+            return
+        buf, piece = self.buffer, self._piece
+        for i in range(n):
+            buf[at + i] = piece[n - 1 - i]
+
+    def _write_silence(self, at, end):
+        if _NP_VIEWS:
+            self._np_buffer[at:end] = 0
+            return
+        buf = self.buffer
+        for i in range(at, end):
+            buf[i] = 0
+
+    def update(self, now):
+        0
+
+        if not self.playing:
+            return False
+        elapsed = now - self._started
+
+
+        while elapsed >= (self._next - 0.5) * self.seconds:
+            self._fill(self._next)
+            self._next += 1
+        if elapsed >= self._blocks * self.seconds + self.TAIL_SECONDS:
+            self.stop()
+            return False
+        return True
+
+    def stop(self):
+        self.playing = False
+        self._close_reader()
+
+    def _close_reader(self):
+        if self.reader is not None:
+            self.reader.close()
+            self.reader = None
+
+    def deinit(self):
+        self.stop()
+        self.sample.deinit()
 
 
 def _value(param):
@@ -1480,6 +1680,7 @@ class Autotune:
         self._target = 0.0
         self._window = array.array("h", [0] * BUFFER_SIZE)
         self._block = array.array("h", [0] * BLOCK_SIZE)
+        self._mixer = _Mixer(self._block)
         self._half = 0
         self._burst_due = None
         self._guard = 0
@@ -1505,6 +1706,7 @@ class Autotune:
         self.sample = None
         self.sample_gain = 256
         self._sample_ready = 0
+        self.sample_ms = 0.0
         self._zeros = array.array("h", [0] * BLOCK_SIZE)
         self.gate_open = False
         self._gate_hold = 0
@@ -1998,14 +2200,17 @@ class Autotune:
 
 
         sample = self.sample
+        sample_ns = 0
         if sample is not None:
+            mixing = time.monotonic_ns()
             extra, n = sample.buf, self._sample_ready
             if not self.gate:
-                block[0:n] = extra[0:n]
+                self._mixer.copy(extra, n)
             elif n:
-                _mix_into(block, extra, n)
+                self._mixer.add(extra, n)
             if not n and sample.done:
                 self.stop_sample()
+            sample_ns = time.monotonic_ns() - mixing
 
 
 
@@ -2030,7 +2235,10 @@ class Autotune:
         else:
             self._analyse(block, speed_override)
         if self.sample is not None:
+            reading = time.monotonic_ns()
             self._sample_ready = self.sample.read(self.sample_gain)
+            sample_ns += time.monotonic_ns() - reading
+        self.sample_ms = sample_ns / 1e6
 
 
         self._ended = time.monotonic_ns()

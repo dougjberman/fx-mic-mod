@@ -84,10 +84,10 @@ SCENARIOS = {
         paddle=[],
         end=5.8,
     ),
-    # The clean spot: tap the sample, shake the mic for 0.6 s while it plays,
-    # then hold still.
+    # The clean spot: hold the sample button down, shake the mic for 0.6 s
+    # while it plays, hold still, then let go (which stops the sample).
     "shake": dict(
-        presses=tap(0.5, BOTTOM),
+        presses=[(0.5, BOTTOM, True), (2.1, BOTTOM, False)],
         paddle=[],
         shakes=[(1.0, 1.6)],
         end=2.5,
@@ -98,6 +98,14 @@ SCENARIOS = {
         paddle=[],
         shakes=[(1.3, 2.0)],
         end=2.8,
+    ),
+    # Singing through an autotune preset and a native one, shaking, with no
+    # sample played at all.
+    "shake_idle": dict(
+        presses=tap(0.5, TOP) + tap(1.5, TOP),
+        paddle=[(0.8, 2.4)],
+        shakes=[(1.0, 2.2)],
+        end=2.5,
     ),
     # A tap and a shake on a board where nothing answers at 0x18.
     "shake_no_chip": dict(
@@ -199,6 +207,7 @@ def main():
             for v in vocoders
         ],
         "plays": script.plays,
+        "looped": script.looped,
         # the shake Echo: the one whose delay is an LFO
         "shake_echo": next((
             {"freq_shift": e.kwargs.get("freq_shift"),
@@ -211,6 +220,7 @@ def main():
             for e in script.echoes
             if type(e.kwargs.get("delay_ms")).__name__ == "LFO"), None),
         "rolls": rolls,
+        "accel_power": script.accel_power,
         # the vocoder's mixer: the voice on voice 0, the synth on voice 1
         "vocoder_mixer": next((
             {"playing": [type(v.playing).__name__ for v in m.voice],

@@ -55,8 +55,9 @@ def write_tone(path, hz, seconds, rate=24000):
 VOICE = {"FAKE_VOCODER_VOICE": "1"}
 
 
-def run(scenario, config=TEST_CONFIG, tone=None, handle=None, env=None):
-    root = tempfile.mkdtemp()
+def run(scenario, config=TEST_CONFIG, tone=None, handle=None, env=None, root=None):
+    """Run a scenario on a fresh drive, or again on ``root`` from an earlier run."""
+    root = root or tempfile.mkdtemp()
     with open(os.path.join(root, "config.json"), "w") as file:
         json.dump(config, file)
     if tone:
@@ -537,7 +538,50 @@ class LoaderTests(unittest.TestCase):
                 got.extend(reader.buf[0:count])
             reader.close()
             self.assertEqual(got, forwards[::-1], block)
-        self.assertEqual(list(autotune.load_reversed(path)), forwards[::-1])
+
+    def test_wave_reader_reads_across_chunks(self):
+        # Blocks that straddle the drive chunks, forwards and backwards, and
+        # a header that puts the data off a sector boundary.
+        import autotune
+        root = tempfile.mkdtemp()
+        path = os.path.join(root, "long.wav")
+        n = 3 * autotune.SAMPLE_CHUNK + 123
+        with wave.open(path, "wb") as out:
+            out.setnchannels(1)
+            out.setsampwidth(2)
+            out.setframerate(autotune.SAMPLE_RATE)
+            out.writeframes(b"".join(int(i % 30000).to_bytes(2, "little", signed=True) for i in range(n)))
+        forwards = [i % 30000 for i in range(n)]
+        for reverse in (False, True):
+            for block in (None, 100, 700, 2500):
+                reader = autotune.WaveReader(path, reverse=reverse, block=block)
+                got = []
+                while True:
+                    count = reader.read()
+                    if not count:
+                        break
+                    got.extend(reader.buf[0:count])
+                reader.close()
+                self.assertEqual(got, forwards[::-1] if reverse else forwards, (reverse, block))
+        # looping goes back to the top
+        reader = autotune.WaveReader(path, loop=True, block=1000)
+        got = []
+        for _ in range(5):
+            got.extend(reader.buf[0:reader.read()])
+        reader.close()
+        self.assertEqual(got, forwards + forwards[0:1000])  # the last block is short
+
+    def test_mixing_a_sample_clips_and_allocates_little(self):
+        import array
+        import autotune
+        block = array.array("h", [30000, -30000, 100, 0])
+        mixer = autotune._Mixer(block)
+        mixer.add(array.array("h", [10000, -10000, 50, 7]), 4)
+        self.assertEqual(list(block), [32767, -32768, 150, 7])
+        mixer.add(array.array("h", [1, 2, 3, 4]), 2)  # a short last block
+        self.assertEqual(list(block), [32767, -32766, 150, 7])
+        mixer.copy(array.array("h", [5, 6, 7, 8]), 3)
+        self.assertEqual(list(block), [5, 6, 7, 7])
 
     def test_feed_window_holds_the_last_two_blocks_in_order(self):
         # feed_phase null: after every write the buffer reads oldest block first.
@@ -860,12 +904,70 @@ class DeviceScenarioTests(unittest.TestCase):
             "playing 1",
             "playing 1",                          # 500 ms apart: two taps
         ])
-        self.assertEqual(out.count("turned round"), 1)  # built once, then kept
-        # with the sample's own effects, the backwards copy feeds their chain
+        # with the sample's own effects, the backwards stream feeds their chain
         config["samples"][0]["effects"] = [{"effect": "freeverb", "mix": 0.4}]
         root, out, s = run("auto", config, tone=(340.0, 1.0))
         self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])
         self.assertIn("playing 1 (double tap: backwards)", out)
+
+    def test_double_tap_streams_backwards(self):
+        # straight from the drive, looped through a double buffer, and it
+        # stops itself at the end
+        config = json.loads(json.dumps(TEST_CONFIG))
+        config["samples"] = [{"file": "1.wav"}]
+        root, out, s = run("auto", config, tone=(340.0, 1.0))
+        self.assertNotIn("can't", out)
+        self.assertIn(("MixerVoice", "_Obj"), [tuple(p) for p in s["looped"]])
+        # with the sample's own effects, their head loops it
+        config["samples"] = [{"file": "1.wav", "effects": [{"effect": "freeverb", "mix": 0.4}]}]
+        root, out, s = run("auto", config, tone=(340.0, 1.0))
+        self.assertIn(("_Obj", "_Obj"), [tuple(p) for p in s["looped"]])
+        self.assertNotIn("can't", out)
+
+    def test_backwards_stream_plays_the_file_backwards(self):
+        import array
+        import autotune
+        root = tempfile.mkdtemp()
+        path = os.path.join(root, "ramp.wav")
+        n = 3000
+        with wave.open(path, "wb") as file:
+            file.setnchannels(1)
+            file.setsampwidth(2)
+            file.setframerate(autotune.SAMPLE_RATE)
+            file.writeframes(b"".join(int(i).to_bytes(2, "little", signed=True) for i in range(n)))
+
+        class Raw:
+            def __init__(self, buffer, **kwargs):
+                self.buffer, self.kwargs = buffer, kwargs
+
+            def deinit(self):
+                pass
+
+        for half, views in ((64, True), (1024, True), (1024, False)):
+            # 1024: two pieces a half, the last one short
+            autotune._NP_VIEWS, saved = views, autotune._NP_VIEWS
+            try:
+                stream = autotune.BackwardsStream(path, half=half, raw_sample=Raw)
+                self.assertEqual(stream.sample.kwargs["single_buffer"], False)
+                t = stream.seconds
+                for late in (0.0, 0.2, 0.45):  # a main loop pass up to nearly half a half late
+                    stream.start(0.0)
+                    played, k = [], 0
+                    while True:
+                        # the mixer reads half k % 2 through its turn, from k
+                        # halves in; the main loop runs part way through each
+                        now = (k + 0.5 + late) * t
+                        if not stream.update(now):
+                            break
+                        for i in range(half):
+                            played.append(stream.buffer[(k % 2) * half + i])
+                        k += 1
+                    self.assertEqual(played[0:n], list(range(n))[::-1], (half, views, late))
+                    self.assertEqual(set(played[n:]), {0})  # then silence to ring out
+                    self.assertIsNone(stream.reader)
+                stream.deinit()
+            finally:
+                autotune._NP_VIEWS = saved
 
     def test_double_tap_backwards_through_autotune(self):
         config = json.loads(json.dumps(THROUGH_CONFIG))
@@ -1094,16 +1196,28 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertLessEqual(echo["mix_max"], 0.3)
         self.assertEqual(echo["mix_last"], 0.0)
         self.assertEqual((echo["clears"], echo["retriggered"]), (2, 1))
+        # the accelerometer sleeps from boot, wakes for the sample, and
+        # sleeps again once it stops
+        self.assertEqual(s["accel_power"], [0x07, 0x57, 0x07])
 
     def test_shaking_a_sample_through_autotune_rolls_it(self):
         root, out, s = run("shake_through", THROUGH_CONFIG, tone=(340.0, 3.0))
-        self.assertEqual(s["shake_echo"]["mix_max"], 0.0)  # the Echo isn't in this path
+        # the Echo isn't in this path, so it is never built
+        self.assertIsNone(s["shake_echo"])
         rolls = s["rolls"]
         self.assertTrue(rolls and rolls[-1] == 0, rolls)  # rolled, then let go
         sweep = rolls[rolls.index(0, 1) + 1:]
         sweep = sweep[:sweep.index(0)]
         self.assertEqual(sweep, sorted(sweep, reverse=True))  # each stretch shorter
         self.assertGreater(sweep[0], 3 * sweep[-1])
+
+    def test_shake_costs_nothing_until_a_sample_plays(self):
+        # sung (and shaken) through two presets, no sample: no Echo is
+        # built, and the accelerometer is put to sleep at boot and stays so
+        root, out, s = run("shake_idle", tone=(340.0, 1.0))
+        self.assertIn("shake: LIS3DH found", out)
+        self.assertIsNone(s["shake_echo"])
+        self.assertEqual(s["accel_power"], [0x07])
 
     def test_shake_without_an_accelerometer(self):
         root, out, s = run("shake_no_chip", tone=(340.0, 1.0))
