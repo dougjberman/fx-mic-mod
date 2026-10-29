@@ -22,12 +22,18 @@ parameter names and types) and the demo `config.json`.
 
 - Up to 4 presets (TOP button, red LEDs; position 0 in the cycle is "clean").
 - Up to 4 samples (MIDDLE selects, white LEDs; BOTTOM plays).
+- TOP and MIDDLE step when let go, not when pressed, so holding TOP + MIDDLE to power off steps
+  neither. The LEDs show the next spot as soon as the button comes up, and the step itself waits
+  200 ms (`BUTTON_GAP_SECONDS`): a press in that time is a double tap, and goes back one preset,
+  sample or page at once instead, without loading the next one first. Presses made while a preset
+  is loading all count once it has loaded, and only the preset they end up on is loaded.
 - `effects_only` **(new, optional)**: `true` trades the samples and record mode for
   more presets, up to 16 in pages of four. Page 1 is presets 1 to 4, page 2 is 5 to 8, and so on;
   the number of pages is however many the presets fill. TOP steps through the current page's
   presets (red LEDs), from the last back to the first, with no Clean stop. MIDDLE steps to the
-  next page, from the last back to page 1, and the white LEDs count it (two lit is page 2). The mic
-  keeps the slot number across a page turn (on a shorter page it stops at the page's last preset).
+  next page, from the last back to page 1, and the white LEDs count it (two lit is page 2). A page
+  turn lands on the new page's first preset. A quick double tap on TOP or MIDDLE goes back a preset
+  or a page instead.
   BOTTOM goes to Clean, every LED dark, and is the only way there; from Clean, TOP or MIDDLE goes
   to page 1, preset 1. The mic starts on Clean. `samples` and the sample settings are ignored but kept, so turning this off brings them
   back. Only the selected preset's effects are built, so 16 presets cost the mic only their JSON.

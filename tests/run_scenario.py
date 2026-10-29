@@ -72,17 +72,56 @@ SCENARIOS = {
         end=2.0,
     ),
     # effects_only, two pages: TOP -> page 1 preset 1; TOP -> 2; MIDDLE ->
-    # page 2 preset 2; TOP -> page 2 preset 1 (round the page, no clean);
+    # page 2 preset 1; TOP -> page 2 preset 2;
     # BOTTOM -> clean; MIDDLE -> page 1 preset 1; TOP x2 -> preset 3;
-    # MIDDLE -> page 2, which stops at preset 2; MIDDLE -> page 1 again;
+    # MIDDLE -> page 2 preset 1; MIDDLE -> page 1 preset 1;
     # BOTTOM -> clean; TOP -> page 1 preset 1.
     "pages": dict(
         presses=tap(0.5, TOP) + tap(1.0, TOP) + tap(1.5, MIDDLE) + tap(2.0, TOP)
-        + tap(2.5, BOTTOM) + tap(3.0, MIDDLE) + tap(3.2, TOP) + tap(3.4, TOP)
+        + tap(2.5, BOTTOM) + tap(3.0, MIDDLE) + tap(3.4, TOP) + tap(3.8, TOP)
         + tap(4.0, MIDDLE) + tap(4.5, MIDDLE) + tap(5.0, BOTTOM) + tap(5.2, BOTTOM)
         + tap(5.4, TOP),
         paddle=[],
         end=5.8,
+    ),
+    # effects_only double taps (TOP and MIDDLE step on letting go, and a
+    # press within 200 ms of that is a double tap): TOP -> page 1 preset 1,
+    # TOP -> 2, TOP twice quickly -> back to preset 1; MIDDLE -> page 2 preset 1, MIDDLE twice
+    # quickly -> back to page 1 preset 1; MIDDLE twice quickly from page 1
+    # -> page 2 (round the back); TOP then MIDDLE quickly is no double tap.
+    "pages_back": dict(
+        presses=tap(0.5, TOP) + tap(1.0, TOP) + tap(1.5, TOP) + tap(1.7, TOP)
+        + tap(2.5, MIDDLE) + tap(3.0, MIDDLE) + tap(3.2, MIDDLE)
+        + tap(4.0, MIDDLE) + tap(4.2, MIDDLE)
+        + tap(5.0, TOP) + tap(5.2, MIDDLE),
+        paddle=[],
+        end=5.8,
+    ),
+    # TOP and MIDDLE double taps with samples: TOP -> preset 1; TOP twice
+    # quickly -> back from preset 1 to clean; twice again -> back from clean
+    # round to record mode; twice again -> back from record mode to the last
+    # preset; TOP -> record mode. MIDDLE -> sample 2; twice quickly -> sample
+    # 1; twice again -> round to 4; twice again -> 3; three quick presses ->
+    # back to 2, then on to 3.
+    # Presets that take 1 s to load (FAKE_LOAD_SECONDS): TOP -> preset 1,
+    # whose load runs to 1.75 s; meanwhile TOP once and then twice quickly
+    # -> on to 2, then back one from there: preset 1 again, so nothing
+    # loads. Then TOP -> 2 (loading to 3.75 s) and TOP twice more meanwhile
+    # -> on to 3 and 4, and only 4 loads.
+    "queued": dict(
+        presses=tap(0.5, TOP) + tap(1.0, TOP) + tap(1.4, TOP) + tap(1.6, TOP)
+        + tap(2.5, TOP) + tap(3.0, TOP) + tap(3.4, TOP),
+        paddle=[],
+        end=6.0,
+    ),
+    "back": dict(
+        presses=tap(0.5, TOP) + tap(1.0, TOP) + tap(1.2, TOP) + tap(2.0, TOP) + tap(2.2, TOP)
+        + tap(3.0, TOP) + tap(3.2, TOP) + tap(4.0, TOP)
+        + tap(5.0, MIDDLE) + tap(5.5, MIDDLE) + tap(5.7, MIDDLE)
+        + tap(6.5, MIDDLE) + tap(6.7, MIDDLE) + tap(7.5, MIDDLE) + tap(7.7, MIDDLE)
+        + tap(8.5, MIDDLE) + tap(8.7, MIDDLE) + tap(8.9, MIDDLE),
+        paddle=[],
+        end=9.5,
     ),
     # The clean spot: hold the sample button down, shake the mic for 0.6 s
     # while it plays, hold still, then let go (which stops the sample).
@@ -178,10 +217,27 @@ def track_rolls():
     return rolls
 
 
+def slow_loads(script):
+    """FAKE_LOAD_SECONDS: every preset takes that long to build, as a
+    vocoder does on a Ting, so presses queue up meanwhile."""
+    seconds = float(os.environ.get("FAKE_LOAD_SECONDS", "0"))
+    if not seconds:
+        return
+    import config_loader
+    create = config_loader.create_preset
+
+    def slow(*args, **kwargs):
+        script.clock.sleep(seconds)
+        return create(*args, **kwargs)
+
+    config_loader.create_preset = slow
+
+
 def main():
     name, root = sys.argv[1], sys.argv[2]
     script = fakes.Script(**SCENARIOS[name])
     fakes.install(script, root)
+    slow_loads(script)
     vocoders = track_vocoders()
     rolls = track_rolls()
     env = runpy.run_path(os.path.join(FIRMWARE, "code.py"), run_name="__main__")

@@ -29,6 +29,7 @@ class Script:
                  shakes=None):
         self.clock = Clock()
         self.presses = sorted(presses)  # (time, key_number, pressed)
+        self.presses_at = 0.0  # the time of the press last handed out
         self.paddle = paddle            # [(start, end)] squeezed intervals
         self.end = end
         self.readonly = readonly
@@ -161,12 +162,14 @@ class _Event:
         self.key_number = key
         self.pressed = pressed
         self.released = not pressed
+        # keypad stamps each event when it scans it, in ms
+        self.timestamp = int(round(SCRIPT.presses_at * 1000))
 
 
 class _Events:
     def get(self):
         if SCRIPT.presses and SCRIPT.presses[0][0] <= SCRIPT.clock.t:
-            _, key, pressed = SCRIPT.presses.pop(0)
+            SCRIPT.presses_at, key, pressed = SCRIPT.presses.pop(0)
             return _Event(key, pressed)
         return None
 
