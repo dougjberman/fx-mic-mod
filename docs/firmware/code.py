@@ -77,6 +77,9 @@
 
 
 
+
+
+
 import gc
 import json
 import os
@@ -119,7 +122,7 @@ import shake
 
 
 
-FIRMWARE_VERSION = "1.0.0"
+FIRMWARE_VERSION = "1.1.0"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 
@@ -186,6 +189,18 @@ if not isinstance(EFFECTS_ONLY, bool):
 
 
 SHUTDOWN_HOLD_SECONDS = 0.8
+
+
+
+
+
+
+
+AUTO_OFF_MINUTES = 10
+
+
+AUTO_OFF_WARN_SECONDS = 10
+AUTO_OFF_BLINK_SECONDS = 0.25
 
 
 
@@ -366,6 +381,12 @@ class DataContext:
 
 
 
+        self.used_at = 0.0
+        self.auto_off_warning = False
+        self.auto_off_done = False
+
+
+
 
         self.knob_applied = -1 << 20
 
@@ -464,6 +485,14 @@ if isinstance(_sample_level, (int, float)) and not isinstance(_sample_level, boo
     SAMPLE_LEVEL = _sample_level
 else:
     print("sample_level must be a number from 0 to 1; using {}".format(SAMPLE_LEVEL))
+
+_auto_off = CONFIG.get("auto_off_minutes", AUTO_OFF_MINUTES)
+if isinstance(_auto_off, (int, float)) and not isinstance(_auto_off, bool) and 0 <= _auto_off <= 240:
+    AUTO_OFF_MINUTES = _auto_off
+else:
+    print("auto_off_minutes must be a number from 0 to 240; using {}".format(AUTO_OFF_MINUTES))
+
+AUTO_OFF_SECONDS = AUTO_OFF_MINUTES * 60 if AUTO_OFF_MINUTES else None
 
 
 
@@ -1259,6 +1288,7 @@ def apply_volume(ctx, force=False):
     if not force and abs(raw - ctx.knob_applied) < VOLUME_DEADBAND:
         return
     ctx.knob_applied = raw
+    ctx.used_at = time.monotonic()
 
     fraction = raw / 65535
     if fraction <= VOLUME_OFF_FRACTION:
@@ -1275,6 +1305,77 @@ def apply_volume(ctx, force=False):
     ctx.volume = VOLUME_MIN_DB + fraction * (VOLUME_MAX_DB - VOLUME_MIN_DB)
     codec.dac_volume = ctx.volume
     print("volume {:+.1f} dB".format(codec.dac_volume))
+
+
+def power_off(ctx):
+    0
+
+
+
+
+    if ctx.power_hold is None:
+        ctx.power_hold = digitalio.DigitalInOut(board.POWER_HOLD)
+        ctx.power_hold.direction = digitalio.Direction.OUTPUT
+    ctx.power_hold.value = False
+    print("still on: USB is powering the mic. Unplug USB and it turns off.")
+
+
+def in_use(ctx, held):
+    0
+
+
+    if held or (ctx.recorder is not None and ctx.recorder.recording):
+        return True
+    if ctx.tune is not None and ctx.tune.sample is not None:
+        return True
+    stream = ctx.backwards_stream
+    if stream is not None and stream.playing:
+        return True
+    return bool(sample_voice(ctx).playing)
+
+
+def check_auto_off(ctx, now, using):
+    0
+
+
+
+
+
+
+
+    if AUTO_OFF_SECONDS is None:
+        return
+    if using or (supervisor is not None and supervisor.runtime.usb_connected):
+        ctx.used_at = now
+    idle = now - ctx.used_at
+    if idle < AUTO_OFF_SECONDS - AUTO_OFF_WARN_SECONDS:
+        if ctx.auto_off_warning:
+            ctx.auto_off_warning = False
+            update_red_leds(ctx)
+            update_white_leds(ctx)
+            print("auto-off: still in use, staying on")
+        if ctx.auto_off_done:
+            ctx.auto_off_done = False
+            ctx.power_hold.value = True
+        return
+    if ctx.auto_off_done:
+        return
+    if idle >= AUTO_OFF_SECONDS:
+        print("auto-off: unused for {} min, shutting down".format(AUTO_OFF_MINUTES))
+        ctx.auto_off_done = True
+        ctx.auto_off_warning = False
+        update_red_leds(ctx)
+        update_white_leds(ctx)
+        power_off(ctx)
+        return
+    if not ctx.auto_off_warning:
+        ctx.auto_off_warning = True
+        print("auto-off in {:.0f} s: press a button or squeeze to stay on".format(
+            AUTO_OFF_SECONDS - idle))
+
+    lit = int(idle / AUTO_OFF_BLINK_SECONDS) % 2 == 0
+    for led in red_leds + white_leds:
+        led.value = lit
 
 
 
@@ -1377,6 +1478,8 @@ print(
     )
 )
 print('handle travel = "$handle" block, 0.0 (out) to 1.0 (in)')
+print("auto-off: after {} min unused on batteries".format(AUTO_OFF_MINUTES)
+      if AUTO_OFF_SECONDS else "auto-off: never")
 if not EFFECTS_ONLY:
     print("BOTTOM: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
         TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
@@ -1398,6 +1501,7 @@ try:
 
         event = keys.events.get()
         while event is not None:
+            data_context.used_at = time.monotonic()
             if event.key_number == TOP:
                 data_context.top_held = event.pressed
             if event.key_number == MIDDLE:
@@ -1440,14 +1544,7 @@ try:
                     "TOP+MIDDLE held {}s: shutting down".format(SHUTDOWN_HOLD_SECONDS)
                 )
 
-
-
-
-                if data_context.power_hold is None:
-                    data_context.power_hold = digitalio.DigitalInOut(board.POWER_HOLD)
-                    data_context.power_hold.direction = digitalio.Direction.OUTPUT
-                data_context.power_hold.value = False
-                print("still on: USB is powering the mic. Unplug USB and it turns off.")
+                power_off(data_context)
                 data_context.combo_since = float("inf")
         else:
             data_context.combo_since = None
@@ -1532,6 +1629,8 @@ try:
             stop_current_wave(data_context)
             print("{} backwards: longest refill {:.1f} ms".format(
                 data_context.current_path, stream.worst_ms))
+
+        check_auto_off(data_context, now, in_use(data_context, held))
 
 
 

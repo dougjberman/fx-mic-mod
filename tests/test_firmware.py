@@ -1236,6 +1236,56 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertEqual(out.count("shutting down"), 1)
         self.assertIn("Unplug USB and it turns off", out)
 
+    def test_auto_off_after_unused(self):
+        config = dict(TEST_CONFIG, auto_off_minutes=0.5)
+        root, out, s = run("auto_off", config)
+        self.assertIn("auto-off: after 0.5 min unused on batteries", out)
+        self.assertEqual(out.count("auto-off in 10 s"), 1)
+        self.assertEqual(out.count("shutting down"), 1)
+        # POWER_HOLD goes low once, 30 s after the last press
+        self.assertEqual(len(s["power_log"]), 1)
+        at, value = s["power_log"][0]
+        self.assertFalse(value)
+        self.assertTrue(35.0 <= at < 35.2, at)
+        # every LED blinks in the last 10 s, and nothing before
+        warning = [lit for t, lit in s["lit_log"] if 25.0 <= t < 35.0]
+        self.assertIn(8, [len(lit) for lit in warning])
+        self.assertIn(0, [len(lit) for lit in warning])
+        self.assertFalse([t for t, lit in s["lit_log"] if 5.2 < t < 25.0])
+        # then the LEDs show where the mic was: clean, sample 2 (before the
+        # scenario's end turns them all off)
+        self.assertEqual([lit for t, lit in s["lit_log"] if t < 39.9][-1], ["LED_WHITE1", "LED_WHITE2"])
+
+    def test_auto_off_kept_on_by_use(self):
+        config = dict(TEST_CONFIG, auto_off_minutes=0.5)
+        root, out, s = run("auto_off_saved", config)
+        self.assertEqual(out.count("auto-off in 10 s"), 1)
+        self.assertEqual(out.count("staying on"), 1)
+        self.assertNotIn("shutting down", out)
+        self.assertEqual(s["power_log"], [])
+        self.assertEqual([lit for t, lit in s["lit_log"] if t < 92.9][-1], ["LED_WHITE1", "LED_WHITE2"])
+
+    def test_auto_off_on_a_charger_holds_power_again_when_used(self):
+        config = dict(TEST_CONFIG, auto_off_minutes=0.5)
+        root, out, s = run("auto_off_charger", config)
+        self.assertEqual([v for t, v in s["power_log"]], [False, True])
+        self.assertTrue(38.0 <= s["power_log"][1][0] < 38.1)
+
+    def test_auto_off_not_over_usb(self):
+        config = dict(TEST_CONFIG, auto_off_minutes=0.5)
+        root, out, s = run("auto_off", config, env={"FAKE_USB": "1"})
+        self.assertNotIn("auto-off in", out)
+        self.assertEqual(s["power_log"], [])
+
+    def test_auto_off_settings(self):
+        root, out, s = run("shake_no_chip")
+        self.assertIn("auto-off: after 10 min unused on batteries", out)
+        root, out, s = run("shake_no_chip", dict(TEST_CONFIG, auto_off_minutes=0))
+        self.assertIn("auto-off: never", out)
+        root, out, s = run("shake_no_chip", dict(TEST_CONFIG, auto_off_minutes="10"))
+        self.assertIn("auto_off_minutes must be a number from 0 to 240; using 10", out)
+        self.assertIn("auto-off: after 10 min", out)
+
     def test_edit_mode_never_writes(self):
         root, out, s = run("readonly")
         self.assertIn("recording is off", out)

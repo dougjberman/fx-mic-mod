@@ -38,6 +38,7 @@ instructions to match your mic.
 | Shake | While a sample plays, shaking the mic zips it up (the default), warbles it or glitches it: `"shake": "zip"`, `"warble"`, `"glitch"` or `"off"`. Played through an autotune preset, the sample stutters instead. |
 | Volume knob | Output level. |
 | TOP + MIDDLE 0.8 s | Power off. |
+| (nothing for 10 min) | On batteries the mic turns itself off, with every light blinking for the last 10 seconds (press anything or squeeze to keep it on). `"auto_off_minutes"` sets the time, 0 for never; it stays on over USB to a computer. |
 
 **Record mode:** all four red LEDs flash together and the white LEDs show the slot to record into. MIDDLE picks the slot,
 squeeze and hold the handle to record, release to save. The red LEDs stop flashing and count down the 4 second max sample length as you record. While the take saves, a light runs down the mic from the top red LED to the bottom white one. Silence before and after the sound is trimmed (the editor can turn that off), so the sample starts right on it. The editor can also normalize takes, so each one peaks at -3 dB (off by default).

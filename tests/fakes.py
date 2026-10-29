@@ -49,6 +49,8 @@ class Script:
         # Each value written to the accelerometer's CTRL_REG1 (0x57 awake,
         # 0x07 asleep).
         self.accel_power = []
+        # Each value written to POWER_HOLD, as (time, value).
+        self.power_log = []
 
     def shaking(self):
         t = self.clock.t
@@ -127,6 +129,8 @@ class DigitalInOut:
     @value.setter
     def value(self, v):
         self._value = bool(v)
+        if self.pin.name == "POWER_HOLD":
+            SCRIPT.power_log.append((SCRIPT.clock.t, self._value))
         if self.pin.name.startswith("LED_"):
             SCRIPT.leds[self.pin.name] = self._value
             SCRIPT.led_log.append((SCRIPT.clock.t, dict(SCRIPT.leds)))
@@ -425,6 +429,12 @@ def install(script, root):
     _module("storage", getmount=lambda path: _Mount(script.readonly),
             remount=lambda *a, **k: None)
     _module("adafruit_nau88l21", NAU88L21=Codec)
+    # FAKE_USB=1: plugged into a computer. Otherwise no supervisor module,
+    # as on the desktop, which code.py takes as running on batteries.
+    if os.environ.get("FAKE_USB") == "1":
+        _module("supervisor", runtime=types.SimpleNamespace(
+            usb_connected=True, serial_bytes_available=0),
+            ticks_ms=lambda: int(script.clock.t * 1000))
 
     real_open = builtins.open
     builtins.open = lambda path, *a, **k: real_open(_map(path), *a, **k)

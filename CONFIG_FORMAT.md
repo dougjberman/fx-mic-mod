@@ -118,6 +118,11 @@ recorded on the mic. Set it to false to keep everything between the squeeze and 
 A top-level `"normalize_takes"` (default false) scales each take recorded on the mic so its loudest
 moment sits at -3 dBFS, boosting by at most +12 dB so a near-silent take doesn't become loud hiss.
 
+A top-level `"auto_off_minutes"` (0..240, default 10; 0 for never) turns the mic off once it has
+sat that long unused on batteries: no button press, squeeze, knob turn, sample playing or take
+recording. Every LED blinks for the last 10 seconds, and anything done then keeps it on. Plugged
+into a computer it stays on. Needs firmware 1.1.0.
+
 A top-level `"sample_level"` (0..1, default 1) turns every sample down. A take recorded on the mic
 already sits at the voice's level; the install guide's converter brings imported files to about that
 level too.
