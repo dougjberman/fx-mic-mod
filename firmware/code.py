@@ -119,7 +119,7 @@ import shake
 # release that adds a config setting, add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number, and add a row for the release to
 # the "What's new" table on the install page, which its update check lists.
-FIRMWARE_VERSION = "1.7.1"
+FIRMWARE_VERSION = "1.0.0"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -1351,7 +1351,7 @@ data_context.paddle_held = paddle.value
 if shake_meter is not None:
     # The shake Echo is built the first time a sample plays on the native
     # mixer (see shake_echo()), so until then the shake holds no RAM: free
-    # memory at boot, and so how often gc runs, stays as it was before 1.7.
+    # memory at boot, and so how often gc runs, stays as it was before the shake (pre-launch 1.7).
     data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
     print("shake: {} found; shaking a sample plays it {}".format(
         shake_meter.name, shake.describe(SHAKE)))
