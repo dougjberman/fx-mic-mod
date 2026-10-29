@@ -275,7 +275,7 @@ class LoaderTests(unittest.TestCase):
             self.assertEqual(root, ratios[0])
             self.assertEqual(len(table), autotune.VOCODER_CHORD_SAMPLES * ratios[-1])
             self.assertLessEqual(max(abs(v) for v in table), 30000)
-            # its spectrum: energy at each chord note, none at the root's 2nd harmonic's neighbours
+            # its spectrum: energy at each chord note, none at the root's 2nd harmonic's neighbors
             import numpy
             spec = abs(numpy.fft.rfft(numpy.array(table, dtype=float)))
             for m in ratios:
@@ -309,18 +309,18 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(len(voc.notes), 8)
         # the breath noise is high-passed once, at load: no Biquad to run
         self.assertIsNone(getattr(voc.noise, "filter", None))
-        centres = [n.filter.kwargs["frequency"] for n in voc.notes]
-        self.assertAlmostEqual(centres[0], autotune.VOCODER_LOW_HZ)
-        self.assertAlmostEqual(centres[-1], autotune.VOCODER_HIGH_HZ)
+        centers = [n.filter.kwargs["frequency"] for n in voc.notes]
+        self.assertAlmostEqual(centers[0], autotune.VOCODER_LOW_HZ)
+        self.assertAlmostEqual(centers[-1], autotune.VOCODER_HIGH_HZ)
 
         def tone(hz, amp=6000):
             return array.array("h", [int(amp * math.sin(2 * math.pi * hz * i / rate))
                                      for i in range(autotune.BUFFER_SIZE)])
 
-        # a tone lights the band it is in, and only that one (and its neighbours a little)
+        # a tone lights the band it is in, and only that one (and its neighbors a little)
         for band in (2, 5):
             voc.levels[:] = [0.0] * 8
-            voc.update(tone(centres[band]), 150.0)
+            voc.update(tone(centers[band]), 150.0)
             levels = [n.amplitude for n in voc.notes]
             self.assertEqual(levels.index(max(levels)), band)
             self.assertLess(sorted(levels)[-3], 0.05 * max(levels))
@@ -333,14 +333,14 @@ class LoaderTests(unittest.TestCase):
             voc.update(array.array("h", [0] * autotune.BUFFER_SIZE), 0.0)
         self.assertTrue(all(n.amplitude < 1e-6 for n in voc.notes))
         # a band under the note stays shut: the carrier has nothing there
-        voc.update(tone(centres[0]), 400.0)
+        voc.update(tone(centers[0]), 400.0)
         self.assertEqual(voc.notes[0].amplitude, 0.0)
         # breath follows the highs
         voc.update(tone(5500), 150.0)
         self.assertGreater(voc.noise.amplitude, 0.0)
         # the noise gate: a quiet hum (about -65 dB) doesn't play the carrier,
         # unless the gate is off; singing opens it, and it holds through a gap
-        hum = tone(centres[3], 25)
+        hum = tone(centers[3], 25)
         for _ in range(autotune.VOCODER_GATE_HOLD + 16):
             voc.update(hum, 150.0)
         self.assertTrue(all(n.amplitude < 1e-6 for n in voc.notes))
@@ -348,7 +348,7 @@ class LoaderTests(unittest.TestCase):
         open_voc = autotune.Vocoder(rate, bands=8, gate=autotune.VOCODER_GATE_OFF)
         open_voc.update(hum, 150.0)
         self.assertGreater(open_voc.notes[3].amplitude, 0.0)
-        voc.update(tone(centres[3]), 150.0)
+        voc.update(tone(centers[3]), 150.0)
         voc.update(hum, 150.0)
         self.assertGreater(voc.notes[3].amplitude, 0.0)
         for _ in range(autotune.VOCODER_GATE_HOLD + 6):
@@ -369,8 +369,8 @@ class LoaderTests(unittest.TestCase):
         ratio = (autotune.VOCODER_HIGH_HZ / autotune.VOCODER_LOW_HZ) ** (1 / 7)
         q = 1 / (math.sqrt(ratio) - 1 / math.sqrt(ratio))
 
-        def band_pass(x, centre):
-            w0 = 2 * math.pi * centre / rate
+        def band_pass(x, center):
+            w0 = 2 * math.pi * center / rate
             alpha = math.sin(w0) / (2 * q)
             b0, a1, a2 = alpha / (1 + alpha), -2 * math.cos(w0) / (1 + alpha), (1 - alpha) / (1 + alpha)
             y, x1, x2, y1, y2 = numpy.zeros(len(x)), 0.0, 0.0, 0.0, 0.0
@@ -398,8 +398,8 @@ class LoaderTests(unittest.TestCase):
             now = sum(note.amplitude * play(note.waveform, note.frequency, n) for note in voc.notes)
             table, sub, _ = voc._wave(chord)
             carrier = play(table, hz * sub, n)
-            before = sum(level * band_pass(carrier, centre)
-                         for level, centre in zip(voc.levels, voc.centres) if level)
+            before = sum(level * band_pass(carrier, center)
+                         for level, center in zip(voc.levels, voc.centers) if level)
             a, b = before[4800:], now[4800:]
             self.assertAlmostEqual(numpy.std(b) / numpy.std(a), 1.0, delta=0.02)
             window = numpy.hanning(len(a))
@@ -421,7 +421,7 @@ class LoaderTests(unittest.TestCase):
         autotune.VOCODER_FILTERS = True
         voc = autotune.Vocoder(rate, bands=6, breath=0.5)
         self.assertEqual(len(voc.notes), 6)
-        self.assertEqual([n.filter.kwargs["frequency"] for n in voc.notes], voc.centres)
+        self.assertEqual([n.filter.kwargs["frequency"] for n in voc.notes], voc.centers)
         voc.update(voice, 196.0)
         self.assertEqual([n.amplitude for n in voc.notes], voc.levels)
 

@@ -17,16 +17,16 @@ Presets use Adafruit's `config.json` format, plus `autotune`, `harmonizer` and `
 ## Controls
 
 The EP-2350 is sold as the **FX Mic** and as the **Ting**. They run the same firmware but the buttons
-are different colours, so this README names them by position:
+are different colors, so this README names them by position:
 
 | Button | FX Mic | Ting |
 |---|---|---|
 | TOP | orange | orange |
 | MIDDLE | white | green |
-| BOTTOM | grey | white |
+| BOTTOM | gray | white |
 | Handle | orange | green |
 
-The website has an FX Mic / Ting switch at the top of every page that changes the colours and
+The website has an FX Mic / Ting switch at the top of every page that changes the colors and
 instructions to match your mic.
 
 | Control | Does |
@@ -85,7 +85,7 @@ One static site, deployed by Cloudflare from `docs/` (see `wrangler.jsonc`):
 
 - `index.html`: how it works, the button guide and record mode.
 - `site-device.js` / `site-device.css`: the FX Mic / Ting switch in the nav. It sets `<html data-device>`,
-  swaps button colour words (`<span data-dw="mid">`), the site palette and the mic drawings.
+  swaps button color words (`<span data-dw="mid">`), the site palette and the mic drawings.
   `?device=ting` or `?device=fxmic` in a link picks one.
 - `install.html`: back up the mic (Ting or FX Mic), flash CircuitPython, then install fx-mic-mod in one click
   (it copies the files in `docs/firmware/` to CIRCUITPY), plus a serial console and restore steps.

@@ -134,7 +134,7 @@ def yin(x, fmin=80.0, fmax=1000.0, frame=1024, hop=256, threshold=0.15):
 
 
 def steady(midis, tolerance=0.3):
-    """Keep pitches that agree with both neighbours, so glides and note
+    """Keep pitches that agree with both neighbors, so glides and note
     changes don't count."""
     keep = []
     for i in range(1, len(midis) - 1):

@@ -323,7 +323,7 @@ footer { max-width: 1120px; margin: 30px auto 0; font-size: 13px; color: var(--m
           <p>If you want a byte-for-byte image of the chip (firmware plus the disk), Raspberry Pi's <code>picotool</code> can read the RP2350's flash while the mic is in boot mode (step 03):</p>
           <pre>picotool info -a
 picotool save -a ting-full-flash.bin</pre>
-          <p><span class="tag">Unverified</span>Nobody has published a picotool dump of an EP-2350 yet. TE changed the boot-mode USB IDs in firmware 1.0.5, so picotool may not recognise the device, and the chip could have reads locked. The official .uf2 above is the dependable restore path.</p>
+          <p><span class="tag">Unverified</span>Nobody has published a picotool dump of an EP-2350 yet. TE changed the boot-mode USB IDs in firmware 1.0.5, so picotool may not recognize the device, and the chip could have reads locked. The official .uf2 above is the dependable restore path.</p>
         </div>
       </details>
     </section>
@@ -510,7 +510,7 @@ picotool save -a ting-full-flash.bin</pre>
         </div>
         <div class="status" id="restoreStatus">No backup folder chosen.</div>
       </div>
-      <p>If the stock firmware freezes on a bad <code>config.json</code>, hold the <span data-dw="mid">white</span> and <span data-dw="bot">grey</span> buttons while it starts to get the disk back, then fix the file.</p>
+      <p>If the stock firmware freezes on a bad <code>config.json</code>, hold the <span data-dw="mid">white</span> and <span data-dw="bot">gray</span> buttons while it starts to get the disk back, then fix the file.</p>
     </section>
 
     <!-- !! -->
@@ -666,7 +666,7 @@ while True:
     if (!hasFs) { status(statusId, "This browser can't open drives. Use Chrome or Edge on a computer, or follow the manual steps.", "bad"); return null; }
     try { const dir = await window.showDirectoryPicker({ mode }); status(statusId, "Working…"); return dir; }
     catch (e) {
-      if (e.name === "AbortError") { status(statusId, "Cancelled."); return null; }
+      if (e.name === "AbortError") { status(statusId, "Canceled."); return null; }
       if (isBlockError(e) || framed) { showBlocked(); status(statusId, "Drive access is blocked in this view. Save the standalone flasher above, or use the manual steps.", "bad"); return null; }
       status(statusId, "Couldn't open the drive: " + e.message, "bad"); return null;
     }
@@ -703,7 +703,7 @@ while True:
         await dl.save({ filename, data });
         status(statusId, "Saved " + filename + ".", "ok"); return true;
       } catch (e) {
-        status(statusId, e.code === "declined" ? "Save cancelled." : "Saving isn't available in this view (" + (e.code || e.message) + ").", "bad"); return false;
+        status(statusId, e.code === "declined" ? "Save canceled." : "Saving isn't available in this view (" + (e.code || e.message) + ").", "bad"); return false;
       }
     }
     const blob = data instanceof Blob ? data : new Blob([data]);
@@ -1072,7 +1072,7 @@ while True:
         await writeFile(dir, p.slot + ".wav", w.blob);
         done.push(`${p.slot}.wav (${w.seconds.toFixed(1)} s, was ${w.from})`);
       }
-      status("samplesStatus", "Copied " + done.join(", ") + ". The mic reloads by itself; press " + (window.siteDevice ? siteDevice.word("mid") : "white") + " to pick a sample and " + (window.siteDevice ? siteDevice.word("bot") : "grey") + " to play it.", "ok");
+      status("samplesStatus", "Copied " + done.join(", ") + ". The mic reloads by itself; press " + (window.siteDevice ? siteDevice.word("mid") : "white") + " to pick a sample and " + (window.siteDevice ? siteDevice.word("bot") : "gray") + " to play it.", "ok");
     } catch (e) {
       status("samplesStatus", (done.length ? "Copied " + done.join(", ") + ", then " : "") + "stopped: " + e.message + ". If the drive is read-only, power the mic on in edit mode (hold orange while you squeeze) and try again.", "bad");
     }
@@ -1117,7 +1117,7 @@ while True:
   // After a power cycle the mic comes back as a new port. Chrome remembers ports it was given,
   // so the console reopens the mic's port when it reappears, unless Disconnect was clicked,
   // and restarts the code once so its start-up lines aren't lost.
-  // stopping ends the read loop: a cancelled read returns done, and without it the loop took a
+  // stopping ends the read loop: a canceled read returns done, and without it the loop took a
   // new reader at once, read done again, and so on without ever yielding (the page froze).
   let lastInfo = null, follow = false, stopping = false, reading = null;
   async function openPort(p) {
