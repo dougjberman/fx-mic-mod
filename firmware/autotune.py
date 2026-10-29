@@ -103,7 +103,7 @@ FEED_SYNC = True
 BLOCK_NS = 16000000     # one BLOCK_SIZE of audio, at any rate
 # The pitch work runs in a wait for the chain only if the wait is this much
 # longer than it has lately taken (see step()).
-ANALYSE_SPARE_NS = 1000000
+ANALYZE_SPARE_NS = 1000000
 
 # Retune speed. `speed` 0..1 (0 = natural, 1 = hard snap) is mapped to the
 # fraction of the remaining correction applied per 16 ms block, from
@@ -124,7 +124,7 @@ INV_LN2 = 1.0 / math.log(2.0)
 # Harmonizer chords: name -> semitones above the sung note, which is the root
 # and is included as 0. Four notes at most (the voice plus three harmony
 # voices), so five-note chords leave out their 5th, the usual jazz voicing,
-# and 11ths and 13ths keep only their colour tones.
+# and 11ths and 13ths keep only their color tones.
 CHORDS = (
     ("octave", (0, 12)),
     ("maj3", (0, 4)),
@@ -235,7 +235,7 @@ def log2(x):
 # This version keeps the same idea (difference between the waveform and a
 # delayed copy of itself) with these changes:
 #   - every offset compares the same number of samples (fixes the octave bias)
-#   - squared differences + YIN normalisation, taking the FIRST dip under the
+#   - squared differences + YIN normalization, taking the FIRST dip under the
 #     threshold rather than the global minimum (fewer octave errors)
 #   - search at 4 kHz, then refine at 8 kHz around the hit and use parabolic
 #     interpolation for a fractional period
@@ -354,7 +354,7 @@ def detect_pitch_autocorrelation(buffer):
     if math.sqrt(sum(sq) / _N_D) < MIN_RMS:
         return 0.0
 
-    # Cumulative-mean-normalised difference (YIN) at 4 kHz. With ulab, the
+    # Cumulative-mean-normalized difference (YIN) at 4 kHz. With ulab, the
     # difference at every lag comes from one convolution:
     #   d(lag) = sum x[i]^2 + sum x[i+lag]^2 - 2 sum x[i] x[i+lag]
     # so the loop below only does scalar sums.
@@ -396,9 +396,9 @@ def detect_pitch_autocorrelation(buffer):
         return 0.0
 
     # Refine at 8 kHz around the coarse hit
-    centre = best_lag * _COARSE // _FINE
-    lo = max(2, centre - 2)
-    hi = min(_MAX_LAG_F + 1, centre + 3)
+    center = best_lag * _COARSE // _FINE
+    lo = max(2, center - 2)
+    hi = min(_MAX_LAG_F + 1, center + 3)
     vals = [diff(xf, lag, _WIN_F) for lag in range(lo, hi)]
     i = vals.index(min(vals))
     period = float(lo + i)
@@ -1004,8 +1004,8 @@ VOCODER_MAX_BANDS = 11          # synthio plays 12 notes; one is kept for breath
 VOCODER_VOICE = False
 VOCODER_VOICE_MAX_BANDS = 8     # bands with the voice in, when VOCODER_VOICE
 VOCODER_VOICE_DENSITY = 1       # the voice's shifter grains beside a vocoder, unless the preset sets "density"
-VOCODER_LOW_HZ = 180.0          # centre of the lowest band
-VOCODER_HIGH_HZ = 5000.0        # centre of the highest band (at most 0.4 x the rate)
+VOCODER_LOW_HZ = 180.0          # center of the lowest band
+VOCODER_HIGH_HZ = 5000.0        # center of the highest band (at most 0.4 x the rate)
 VOCODER_BREATH_HZ = 4000.0      # breath noise covers the voice above this
 VOCODER_HARMONICS = 48          # carrier waveform harmonics (band-limited: no aliasing hiss)
 VOCODER_TABLE = 256             # carrier waveform samples
@@ -1322,18 +1322,18 @@ class Vocoder:
         ratio = (high / VOCODER_LOW_HZ) ** (1.0 / (bands - 1))
         half = math.sqrt(ratio)
         q = 1.0 / (half - 1.0 / half)
-        self.centres = []
+        self.centers = []
         self._bins = []
         self._k = []
         self._floor = []
         self._biquads = []  # each band's band-pass as (b0, a1, a2), b1 being 0 and b2 -b0
         mode = synthio.FilterMode.BAND_PASS
         for i in range(bands):
-            centre = VOCODER_LOW_HZ * ratio ** i
-            low, top = centre / half, centre * half
+            center = VOCODER_LOW_HZ * ratio ** i
+            low, top = center / half, center * half
             a = max(1, int(low * n / rate + 0.5))
             b = max(a + 1, int(top * n / rate + 0.5))
-            self.centres.append(centre)
+            self.centers.append(center)
             self._bins.append((a, b))
             # amplitude = k * sqrt(band power) / sqrt(f0): the voice's band
             # level over a full-amplitude carrier's level in the band
@@ -1343,10 +1343,10 @@ class Vocoder:
             if self.filters:
                 self.notes.append(synthio.Note(
                     frequency=110.0, waveform=self._table, amplitude=0.0,
-                    filter=synthio.Biquad(mode, frequency=centre, Q=q)))
+                    filter=synthio.Biquad(mode, frequency=center, Q=q)))
             else:
-                # synthio's band-pass, the RBJ cookbook's (0 dB at the centre)
-                w0 = 2 * math.pi * centre / rate
+                # synthio's band-pass, the RBJ cookbook's (0 dB at the center)
+                w0 = 2 * math.pi * center / rate
                 alpha = math.sin(w0) / (2 * q)
                 self._biquads.append((alpha / (1 + alpha), -2 * math.cos(w0) / (1 + alpha),
                                       (1 - alpha) / (1 + alpha)))
@@ -1697,7 +1697,7 @@ class Autotune:
         self.idle_ms = 0.0      # of that pass, spent in mic.record (spare time)
         self.outside_ms = 0.0   # from the pass before ending to this one starting
         self._ended = 0
-        self._analyse_ns = 0    # what the pitch work costs, a slowly falling max
+        self._analyze_ns = 0    # what the pitch work costs, a slowly falling max
         # Mic level, 0 or 1, applied before pitch detection. Used when
         # samples are mixed into this stage, so the paddle can mute the mic
         # without muting the sample.
@@ -2225,15 +2225,15 @@ class Autotune:
             # pitch work after the write ran past the next mic block (an
             # overflow, and the sample played slow). So when the wait is
             # longer than the pitch work, do the pitch work in it.
-            early = self._render_ahead() > self._analyse_ns + ANALYSE_SPARE_NS
+            early = self._render_ahead() > self._analyze_ns + ANALYZE_SPARE_NS
             if early:
-                self._analyse(block, speed_override)
+                self._analyze(block, speed_override)
             waited = self._wait_out_burst()  # waiting is not work
             self._feed_block(block)
             if not early:
-                self._analyse(block, speed_override)
+                self._analyze(block, speed_override)
         else:
-            self._analyse(block, speed_override)
+            self._analyze(block, speed_override)
         if self.sample is not None:
             reading = time.monotonic_ns()
             self._sample_ready = self.sample.read(self.sample_gain)
@@ -2246,7 +2246,7 @@ class Autotune:
         self.busy_ms = (self._ended - began - waited) / 1e6
         return got
 
-    def _analyse(self, block, speed_override=None):
+    def _analyze(self, block, speed_override=None):
         """Find the pitch in the latest window and set the shift amounts."""
         began = time.monotonic_ns()
         window = self._window
@@ -2322,7 +2322,7 @@ class Autotune:
         # An average, not a max: a slow pass (a garbage collection) would
         # keep the work out of the wait for seconds. Should it overrun the
         # render, the write still lands after it, as when waiting.
-        self._analyse_ns += (cost - self._analyse_ns) // 4
+        self._analyze_ns += (cost - self._analyze_ns) // 4
 
 
 

@@ -204,7 +204,7 @@ HEADPHONE_VOLUME = 0
 VOLUME_MIN_DB = -50
 VOLUME_MAX_DB = 6
 
-# Fraction of the travel at the anticlockwise end that means silence, so the
+# Fraction of the travel at the counterclockwise end that means silence, so the
 # knob has a definite "off" rather than bottoming out at merely very quiet.
 VOLUME_OFF_FRACTION = 0.02
 
@@ -426,7 +426,7 @@ SAMPLES = [] if EFFECTS_ONLY else load_samples(CONFIG, max_samples=MAX_SAMPLES)
 SAMPLES = [dict(e, effects=at_rate(e.get("effects"))) for e in SAMPLES]
 
 # "preset": samples play dry into the selected preset, like the mic does.
-# "own": each sample keeps its own effects (Adafruit's behaviour).
+# "own": each sample keeps its own effects (Adafruit's behavior).
 try:
     THROUGH_PRESET = sample_routing(CONFIG) == "preset" and not EFFECTS_ONLY
 except ValueError as error:
@@ -1244,7 +1244,7 @@ def apply_volume(ctx, force=False):
     """Set the DAC digital volume from the knob, if the knob has moved.
 
     The knob's travel maps linearly onto `VOLUME_MIN_DB` .. `VOLUME_MAX_DB`,
-    except for `VOLUME_OFF_FRACTION` at the anticlockwise end, which mutes.
+    except for `VOLUME_OFF_FRACTION` at the counterclockwise end, which mutes.
 
     Small movements are ignored: the wiper is noisy enough to jitter by a few
     hundred counts while nobody is touching it, and each change costs an I2C

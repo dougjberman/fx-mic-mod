@@ -148,7 +148,7 @@ function dspFactory(){
         prev=nrm;
       }
       if(bestLag===0||(!found&&bestVal>0.4)) return 0;
-      const centre=bestLag*DEC, lo=Math.max(minLag,centre-DEC-1), hi=Math.min(maxLag+1,centre+DEC+2);
+      const center=bestLag*DEC, lo=Math.max(minLag,center-DEC-1), hi=Math.min(maxLag+1,center+DEC+2);
       const vals=[]; for(let lag=lo;lag<hi;lag++) vals.push(diff(x,lag,winF));
       let i=0; for(let k=1;k<vals.length;k++) if(vals[k]<vals[i]) i=k;
       let period=lo+i;

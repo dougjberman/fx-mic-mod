@@ -41,7 +41,7 @@ parameter names and types) and the demo `config.json`.
   Played through an autotune preset (`"sample_fx": "preset"`), any style is a stutter roll over the
   same range.
 - `sample_fx` **(new, optional)**: where samples get their effects.
-  - `"own"` (default, Adafruit's behaviour): each sample runs through its own `effects`.
+  - `"own"` (default, Adafruit's behavior): each sample runs through its own `effects`.
   - `"preset"`: samples play dry into the effect preset currently selected on the mic (TOP button), mixed with the mic ahead of the
     whole chain, autotune included. The handle still gates only the mic. Sample `effects` are
     ignored. On clean and in record mode samples play dry. On autotune presets the firmware
@@ -239,7 +239,7 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   at 8: on a Ting, 11 bands plus the voice overflowed, while 8 plus the voice, or 11 alone, ran clean.
   Source of truth: `firmware/autotune.py` (`Vocoder`, `VOCODER_*`).
 
-## Firmware behaviour the preview mirrors
+## Firmware behavior the preview mirrors
 - TOP+MIDDLE power-off hold is **0.8 s** (`SHUTDOWN_HOLD_SECONDS` in Adafruit's code.py; its
   docstring says 500 ms but the constant wins).
 - Omitted effect params use the CircuitPython constructor defaults.
