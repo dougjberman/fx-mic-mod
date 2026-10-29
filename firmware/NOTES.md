@@ -64,33 +64,21 @@ Through an autotune preset the sample is streamed by Python, so there the shake 
 `WaveReader.roll()` repeats the last stretch of the file, shorter on each sweep. That only moves
 the file position, so it adds no audio work to the autotune pass.
 
-## Needs checking on the device
-- **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
-  the dead zone (0.25, or `"handle_dead_zone"` in config.json). The console prints "handle opens the
-  mic at 0.xx" on each squeeze; check it settles near the real click, then try dead zones from about
-  0.1 to 0.25 and keep whichever lets you sing with a light squeeze without nudging the effect.
-- **Harmonizer CPU:** autotune plus three harmony voices is four granular shifters. Watch for
-  `overflow` with a four-note chord, and try `density` 1 on autotune if it can't keep up.
-- **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for
-  flamming or a comb sound on the harmony; if so, the shifters may need one shared feed.
-- **Vocoder CPU:** `import autotune; autotune.bench_vocoder()` at the REPL (Ctrl-C, Enter
-  first) times the Python side of one block on a held note and on a new note. The synth side is a
-  note and Biquad per band, plus breath. Watch for `overflow` on Night call, squeezed and not.
-- **Vocoder APIs:** written for CircuitPython 10's `synthio`, `ulab.utils.spectrogram` (or
-  `ulab.numpy.fft.fft`) and `ulab.numpy.fft.ifft` (either the (real, imaginary) pair CircuitPython
-  builds have, or complex numbers). Without `ifft` the vocoder falls back to a Biquad per band.
-  A preset that fails to build falls back to clean and prints why.
-- **Vocoder level:** `VOCODER_GAIN` (0.7) puts the vocoder about level with the voice in the
-  browser preview. Check it against the Clean spot on the mic, and that a loud voice doesn't hit
-  the synth's soft clip. Band levels step every 32 ms; listen for zipper noise on held vowels.
-- **Vocoder gate:** -50 dB (`VOCODER_GATE`) is a starting guess, tried only in the preview with a
-  synthetic hum. Check that the mic's own noise floor sits well under it, and that quiet singing
-  still opens it.
-- **CPU:** autotune plus 2-3 effects. Watch the serial console for `overflow`.
-- **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
-  Adafruit's use 1024. Try both if audio stutters.
-- **Render counter** (PROBE_RATE in autotune.py): the shifters always go through a mixer whose
-  voice level is a synthio LFO with scale 0. Its phase only moves when the mixer renders, so
+## Checked on a Ting
+- **Autotune and effects:** autotune with 2-3 effects runs on a Ting without `overflow`; the
+  serial console still prints `overflow` lines if a heavy preset can't keep up.
+- **Harmonizer:** autotune plus harmony voices runs on a Ting. On a busy pass the chain renders
+  about 1 ms after each mic block, right on the write, which is what the render counter below was
+  tuned for. Three harmony voices is four granular shifters: if a four-note chord
+  overflows, try `density` 1 on autotune.
+- **Vocoder:** builds and runs on CircuitPython 10 (`synthio`, `ulab` FFT). Timed on a Ting with
+  `import autotune; autotune.bench_vocoder()` at the REPL (Ctrl-C, Enter first): a band-pass Biquad
+  per band beats a Python-built waveform (1.5 cost 5 ms a block, 11 ms on a new note), and 11 bands
+  with no voice in the mix run clean where 8 or 7 bands beside the voice's shifter overflowed. So
+  Night call is 11 bands at 100%. Without `ifft` the vocoder falls back to a Biquad per band, and a
+  preset that fails to build falls back to clean and prints why.
+- **Render counter** (PROBE_RATE in autotune.py), timed on a Ting: the shifters always go through a
+  mixer whose voice level is a synthio LFO with scale 0. Its phase only moves when the mixer renders, so
   Python counts renders and knows which feed half the next one reads first (a RawSample flips
   halves on every pull and never resets to half 0). Each write puts the new block where the next
   render reads it second and the block before it where it reads first. The console prints
@@ -108,6 +96,39 @@ the file position, so it adds no audio work to the autotune pass.
   write due less than half a block before a burst waits for it, so every write has half a block
   of slack. The console prints `feed sync: … ; waits for it` or `writes ahead`. If a load still
   crackles, type `f` and Enter to flip it, and keep that load's line.
+- **Backwards samples:** off autotune, a double tap streams the WAV backwards from the drive:
+  autotune.BackwardsStream, a looped double-buffered RawSample of two 4096-sample halves (170 ms
+  each), refilled by the main loop by the clock, each half way through the other's turn, 512
+  samples at a time straight into the buffer (reading whole halves into fresh arrays made the mic
+  overflow every second or so). A sample that plays to the end prints `backwards: longest refill
+  N ms`; over a few ms there means the drive reads themselves are what stalls the mic. Until
+  1.7.1 it was turned round whole in RAM, which needs one unbroken block as big as the file: the
+  heap's biggest is 123 KB even at power-on, so a 3 s take (140 KB) never fit, and the copy
+  stalled the mic 100-430 ms (an overflow each time) and held its RAM while the slot was loaded
+  (Night call down to 24 KB free).
+- **Shake at rest:** 1.7 built the shake Echo at boot and left the accelerometer sampling, and
+  Night call and Squeeze for backups crackled with no sample playing. Since 1.7.1 nothing of the
+  shake exists until a sample plays, and boot memory matches 1.6.
+- **Record mode:** takes record and save on a Ting. The heap's biggest free block is about 123 KB
+  even at power-on, which is why backwards playback streams from the drive instead of turning a
+  take round in RAM.
+
+## Still to check on the device
+These run on the mic but haven't had a careful look yet, or their numbers are first guesses.
+- **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
+  the dead zone (0.25, or `"handle_dead_zone"` in config.json). The console prints "handle opens the
+  mic at 0.xx" on each squeeze; check it settles near the real click, then try dead zones from about
+  0.1 to 0.25 and keep whichever lets you sing with a light squeeze without nudging the effect.
+- **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for
+  flamming or a comb sound on the harmony; if so, the shifters may need one shared feed.
+- **Vocoder level:** `VOCODER_GAIN` (0.7) puts the vocoder about level with the voice in the
+  browser preview. Check it against the Clean spot on the mic, and that a loud voice doesn't hit
+  the synth's soft clip. Band levels step every 32 ms; listen for zipper noise on held vowels.
+- **Vocoder gate:** -50 dB (`VOCODER_GATE`) is a starting guess, tried only in the preview with a
+  synthetic hum. Check that the mic's own noise floor sits well under it, and that quiet singing
+  still opens it.
+- **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
+  Adafruit's use 1024. Try both if audio stutters.
 - **Recording after playback:** record mode stops the mic feeding the mixer, then calls
   `mic.record()`. Check that the first block of a take is not stale audio from before the squeeze
   (the 50 ms trim and 0.1 s settle should cover it).
@@ -136,20 +157,11 @@ the file position, so it adds no audio work to the autotune pass.
   play backwards); move the numbers to whatever feels natural and the editor's `TAP_HOLD_MS` /
   `DOUBLE_TAP_MS` to match. Timing uses keypad's own event timestamps, so a slow loop pass doesn't
   skew it.
-- **Backwards samples:** off autotune, a double tap streams the WAV backwards from the drive:
-  autotune.BackwardsStream, a looped double-buffered RawSample of two 4096-sample halves (170 ms
-  each), refilled by the main loop by the clock, each half way through the other's turn, 512
-  samples at a time straight into the buffer (reading whole halves into fresh arrays made the mic
-  overflow every second or so). A sample that plays to the end prints `backwards: longest refill
-  N ms`; over a few ms there means the drive reads themselves are what stalls the mic. Until
-  1.7.1 it was turned round whole in RAM, which needs one unbroken block as big as the file: the
-  heap's biggest is 123 KB even at power-on, so a 3 s take (140 KB) never fit, and the copy
-  stalled the mic 100-430 ms (an overflow each time) and held its RAM while the slot was loaded
-  (Night call down to 24 KB free). Listen for a stutter or repeated piece while one streams,
-  above all on a busy preset or when switching presets mid-sample (a main loop pass more than
-  85 ms late repeats a piece), and for a click where the halves meet. Through autotune it streams backwards from flash, a chunk at a time:
-  watch for `overflow` or crackle while a sample plays backwards on a harmonizer or vocoder preset,
-  where the pass is tightest.
+- **Backwards on busy presets:** listen for a stutter or repeated piece while a sample streams
+  backwards, above all on a busy preset or when switching presets mid-sample (a main loop pass more
+  than 85 ms late repeats a piece), and for a click where the halves meet. Through autotune it
+  streams backwards from flash, a chunk at a time: watch for `overflow` or crackle while a sample
+  plays backwards on a harmonizer or vocoder preset, where the pass is tightest.
 - **Accelerometer:** the board says only "accelerometer at 0x18". shake.py speaks the LIS3DH
   register set (WHO_AM_I 0x33, also LIS2DH12) and Silan's SC7A20 (0x11), which copies it. The
   console prints `shake: LIS3DH found` or `shake: no accelerometer (...)` with the id it read; an
