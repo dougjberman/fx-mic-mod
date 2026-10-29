@@ -180,7 +180,7 @@ the numbers to suit their own mic or hands.
   The console prints `page N of M, preset K of 4: name, … bytes free` on each change; check free
   memory with 16 presets against a 4-preset pack (each preset's JSON stays in RAM, its effects
   don't), and that TOP + MIDDLE still powers off.
-- **Auto-off** (1.1.0, not yet tried on a Ting): after `"auto_off_minutes"` unused (10 by
+- **Auto-off** (1.1.0, powers off on a Ting on batteries): after `"auto_off_minutes"` unused (10 by
   default) the mic drives POWER_HOLD low like TOP + MIDDLE, blinking every LED for the last 10 s.
   Check it powers off on batteries (try `"auto_off_minutes": 1`), that a press or squeeze in the
   blink keeps it on, and that it never fires plugged into a computer (`supervisor.runtime.usb_connected`).
