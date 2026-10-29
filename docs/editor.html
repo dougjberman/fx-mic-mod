@@ -506,6 +506,14 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   </div>
   </div>
 
+  <div class="group" id="power-group">
+  <div class="group-head">
+    <h2>Power</h2>
+    <p class="small muted">Saving the batteries when the mic is left on.</p>
+  </div>
+  <section class="panel" id="power" style="display:grid;gap:10px"></section>
+  </div>
+
   <section class="panel adv" style="gap:10px">
     <div class="row spread"><h2>config.json</h2><button class="btn small" id="btn-copy2">Copy</button></div>
     <pre class="out" id="json-out"></pre>
@@ -1285,16 +1293,18 @@ function renderMoreFx(){
     h("p",{class:"small muted"}, ...(on
       ? ["Your mic has no samples and no Record mode now. Instead it holds up to 16 effect presets, four pages of four, up in ", h("a",{href:"#effects"},"Effects presets"), ". The ", dw("mid"), " button turns the page, the white lights show which page you're on, and the ", dw("bot"), " button takes you to Clean. Your WAV files stay on the mic, and turning this off brings the samples back."]
       : ["Swap the samples and Record mode for more effects: four pages of four presets, sixteen in all. The ", dw("mid"), " button turns the page instead of picking a sample, and the white lights show the page."])));
+  $("#samples-panel").style.display = on ? "none" : "grid";  // hidden loses to the inline display
+}
+function renderPower(){
   // "auto_off_minutes": how long the mic sits unused on batteries before turning off, 0 never (firmware AUTO_OFF_MINUTES, 10)
   const off = typeof config.auto_off_minutes==="number" ? config.auto_off_minutes : 10;
-  $("#more-fx").append(
+  $("#power").replaceChildren(
     h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Turn off when inactive"),
       h("div",{class:"seg", role:"group", "aria-label":"Turn off when inactive"},
         [[5,"5 min"],[10,"10 min"],[30,"30 min"],[0,"Never"]].map(([v,l])=>h("button",{"aria-pressed":String(off===v), onclick:()=>{ if (v===10) delete config.auto_off_minutes; else config.auto_off_minutes=v; changed(); }}, l)))),
     h("p",{class:"small muted"}, off
       ? "Left alone on batteries for "+off+" minutes (no button, no squeeze, no knob, no sample playing), the mic turns itself off to save the batteries. Every light blinks for the last 10 seconds: press a button or squeeze the handle to keep it on. It stays on while plugged into a computer."
       : "The mic stays on until you turn it off (hold the orange and white buttons together), even if the batteries run flat.")));
-  $("#samples-panel").style.display = on ? "none" : "grid";  // hidden loses to the inline display
 }
 function setEffectsOnly(on){
   if (on){ config.effects_only = true; changed(); toast("Up to 16 presets now, four pages of four"); track("effects-only-on"); return; }
@@ -1320,6 +1330,7 @@ function shakeStyle(){
 }
 function renderSamples(){
   renderMoreFx();
+  renderPower();
   // "sample_fx": "preset" plays samples dry into the selected preset; "own" (or unset) gives each slot its own effects
   const through = String(config.sample_fx||"own").toLowerCase()==="preset";
   $("#sample-fx").replaceChildren(
