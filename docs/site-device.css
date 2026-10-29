@@ -1,5 +1,5 @@
 /* FX Mic or Ting: the switcher in the nav, the Ting palette, and the mic
- * drawings' colours. Loaded after each page's own <style>, so the Ting
+ * drawings' colors. Loaded after each page's own <style>, so the Ting
  * tokens below win over the page's light and dark ones. See site-device.js. */
 
 /* ---------- the switcher ---------- */
@@ -9,7 +9,7 @@
 .device-switch button:hover{color:var(--ink)}
 .device-switch button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 .device-switch button:focus-visible{outline:2px solid var(--accent,#e2541c);outline-offset:2px}
-/* each choice shows its button colours, top to bottom */
+/* each choice shows its button colors, top to bottom */
 .device-switch .sw{display:inline-block;width:8px;height:16px;border-radius:2px;flex:none;box-shadow:0 0 0 1px rgba(0,0,0,.25);
   background:linear-gradient(#f15a22 0 5px,var(--sw-gap) 5px 5.5px,var(--sw-mid) 5.5px 10.5px,var(--sw-gap) 10.5px 11px,var(--sw-bot) 11px)}
 .device-switch .sw{--sw-gap:rgba(0,0,0,.35)}
@@ -50,7 +50,7 @@
 :root[data-device="ting"] body{scrollbar-color:var(--line) var(--bg)}
 
 /* ---------- the mic drawings ---------- */
-/* Object colours are fixed per device; only the outline follows light and dark. */
+/* Object colors are fixed per device; only the outline follows light and dark. */
 .dev,.hero-dev{--handle:#f15a22; --b1:#f15a22; --b2:#eceae6; --b3:#d3d3d1; --relief:#9ea1a5; --relief2:#b8babd; --cable:#c9cacc; --ledoff:var(--grill)}
 :root[data-device="ting"] .dev,:root[data-device="ting"] .hero-dev{
   --case:#e9e8e2; --outline:#00513a; --handle:#00513a; --b1:#ff6a1f; --b2:#00513a; --b3:#e9e8e2;

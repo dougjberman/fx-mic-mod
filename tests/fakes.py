@@ -2,7 +2,7 @@
 
 Install with ``fakes.install(script)``; ``script`` drives buttons, the paddle
 and a fake clock. Only what code.py, config_loader.py, autotune.py and
-recorder.py touch is modelled.
+recorder.py touch is modeled.
 """
 
 import os

@@ -103,7 +103,7 @@ FEED_SYNC = True
 BLOCK_NS = 16000000
 
 
-ANALYSE_SPARE_NS = 1000000
+ANALYZE_SPARE_NS = 1000000
 
 
 
@@ -396,9 +396,9 @@ def detect_pitch_autocorrelation(buffer):
         return 0.0
 
 
-    centre = best_lag * _COARSE // _FINE
-    lo = max(2, centre - 2)
-    hi = min(_MAX_LAG_F + 1, centre + 3)
+    center = best_lag * _COARSE // _FINE
+    lo = max(2, center - 2)
+    hi = min(_MAX_LAG_F + 1, center + 3)
     vals = [diff(xf, lag, _WIN_F) for lag in range(lo, hi)]
     i = vals.index(min(vals))
     period = float(lo + i)
@@ -1322,18 +1322,18 @@ class Vocoder:
         ratio = (high / VOCODER_LOW_HZ) ** (1.0 / (bands - 1))
         half = math.sqrt(ratio)
         q = 1.0 / (half - 1.0 / half)
-        self.centres = []
+        self.centers = []
         self._bins = []
         self._k = []
         self._floor = []
         self._biquads = []
         mode = synthio.FilterMode.BAND_PASS
         for i in range(bands):
-            centre = VOCODER_LOW_HZ * ratio ** i
-            low, top = centre / half, centre * half
+            center = VOCODER_LOW_HZ * ratio ** i
+            low, top = center / half, center * half
             a = max(1, int(low * n / rate + 0.5))
             b = max(a + 1, int(top * n / rate + 0.5))
-            self.centres.append(centre)
+            self.centers.append(center)
             self._bins.append((a, b))
 
 
@@ -1343,10 +1343,10 @@ class Vocoder:
             if self.filters:
                 self.notes.append(synthio.Note(
                     frequency=110.0, waveform=self._table, amplitude=0.0,
-                    filter=synthio.Biquad(mode, frequency=centre, Q=q)))
+                    filter=synthio.Biquad(mode, frequency=center, Q=q)))
             else:
 
-                w0 = 2 * math.pi * centre / rate
+                w0 = 2 * math.pi * center / rate
                 alpha = math.sin(w0) / (2 * q)
                 self._biquads.append((alpha / (1 + alpha), -2 * math.cos(w0) / (1 + alpha),
                                       (1 - alpha) / (1 + alpha)))
@@ -1697,7 +1697,7 @@ class Autotune:
         self.idle_ms = 0.0
         self.outside_ms = 0.0
         self._ended = 0
-        self._analyse_ns = 0
+        self._analyze_ns = 0
 
 
 
@@ -2225,15 +2225,15 @@ class Autotune:
 
 
 
-            early = self._render_ahead() > self._analyse_ns + ANALYSE_SPARE_NS
+            early = self._render_ahead() > self._analyze_ns + ANALYZE_SPARE_NS
             if early:
-                self._analyse(block, speed_override)
+                self._analyze(block, speed_override)
             waited = self._wait_out_burst()
             self._feed_block(block)
             if not early:
-                self._analyse(block, speed_override)
+                self._analyze(block, speed_override)
         else:
-            self._analyse(block, speed_override)
+            self._analyze(block, speed_override)
         if self.sample is not None:
             reading = time.monotonic_ns()
             self._sample_ready = self.sample.read(self.sample_gain)
@@ -2246,7 +2246,7 @@ class Autotune:
         self.busy_ms = (self._ended - began - waited) / 1e6
         return got
 
-    def _analyse(self, block, speed_override=None):
+    def _analyze(self, block, speed_override=None):
         0
         began = time.monotonic_ns()
         window = self._window
@@ -2322,7 +2322,7 @@ class Autotune:
 
 
 
-        self._analyse_ns += (cost - self._analyse_ns) // 4
+        self._analyze_ns += (cost - self._analyze_ns) // 4
 
 
 

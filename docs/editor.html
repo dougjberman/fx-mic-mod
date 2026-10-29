@@ -177,7 +177,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .keys{display:flex;flex-wrap:wrap;gap:4px}
 .keys button{min-width:38px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;font-family:var(--f-mono);font-size:13px}
 .keys button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
-/* harmonizer chord picker: chips in labelled families, then the notes you'd get */
+/* harmonizer chord picker: chips in labeled families, then the notes you'd get */
 .chordset{display:grid;gap:10px}
 .chordfam{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr);gap:6px 12px;align-items:start}
 @media (max-width:560px){.chordfam{grid-template-columns:1fr}}
@@ -211,10 +211,10 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px;margin:0;dis
 .try-note{margin:4px 0 0}
 .levelrow{border-top:1px solid var(--line);padding-top:10px}
 .slot-player{gap:8px;margin-top:8px}
-.grey-key{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px 4px 6px;font-weight:600;font-size:13px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--ink)}
-.grey-key .dot{width:20px;height:20px;border-radius:50%;background:var(--btn-bot,#b5b6b8);border:1px solid rgba(0,0,0,.25);transition:transform .08s}
-.grey-key:active .dot{transform:scale(.88)}
-.grey-key:disabled{opacity:.45;cursor:default}
+.gray-key{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px 4px 6px;font-weight:600;font-size:13px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--ink)}
+.gray-key .dot{width:20px;height:20px;border-radius:50%;background:var(--btn-bot,#b5b6b8);border:1px solid rgba(0,0,0,.25);transition:transform .08s}
+.gray-key:active .dot{transform:scale(.88)}
+.gray-key:disabled{opacity:.45;cursor:default}
 @media (max-width:560px){.field{grid-template-columns:1fr}}
 .field > label{font-size:14px;font-weight:600}
 .squeeze{display:grid;gap:8px;padding:10px 12px;border-radius:10px;background:var(--panel-2);border:1px dashed var(--line)}
@@ -471,7 +471,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <div class="group" id="samples-group">
   <div class="group-head">
     <h2>Samples</h2>
-    <p class="small muted">The four sounds the <span data-dw="mid">white</span> button picks and the <span data-dw="bot">grey</span> button plays.</p>
+    <p class="small muted">The four sounds the <span data-dw="mid">white</span> button picks and the <span data-dw="bot">gray</span> button plays.</p>
     <button class="btn small ghost" data-collapse="samples-body" aria-expanded="true" aria-controls="samples-body">Collapse</button>
   </div>
   <div class="group-body" id="samples-body">
@@ -479,7 +479,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <section class="panel" id="samples-panel" style="display:grid;gap:12px">
     <div class="row spread"><h2>Sample slots · <span data-dw="mid">white</span> button</h2><button class="btn small" id="btn-load-samples" title="Copy 1.wav to 4.wav from the mic's drive into this page, so you can hear them here">Copy samples from the mic</button></div>
     <div class="small muted sample-help">
-      <p>There are two ways to get samples onto the mic: copy WAV files from your computer with the <a href="install.html#samples">sample copier on the Install page</a>, or record them on the mic itself, with no computer needed. On the mic, the <span data-dw="mid">white</span> button picks a slot and the <span data-dw="bot">grey</span> button plays it.</p>
+      <p>There are two ways to get samples onto the mic: copy WAV files from your computer with the <a href="install.html#samples">sample copier on the Install page</a>, or record them on the mic itself, with no computer needed. On the mic, the <span data-dw="mid">white</span> button picks a slot and the <span data-dw="bot">gray</span> button plays it.</p>
       <p>The WAVs below are only for hearing each slot here, with its effects. Choosing one doesn't change the mic, and Save to mic saves your settings, not the WAVs.</p>
       <p>To record a sample directly on the mic:</p>
       <ul>
@@ -489,7 +489,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
       </ul>
     </div>
     <div class="btn-guide">
-      <h3>The <span data-dw="bot">grey</span> button</h3>
+      <h3>The <span data-dw="bot">gray</span> button</h3>
       <table>
         <thead><tr><th scope="col">Do this</th><th scope="col">The sample</th></tr></thead>
         <tbody>
@@ -498,7 +498,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
           <tr><th scope="row">Double-tap</th><td>Plays backwards from the end. Hold the second tap to stop it when you let go.</td></tr>
         </tbody>
       </table>
-      <p class="small muted">Every press starts the sample straight away. A press counts as a hold once it lasts a quarter of a second, and a second tap within about a third of a second makes a double-tap. Use the <span data-dw="bot">grey</span> button on each slot below to try it here.</p>
+      <p class="small muted">Every press starts the sample straight away. A press counts as a hold once it lasts a quarter of a second, and a second tap within about a third of a second makes a double-tap. Use the <span data-dw="bot">gray</span> button on each slot below to try it here.</p>
     </div>
     <div id="sample-fx"></div>
     <div class="samples" id="samples"></div>
@@ -529,7 +529,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
 if (!window.track) window.track = function(){};  // site-stats.js missing
 "use strict";
 /* ------------------------------------------------------------------ *
- * Effect catalogue. Mirrors firmware/config_loader.py (EFFECTS) and
+ * Effect catalog. Mirrors firmware/config_loader.py (EFFECTS) and
  * CONFIG_FORMAT.md. `simple` params show in Simple mode; the rest only
  * in Advanced. `squeeze` params may be driven by the handle.
  * cost is a rough load estimate for the meter, set from a Ting at 24 kHz: autotune, distortion,
@@ -1055,7 +1055,7 @@ function harmonizerCard(p, fx){
   }
 
   if (!tune) body.append(h("p",{class:"small muted"}, "This preset has no autotune, so the harmony follows your voice as you sing it. Add autotune for chords that land in tune."));
-  if (["6/9","maj9","9","m9","7b9","7#9","maj7#11","11","m11","13","maj13","m13"].includes(chord)) body.append(h("p",{class:"small muted"}, "Three harmony voices is the most the mic runs, so bigger chords keep their colour notes and leave out the 5th."));
+  if (["6/9","maj9","9","m9","7b9","7#9","maj7#11","11","m11","13","maj13","m13"].includes(chord)) body.append(h("p",{class:"small muted"}, "Three harmony voices is the most the mic runs, so bigger chords keep their color notes and leave out the 5th."));
 
   // the notes you'd hear go last, as a readout under the controls
   if (preview) body.append(preview);
@@ -1153,7 +1153,7 @@ function effectCard(list, i, owner){
   }
   // unknown keys on a known effect: keep, show in advanced
   const extra = Object.keys(fx).filter(k=>!["effect","enabled"].includes(k) && !(k in def.params));
-  if (extra.length) body.append(h("p",{class:"small", style:"color:var(--warn)"}, "Unrecognised settings kept as is: "+extra.join(", ")));
+  if (extra.length) body.append(h("p",{class:"small", style:"color:var(--warn)"}, "Unrecognized settings kept as is: "+extra.join(", ")));
   return h("div",{class:"fx"+(fx.enabled===false?" off":"")}, fxHead(def.label, def.what, list, i, fx), body);
 }
 
@@ -1382,17 +1382,17 @@ async function playSlot(i, loop, reverse){
   trySend({samples: slotPayload(), sampleFx: config.sample_fx || "own"});
   trySend({play: {idx: i, loop, reverse: !!reverse}});
 }
-// The bottom (grey or white) button, as the firmware does it: plays at once; held TAP_HOLD_MS or
+// The bottom (gray or white) button, as the firmware does it: plays at once; held TAP_HOLD_MS or
 // more, letting go stops it; a press within DOUBLE_TAP_MS of a tap's press plays it backwards
 // (firmware TAP_HOLD_SECONDS / DOUBLE_TAP_SECONDS).
 const TAP_HOLD_MS = 250, DOUBLE_TAP_MS = 300;
 let autoPress = null, autoTap = null;
-function greyDown(i){
+function grayDown(i){
   const now = performance.now(), double = !!autoTap && autoTap.i === i && now - autoTap.at <= DOUBLE_TAP_MS;
   autoTap = null; autoPress = {i, at: now, double};
   playSlot(i, false, double);
 }
-function greyUp(i){
+function grayUp(i){
   if (!autoPress || autoPress.i !== i) return;
   const p = autoPress; autoPress = null;
   if (performance.now() - p.at >= TAP_HOLD_MS) trySend({stopSample:true});
@@ -1406,11 +1406,11 @@ function slotPlayer(i){
     catch(err){ toast("Couldn't read "+f.name+": "+err.message); }
   }});
   return h("div",{class:"row slot-player"},
-    h("button",{class:"grey-key", disabled: a ? null : true, title:"Works like the "+siteDevice.word("bot")+" button on the mic: tap, hold or double-tap",
+    h("button",{class:"gray-key", disabled: a ? null : true, title:"Works like the "+siteDevice.word("bot")+" button on the mic: tap, hold or double-tap",
       "aria-label":siteDevice.word("Bot")+" button: play slot "+(i+1),
-      onpointerdown:(e)=>{ e.preventDefault(); greyDown(i); }, onpointerup:()=>greyUp(i), onpointerleave:()=>greyUp(i), onpointercancel:()=>greyUp(i),
-      onkeydown:(e)=>{ if ((e.key===" "||e.key==="Enter") && !e.repeat){ e.preventDefault(); greyDown(i); } },
-      onkeyup:(e)=>{ if (e.key===" "||e.key==="Enter") greyUp(i); }}, h("span",{class:"dot","aria-hidden":"true"}), h("span",{"data-dw":"Bot"}, siteDevice.word("Bot"))),
+      onpointerdown:(e)=>{ e.preventDefault(); grayDown(i); }, onpointerup:()=>grayUp(i), onpointerleave:()=>grayUp(i), onpointercancel:()=>grayUp(i),
+      onkeydown:(e)=>{ if ((e.key===" "||e.key==="Enter") && !e.repeat){ e.preventDefault(); grayDown(i); } },
+      onkeyup:(e)=>{ if (e.key===" "||e.key==="Enter") grayUp(i); }}, h("span",{class:"dot","aria-hidden":"true"}), h("span",{"data-dw":"Bot"}, siteDevice.word("Bot"))),
     h("button",{class:"btn small ghost", disabled: a ? null : true, onclick:()=>{ trySend({stopSample:true}); }, "aria-label":"Stop slot "+(i+1)}, "Stop"),
     h("label",{class:"btn small ghost", for:id}, a ? "Choose another WAV" : "Choose a WAV"), input,
     h("span",{class:"small muted mono"}, a ? a.name+" \u00b7 "+a.sec.toFixed(1)+" s" : "No WAV to hear yet"));

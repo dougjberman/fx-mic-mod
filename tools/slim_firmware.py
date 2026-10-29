@@ -22,7 +22,7 @@ _STATEMENT_START = (tokenize.INDENT, tokenize.DEDENT, tokenize.NEWLINE, None)
 def slim(source):
     """``source`` with comments and docstrings removed, line for line.
 
-    The SPDX licence lines stay.
+    The SPDX license lines stay.
     """
     lines = source.splitlines(keepends=True)
     starts = [0]

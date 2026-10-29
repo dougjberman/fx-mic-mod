@@ -19,7 +19,7 @@
    animated mic. Setup steps and the button cheat sheet come after. Stacks on phones. */
 :root{
   --bg:#f4f5f6; --panel:#ffffff; --panel-2:#f0f1f3; --ink:#1b1c1e; --line:#dcdfe3;
-  --accent:#e2541c; --accent-ink:#ffffff; --accent-text:#ad3d0c; --accent-btn:#c4471a; --muted:#5c6066; --accent-soft:#fbe3d8; --led-r:#ff2d2d; --btn-white:#ffffff; --btn-grey:#b5b6b8;
+  --accent:#e2541c; --accent-ink:#ffffff; --accent-text:#ad3d0c; --accent-btn:#c4471a; --muted:#5c6066; --accent-soft:#fbe3d8; --led-r:#ff2d2d; --btn-white:#ffffff; --btn-gray:#b5b6b8;
   --voice:#9a9ea4; --grid:#e3e5e8;
   --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
   --f-body:"Archivo","Helvetica Neue",Arial,sans-serif;
@@ -28,11 +28,11 @@
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#171615; --panel:#211f1d; --panel-2:#1b1a18; --ink:#ece9e3; --muted:#a29d95; --line:#38342f;
-  --accent:#ff6a33; --accent-ink:#1a0d06; --accent-text:#ff6a33; --accent-btn:#ff6a33; --accent-soft:#3a2117; --btn-white:#ece9e3; --btn-grey:#7d7e80;
+  --accent:#ff6a33; --accent-ink:#1a0d06; --accent-text:#ff6a33; --accent-btn:#ff6a33; --accent-soft:#3a2117; --btn-white:#ece9e3; --btn-gray:#7d7e80;
   --voice:#7d7871; --grid:#2e2b27; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#171615; --panel:#211f1d; --panel-2:#1b1a18; --ink:#ece9e3; --muted:#a29d95; --line:#38342f;
-  --accent:#ff6a33; --accent-ink:#1a0d06; --accent-text:#ff6a33; --accent-btn:#ff6a33; --accent-soft:#3a2117; --btn-white:#ece9e3; --btn-grey:#7d7e80;
+  --accent:#ff6a33; --accent-ink:#1a0d06; --accent-text:#ff6a33; --accent-btn:#ff6a33; --accent-soft:#3a2117; --btn-white:#ece9e3; --btn-gray:#7d7e80;
   --voice:#7d7871; --grid:#2e2b27; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{margin:0}
@@ -130,7 +130,7 @@ code{font-family:var(--f-mono);font-size:.92em}
 .fact b{font-family:var(--f-display);font-size:22px;display:block;line-height:1.2}
 .fact span{font-size:14px;color:var(--muted)}
 
-/* device drawing: fixed object colours, the outline follows the theme */
+/* device drawing: fixed object colors, the outline follows the theme */
 .dev{--case:#e4e2de; --outline:#2f3236; --grill:#6c7176; --hole:#2a2d31; --orange:#f15a22; --bw:#eceae6; --bg2:#d3d3d1; --cable:#c9cacc}
 .dev .r.on{fill:#ff3b2f;filter:url(#glowR)}
 .dev .w.on{fill:#ffffff;filter:url(#glowW)}
@@ -171,7 +171,7 @@ code{font-family:var(--f-mono);font-size:.92em}
 .pair-keys .key{width:16px;height:16px}
 .key.orange{background:var(--accent);border-color:var(--accent)}
 .key.mid{background:var(--btn-white)}
-.key.bot{background:var(--btn-grey)}
+.key.bot{background:var(--btn-gray)}
 .key.handle{border-radius:10px;width:36px;height:22px;background:var(--accent);border-color:var(--accent)}
 .ctl b{display:block}
 .ctl span{font-size:14px;color:var(--muted)}
@@ -447,7 +447,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
           <g stroke="var(--outline)" stroke-width="1.2">
             <path class="hw" id="bOrange" d="M540 37 h20 a6 6 0 0 1 6 6 v18 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--b1)"/>
             <path class="hw" id="bWhite" d="M540 114 h20 a6 6 0 0 1 6 6 v20 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--b2)"/>
-            <path class="hw" id="bGrey" d="M540 242 h20 a6 6 0 0 1 6 6 v20 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--b3)"/>
+            <path class="hw" id="bGray" d="M540 242 h20 a6 6 0 0 1 6 6 v20 a6 6 0 0 1 -6 6 h-20 Z" fill="var(--b3)"/>
           </g>
           <circle class="ring" id="ringO" cx="562" cy="52" r="20"/>
           <circle class="ring" id="ringW" cx="562" cy="130" r="20"/>
@@ -478,9 +478,9 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
       </div>
       <ol class="steplist" id="steplist">
         <li><button type="button" data-step="0"><span class="n">1</span><b>Switch to record mode</b><span class="d">Keep tapping orange past your fourth preset. All four red lights start flashing together. The white lights show the slot you'll record into, counting up like the stock mic: one light for slot 1, two for slot 2.</span><span class="bar"><i></i></span></button></li>
-        <li><button type="button" data-step="1"><span class="n">2</span><b>Choose a slot</b><span class="d">Tap <span data-dw="mid">white</span> to pick another of the four slots. Tap <span data-dw="bot">grey</span> to hear what's in a slot now, before you replace it.</span><span class="bar"><i></i></span></button></li>
+        <li><button type="button" data-step="1"><span class="n">2</span><b>Choose a slot</b><span class="d">Tap <span data-dw="mid">white</span> to pick another of the four slots. Tap <span data-dw="bot">gray</span> to hear what's in a slot now, before you replace it.</span><span class="bar"><i></i></span></button></li>
         <li><button type="button" data-step="2"><span class="n">3</span><b>Squeeze and make some noise</b><span class="d">Hold the handle to record. The red lights stop flashing and go out one by one as your 4 seconds run down. Let go to stop. A light runs down the mic while the take saves to the slot, with the silence around your sound trimmed off.</span><span class="bar"><i></i></span></button></li>
-        <li><button type="button" data-step="3"><span class="n">4</span><b>Play it back, then keep it</b><span class="d">Tap <span data-dw="bot">grey</span> to hear your new sample. Not quite right? Squeeze again to redo it. Happy with it? Tap orange to leave record mode.</span><span class="bar"><i></i></span></button></li>
+        <li><button type="button" data-step="3"><span class="n">4</span><b>Play it back, then keep it</b><span class="d">Tap <span data-dw="bot">gray</span> to hear your new sample. Not quite right? Squeeze again to redo it. Happy with it? Tap orange to leave record mode.</span><span class="bar"><i></i></span></button></li>
       </ol>
     </div>
     <div class="facts-row">
@@ -537,7 +537,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
       <div class="controls" data-reveal-list>
         <div class="ctl"><span class="key orange" aria-hidden="true"></span><div><b>Orange: next preset</b><span>Clean → preset 1 to 4 → record mode → clean. The red lights count up like the stock mic: one for preset 1, all four for preset 4, all four flashing in record mode.</span></div></div>
         <div class="ctl"><span class="key mid" aria-hidden="true"></span><div><b><span data-dw="Mid">White</span>: next sample slot</b><span>Slots 1 to 4, counted on the white lights the same way.</span></div></div>
-        <div class="ctl"><span class="key bot" aria-hidden="true"></span><div><b><span data-dw="Bot">Grey</span>: play the sample</b><span>Tap to play, hold to play, or tap start/stop, set per slot in the editor.</span></div></div>
+        <div class="ctl"><span class="key bot" aria-hidden="true"></span><div><b><span data-dw="Bot">Gray</span>: play the sample</b><span>Tap to play, hold to play, or tap start/stop, set per slot in the editor.</span></div></div>
         <div class="ctl"><span class="key handle" aria-hidden="true"></span><div><b>Handle: squeeze to sing</b><span>Opens the mic. Presets can also use how far you squeeze: more autotune, a key change, a deeper pitch, more echo.</span></div></div>
         <div class="ctl"><span class="pair-keys" aria-hidden="true"><span class="key orange"></span><span class="key mid"></span></span><div><b>Orange and <span data-dw="mid">white</span> together, about 1 second</b><span>Turns the mic off.</span></div></div>
       </div>
@@ -690,7 +690,7 @@ footer{max-width:1120px;margin:56px auto 0;font-size:13px;color:var(--muted);bor
   const dev=document.getElementById("dev");
   const reds=[...dev.querySelectorAll(".led.r")], whites=[...dev.querySelectorAll(".led.w")];
   const handle=document.getElementById("handle"), waves=document.getElementById("waves"), spk=document.getElementById("spkWaves");
-  const btn={orange:document.getElementById("bOrange"), mid:document.getElementById("bWhite"), bot:document.getElementById("bGrey")};
+  const btn={orange:document.getElementById("bOrange"), mid:document.getElementById("bWhite"), bot:document.getElementById("bGray")};
   const ring={orange:document.getElementById("ringO"), mid:document.getElementById("ringW"), bot:document.getElementById("ringG"), handle:document.getElementById("ringH")};
   const chip=document.getElementById("recChip"), recTime=document.getElementById("recTime");
   const items=[...document.querySelectorAll("#steplist button")];

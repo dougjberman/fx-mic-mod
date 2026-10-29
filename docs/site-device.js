@@ -1,23 +1,23 @@
 /* Which mic the visitor has: the EP-2350 is sold as the FX Mic and as the
- * Ting, with the same insides and different colours:
+ * Ting, with the same insides and different colors:
  *
  *              FX Mic    Ting
  *   top        orange    orange
  *   middle     white     green
- *   bottom     grey      white
+ *   bottom     gray      white
  *   handle     orange    green
  *
  * Loaded in <head> so <html data-device> is set before the page paints. The
  * choice is remembered, and ?device=ting or ?device=fxmic in a link sets it.
  * Words that differ sit in <span data-dw="mid"> and the like; site-device.css
- * does the colours and swaps the drawings. */
+ * does the colors and swaps the drawings. */
 (function(){
   var KEY = "fx-mic-mod-device";
   var WORDS = {
     mid:    {fxmic: "white",  ting: "green"},
     Mid:    {fxmic: "White",  ting: "Green"},
-    bot:    {fxmic: "grey",   ting: "white"},
-    Bot:    {fxmic: "Grey",   ting: "White"},
+    bot:    {fxmic: "gray",   ting: "white"},
+    Bot:    {fxmic: "Gray",   ting: "White"},
     handle: {fxmic: "orange", ting: "green"},
     name:   {fxmic: "FX Mic", ting: "Ting"},
     NAME:   {fxmic: "FX MIC", ting: "TING"}
