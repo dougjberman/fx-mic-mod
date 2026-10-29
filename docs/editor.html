@@ -1288,8 +1288,8 @@ function renderMoreFx(){
   // "auto_off_minutes": how long the mic sits unused on batteries before turning off, 0 never (firmware AUTO_OFF_MINUTES, 10)
   const off = typeof config.auto_off_minutes==="number" ? config.auto_off_minutes : 10;
   $("#more-fx").append(
-    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Turn off when unused"),
-      h("div",{class:"seg", role:"group", "aria-label":"Turn off when unused"},
+    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Turn off when inactive"),
+      h("div",{class:"seg", role:"group", "aria-label":"Turn off when inactive"},
         [[5,"5 min"],[10,"10 min"],[30,"30 min"],[0,"Never"]].map(([v,l])=>h("button",{"aria-pressed":String(off===v), onclick:()=>{ if (v===10) delete config.auto_off_minutes; else config.auto_off_minutes=v; changed(); }}, l)))),
     h("p",{class:"small muted"}, off
       ? "Left alone on batteries for "+off+" minutes (no button, no squeeze, no knob, no sample playing), the mic turns itself off to save the batteries. Every light blinks for the last 10 seconds: press a button or squeeze the handle to keep it on. It stays on while plugged into a computer."
