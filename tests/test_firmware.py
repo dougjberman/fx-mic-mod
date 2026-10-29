@@ -910,6 +910,31 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertIn(["_Obj", "_Obj"], [list(p) for p in s["plays"]])
         self.assertIn("playing 1 (double tap: backwards)", out)
 
+    def test_top_and_middle_double_taps_go_back(self):
+        root, out, s = run("back")
+        spots = [l.split(" (")[0].split(",")[0] for l in out.splitlines()
+                 if l.startswith(("preset ", "record mode"))]
+        self.assertEqual(spots, [
+            "preset 0 of 2",                         # boot: clean
+            "preset 1 of 2: T-Pain",
+            "preset 2 of 2: Echo",                   # a double tap's first press steps on
+            "preset 0 of 2",                         # and its second goes back one from preset 1
+            "preset 1 of 2: T-Pain",
+            "record mode",                           # back one from clean: round the cycle
+            "preset 0 of 2",
+            "preset 2 of 2: Echo",                   # back one from record mode
+            "record mode",
+        ])
+        lines = [l for l in out.splitlines() if l.startswith("white LED")]
+        self.assertEqual(lines, [
+            "white LED 2",
+            "white LED 3", "white LED 1 (double tap: back one)",
+            "white LED 2", "white LED 4 (double tap: back one)",
+            "white LED 1", "white LED 3 (double tap: back one)",
+            "white LED 4", "white LED 2 (double tap: back one)",
+            "white LED 3",                                    # a third quick press steps on
+        ])
+
     def test_double_tap_streams_backwards(self):
         # straight from the drive, looped through a double buffer, and it
         # stops itself at the end
@@ -1148,14 +1173,14 @@ class DeviceScenarioTests(unittest.TestCase):
             "page 1 of 2, preset 0 of 4",     # boot: clean
             "page 1 of 2, preset 1 of 4: P1",
             "page 1 of 2, preset 2 of 4: P2",
-            "page 2 of 2, preset 2 of 2: P6",  # MIDDLE keeps the slot
-            "page 2 of 2, preset 1 of 2: P5",  # TOP goes round the page, no clean
+            "page 2 of 2, preset 1 of 2: P5",  # MIDDLE lands on the page's first preset
+            "page 2 of 2, preset 2 of 2: P6",
             "page 2 of 2, preset 0 of 2",      # BOTTOM: clean
             "page 1 of 2, preset 1 of 4: P1",  # MIDDLE from clean: page 1, preset 1
             "page 1 of 2, preset 2 of 4: P2",
             "page 1 of 2, preset 3 of 4: P3",
-            "page 2 of 2, preset 2 of 2: P6",  # a shorter page stops at its last
-            "page 1 of 2, preset 2 of 4: P2",
+            "page 2 of 2, preset 1 of 2: P5",  # a page turn lands on the first preset
+            "page 1 of 2, preset 1 of 4: P1",
             "page 1 of 2, preset 0 of 4",      # BOTTOM: clean (a second press does nothing)
             "page 1 of 2, preset 1 of 4: P1",  # TOP from clean: page 1, preset 1
         ])
@@ -1170,6 +1195,28 @@ class DeviceScenarioTests(unittest.TestCase):
                          [0, 1, 2, 0, 1, 2, 1, 0, 1])
         reds = [c for t, c in transitions(s["red_counts"]) if 2.4 < t < 2.9]
         self.assertEqual(reds[-1], 0)
+
+    def test_effects_only_double_taps_go_back(self):
+        config = {"name": "PAGES", "effects_only": True,
+                  "presets": [{"name": "P%d" % (i + 1), "list": []} for i in range(6)]}
+        root, out, s = run("pages_back", config)
+        picks = [l.split(" (")[0] for l in out.splitlines() if l.startswith("page ")]
+        self.assertEqual(picks, [
+            "page 1 of 2, preset 0 of 4",
+            "page 1 of 2, preset 1 of 4: P1",
+            "page 1 of 2, preset 2 of 4: P2",
+            "page 1 of 2, preset 3 of 4: P3",  # the double tap's first press steps on
+            "page 1 of 2, preset 1 of 4: P1",  # and its second goes back one from P2
+            "page 2 of 2, preset 1 of 2: P5",
+            "page 1 of 2, preset 1 of 4: P1",
+            "page 1 of 2, preset 1 of 4: P1",  # MIDDLE double tap: back a page from page 2
+            "page 2 of 2, preset 1 of 2: P5",
+            "page 2 of 2, preset 1 of 2: P5",  # back a page from page 1: round to page 2
+            "page 2 of 2, preset 2 of 2: P6",
+            "page 1 of 2, preset 1 of 4: P1",  # TOP then MIDDLE: no double tap
+        ])
+        self.assertEqual(out.count("TOP double tap"), 1)
+        self.assertEqual(out.count("MIDDLE double tap"), 2)
 
     def test_effects_only_caps_at_four_pages(self):
         config = {"effects_only": True,

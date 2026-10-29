@@ -471,7 +471,7 @@ pre.out{margin:0;overflow:auto;max-height:420px;font-family:var(--f-mono);font-s
   <div class="group" id="samples-group">
   <div class="group-head">
     <h2>Samples</h2>
-    <p class="small muted">The four sounds the <span data-dw="mid">white</span> button picks and the <span data-dw="bot">gray</span> button plays.</p>
+    <p class="small muted">The four sounds the <span data-dw="mid">white</span> button picks (double-tap it to go back one) and the <span data-dw="bot">gray</span> button plays.</p>
     <button class="btn small ghost" data-collapse="samples-body" aria-expanded="true" aria-controls="samples-body">Collapse</button>
   </div>
   <div class="group-body" id="samples-body">
@@ -811,8 +811,8 @@ function renderSlots(){
     ? ["Up to sixteen effect chains, in four pages of four. The orange button steps through a page, the ", dw("mid"), " button turns the page, and the ", dw("bot"), " button goes to Clean."]
     : ["The four effect chains the orange button steps through."]));
   $("#slots-help").replaceChildren(...(effectsOnly()
-    ? ["On the mic, the orange button steps through the presets of the page you're on, from the last back to the first. The ", dw("mid"), " button goes to the next page, staying on the same preset number, and from the last page back to page 1. The white lights count the page: two lit is page 2. The ", dw("bot"), " button goes to Clean (no effects, every light off), and it's the only way there; from Clean, the orange or ", dw("mid"), " button starts again at page 1, preset 1. Pages fill in order, so page 2 starts at the fifth preset. Copy a preset with \u29C9, then click Paste on another slot to replace it, or on the empty slot to add it."]
-    : ["The orange button steps through Clean, presets 1 to 4, then Record mode. Squeeze the handle to hear the mic. Copy a preset with \u29C9, then click Paste on another slot to replace it."]));
+    ? ["On the mic, the orange button steps through the presets of the page you're on, from the last back to the first. The ", dw("mid"), " button goes to the next page, starting at its first preset, and from the last page back to page 1. Double-tap either button to go back a preset or a page. The white lights count the page: two lit is page 2. The ", dw("bot"), " button goes to Clean (no effects, every light off), and it's the only way there; from Clean, the orange or ", dw("mid"), " button starts again at page 1, preset 1. Pages fill in order, so page 2 starts at the fifth preset. Copy a preset with \u29C9, then click Paste on another slot to replace it, or on the empty slot to add it."]
+    : ["The orange button steps through Clean, presets 1 to 4, then Record mode; double-tap it to go back one. Squeeze the handle to hear the mic. Copy a preset with \u29C9, then click Paste on another slot to replace it."]));
 }
 // A word that differs between the FX Mic and the Ting, kept up to date by site-device.js.
 function dw(key){ return h("span",{"data-dw":key}, siteDevice.word(key)); }

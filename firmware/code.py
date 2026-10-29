@@ -25,7 +25,8 @@ Controls:
                      configured presets plus a "clean" spot with no effects at
                      all, where the mic feeds the output directly. The LEDs
                      change at once; a press while a preset is still loading
-                     is ignored rather than stepping on again.
+                     is ignored rather than stepping on again. A double tap
+                     steps back one spot instead.
 * Handle          -- gates the mic output. It starts muted; the DAC un-mutes
                      while the paddle is squeezed and mutes again on release.
 * Volume knob     -- sets the DAC digital volume, continuously. Fully anti-
@@ -37,7 +38,7 @@ Controls:
 
 * MIDDLE side button -- steps to the next spot in the list of wave samples. the
                         current position in the list is indicated by the white
-                        LEDs.
+                        LEDs. A double tap steps back one sample instead.
 * BOTTOM side button -- plays the current sample wave file with any effects
                         configured for it. A tap plays it once, a hold
                         plays it until let go, and a double tap plays it
@@ -63,11 +64,10 @@ Effects-only mode (``"effects_only": true`` in config.json):
 
 * Up to 16 presets, in pages of four. TOP steps through the current page's
   presets (the red LEDs, as above), from the last back to the first; there is
-  no Clean spot in the cycle and no record mode.
-* MIDDLE steps to the next page, wrapping from the last back to page 1. The
-  white LEDs count the page: page 2 lights two, all four is page 4. The mic
-  stays on the same slot of the new page (or the page's last preset if the
-  page is shorter).
+  no Clean spot in the cycle and no record mode. A double tap steps back one.
+* MIDDLE steps to the next page, wrapping from the last back to page 1, and a
+  double tap steps back a page. The white LEDs count the page: page 2 lights
+  two, all four is page 4. The mic lands on the new page's first preset.
 * BOTTOM goes to Clean, with every LED dark. It is the only way there. From
   Clean, TOP or MIDDLE goes to preset 1 of page 1. The mic starts on Clean.
 
@@ -122,7 +122,7 @@ import shake
 # release that adds a config setting, add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number, and add a row for the release to
 # the "What's new" table on the install page, which its update check lists.
-FIRMWARE_VERSION = "1.1.0"
+FIRMWARE_VERSION = "1.2.0"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -263,6 +263,15 @@ HANDLE_DEAD_ZONE = 0.4
 TAP_HOLD_SECONDS = 0.25
 DOUBLE_TAP_SECONDS = 0.3
 
+# --- The preset and sample (or page) buttons ---
+
+# TOP and MIDDLE step forward at once on every press, so a single press never
+# waits to see if a second follows. A second press within DOUBLE_TAP_SECONDS
+# of the first is a double tap: it goes back one from where the first press
+# started, so the first press's step shows for a moment and is undone. The
+# second press often comes in while the first one's preset is still loading;
+# that is still a double tap, not one of the ignored repeat presses.
+
 # --- Record mode ---
 
 # Longest take, in seconds. Held in RAM (48 KB per second at 24 kHz) and
@@ -367,6 +376,16 @@ class DataContext:
         # (a shake.Roll). None with the shake off or no accelerometer.
         self.shake_fx = None
         self.shake_roll = None
+
+        # TOP and MIDDLE double taps: when the last single press of each
+        # began (None unless a second press could still make it a double
+        # tap), in ms as `event_ms()` gives them, and where it stepped from:
+        # (cycle position, page) for TOP and for MIDDLE in effects-only mode,
+        # the white LED otherwise.
+        self.top_tap_at = None
+        self.top_from = (0, 0)
+        self.middle_tap_at = None
+        self.middle_from = 1
 
         # Whether TOP / MIDDLE are currently held down, for the shutdown combo.
         self.top_held = False
@@ -517,6 +536,18 @@ def next_spot(ctx):
             ctx.page = 0
         return ctx.active % len(page_presets(ctx)) + 1 if PRESETS else 0
     return (ctx.active + 1) % (len(page_presets(ctx)) + 2)
+
+
+def prev_spot(ctx, spot):
+    """The cycle position a TOP double tap goes back to from ``spot``: the
+    one `next_spot()` would step from to get there. In effects-only mode,
+    clean goes back to page 1's last preset."""
+    if EFFECTS_ONLY:
+        if not spot:
+            ctx.page = 0
+            return len(page_presets(ctx)) if PRESETS else 0
+        return (spot - 2) % len(page_presets(ctx)) + 1
+    return (spot - 1) % (len(page_presets(ctx)) + 2)
 
 # Whether the code may write the drive (boot.py decides at power-on).
 CAN_RECORD = not storage.getmount("/").readonly
@@ -1200,17 +1231,81 @@ def now_ms():
     return int(time.monotonic() * 1000) & TICKS_MASK
 
 
-def pressed_while_loading(ctx, event):
-    """Whether a press came in while the last preset switch was loading.
-    Its LEDs were already lit, so such a press is a repeat of the one being
-    loaded, not a step on from it."""
-    return 0 < ms_between(event_ms(event), ctx.loaded_at) < TICKS_MASK // 2
+def pressed_while_loading(ctx, at):
+    """Whether a press at ``at`` came in while the last preset switch was
+    loading. Its LEDs were already lit, so such a press is a repeat of the one
+    being loaded, not a step on from it."""
+    return 0 < ms_between(at, ctx.loaded_at) < TICKS_MASK // 2
 
 
-def next_page(ctx):
-    """Handle a MIDDLE press in effects-only mode: step to the next page,
-    keeping the slot (or the page's last preset, on a shorter page). From
-    clean, go to page 1's first preset."""
+def double_tap(tap_at, at):
+    """Whether a press at ``at`` is the second of a double tap on a button
+    whose last single press began at ``tap_at`` (None: there is none)."""
+    return tap_at is not None and ms_between(tap_at, at) <= DOUBLE_TAP_SECONDS * 1000
+
+
+def press_top(ctx, at):
+    """Handle a TOP press: step to the next spot in the cycle, wrapping
+    around, or on a double tap back one from where the first press started.
+
+    :param ctx: The mutable state container.
+    :param at: When the button went down, from `event_ms()`.
+    """
+    if double_tap(ctx.top_tap_at, at):
+        ctx.top_tap_at = None
+        spot, ctx.page = ctx.top_from
+        print("TOP double tap: back one")
+        select_preset(ctx, prev_spot(ctx, spot))
+    elif pressed_while_loading(ctx, at):
+        print("TOP pressed while a preset loaded: ignored")
+    else:
+        ctx.top_tap_at = at
+        ctx.top_from = (ctx.active, ctx.page)
+        select_preset(ctx, next_spot(ctx))
+
+
+def press_middle(ctx, at):
+    """Handle a MIDDLE press outside effects-only mode: step to the next
+    sample slot (1 -> 2 -> 3 -> 4 -> 1 ..., exactly one white LED always lit),
+    or on a double tap back one from where the first press started.
+
+    :param ctx: The mutable state container.
+    :param at: When the button went down, from `event_ms()`.
+    """
+    slots = len(white_leds)
+    if double_tap(ctx.middle_tap_at, at):
+        ctx.middle_tap_at = None
+        ctx.white_active = (ctx.middle_from - 2) % slots + 1
+    else:
+        ctx.middle_tap_at = at
+        ctx.middle_from = ctx.white_active
+        ctx.white_active = ctx.white_active % slots + 1
+    update_white_leds(ctx)
+    load_selected_wave_sample(ctx)
+    print("white LED {}{}".format(ctx.white_active, "" if ctx.middle_tap_at is not None
+                                  else " (double tap: back one)"))
+
+
+def turn_page(ctx, at):
+    """Handle a MIDDLE press in effects-only mode: step to the next page, or
+    on a double tap back a page from where the first press started, landing
+    on the page's first preset. From clean, go to page 1's first preset (and
+    a double tap from clean to the last page's).
+
+    :param ctx: The mutable state container.
+    :param at: When the button went down, from `event_ms()`.
+    """
+    if double_tap(ctx.middle_tap_at, at):
+        ctx.middle_tap_at = None
+        spot, page = ctx.middle_from
+        if PAGES == 1:
+            return
+        ctx.page = (page - 1) % PAGES if spot else PAGES - 1
+        print("MIDDLE double tap: back a page")
+        select_preset(ctx, 1)
+        return
+    ctx.middle_tap_at = at
+    ctx.middle_from = (ctx.active, ctx.page)
     if not ctx.active:
         select_preset(ctx, next_spot(ctx))
         return
@@ -1218,7 +1313,7 @@ def next_page(ctx):
         print("one page of presets: add a fifth to get a second page")
         return
     ctx.page = (ctx.page + 1) % PAGES
-    select_preset(ctx, min(ctx.active, len(page_presets(ctx))))
+    select_preset(ctx, 1)
 
 
 def play_current_wave_sample(ctx, at=0):
@@ -1480,6 +1575,7 @@ print(
 print('handle travel = "$handle" block, 0.0 (out) to 1.0 (in)')
 print("auto-off: after {} min unused on batteries".format(AUTO_OFF_MINUTES)
       if AUTO_OFF_SECONDS else "auto-off: never")
+print("TOP / MIDDLE: two presses within {:.0f} ms = back one".format(DOUBLE_TAP_SECONDS * 1000))
 if not EFFECTS_ONLY:
     print("BOTTOM: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
         TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
@@ -1506,25 +1602,20 @@ try:
                 data_context.top_held = event.pressed
             if event.key_number == MIDDLE:
                 data_context.middle_held = event.pressed
-            if event.pressed and event.key_number == TOP and pressed_while_loading(data_context, event):
-                print("TOP pressed while a preset loaded: ignored")
-            elif event.pressed and event.key_number == TOP:
-                # Step to the next spot in the cycle, wrapping around. The
-                # cycle is two longer than the page's preset count: spot 0 is
-                # clean and the last spot is record mode (none in
+            # A press of another button between two taps breaks a double tap.
+            if event.pressed and event.key_number != TOP:
+                data_context.top_tap_at = None
+            if event.pressed and event.key_number != MIDDLE:
+                data_context.middle_tap_at = None
+            if event.pressed and event.key_number == TOP:
+                # The cycle is two longer than the page's preset count: spot
+                # 0 is clean and the last spot is record mode (none in
                 # effects-only mode).
-                select_preset(data_context, next_spot(data_context))
+                press_top(data_context, event_ms(event))
             if event.pressed and event.key_number == MIDDLE and EFFECTS_ONLY:
-                next_page(data_context)
+                turn_page(data_context, event_ms(event))
             elif event.pressed and event.key_number == MIDDLE:
-                # Cycle the white LEDs: 1 -> 2 -> 3 -> 4 -> 1 ...
-                # No empty spot; exactly one is always lit.
-                data_context.white_active = (
-                    data_context.white_active % len(white_leds) + 1
-                )
-                update_white_leds(data_context)
-                load_selected_wave_sample(data_context)
-                print("white LED {}".format(data_context.white_active))
+                press_middle(data_context, event_ms(event))
             if event.pressed and event.key_number == BOTTOM and EFFECTS_ONLY:
                 # The way back to clean, and the only one.
                 if data_context.active:

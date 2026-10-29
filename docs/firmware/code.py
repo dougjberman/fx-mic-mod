@@ -122,7 +122,7 @@ import shake
 
 
 
-FIRMWARE_VERSION = "1.1.0"
+FIRMWARE_VERSION = "1.2.0"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 
@@ -267,6 +267,15 @@ DOUBLE_TAP_SECONDS = 0.3
 
 
 
+
+
+
+
+
+
+
+
+
 RECORD_SECONDS = 4
 
 RECORD_BLINK_SECONDS = 0.25
@@ -367,6 +376,16 @@ class DataContext:
 
         self.shake_fx = None
         self.shake_roll = None
+
+
+
+
+
+
+        self.top_tap_at = None
+        self.top_from = (0, 0)
+        self.middle_tap_at = None
+        self.middle_from = 1
 
 
         self.top_held = False
@@ -517,6 +536,18 @@ def next_spot(ctx):
             ctx.page = 0
         return ctx.active % len(page_presets(ctx)) + 1 if PRESETS else 0
     return (ctx.active + 1) % (len(page_presets(ctx)) + 2)
+
+
+def prev_spot(ctx, spot):
+    0
+
+
+    if EFFECTS_ONLY:
+        if not spot:
+            ctx.page = 0
+            return len(page_presets(ctx)) if PRESETS else 0
+        return (spot - 2) % len(page_presets(ctx)) + 1
+    return (spot - 1) % (len(page_presets(ctx)) + 2)
 
 
 CAN_RECORD = not storage.getmount("/").readonly
@@ -1200,17 +1231,81 @@ def now_ms():
     return int(time.monotonic() * 1000) & TICKS_MASK
 
 
-def pressed_while_loading(ctx, event):
+def pressed_while_loading(ctx, at):
     0
 
 
-    return 0 < ms_between(event_ms(event), ctx.loaded_at) < TICKS_MASK // 2
+    return 0 < ms_between(at, ctx.loaded_at) < TICKS_MASK // 2
 
 
-def next_page(ctx):
+def double_tap(tap_at, at):
+    0
+
+    return tap_at is not None and ms_between(tap_at, at) <= DOUBLE_TAP_SECONDS * 1000
+
+
+def press_top(ctx, at):
     0
 
 
+
+
+
+    if double_tap(ctx.top_tap_at, at):
+        ctx.top_tap_at = None
+        spot, ctx.page = ctx.top_from
+        print("TOP double tap: back one")
+        select_preset(ctx, prev_spot(ctx, spot))
+    elif pressed_while_loading(ctx, at):
+        print("TOP pressed while a preset loaded: ignored")
+    else:
+        ctx.top_tap_at = at
+        ctx.top_from = (ctx.active, ctx.page)
+        select_preset(ctx, next_spot(ctx))
+
+
+def press_middle(ctx, at):
+    0
+
+
+
+
+
+
+    slots = len(white_leds)
+    if double_tap(ctx.middle_tap_at, at):
+        ctx.middle_tap_at = None
+        ctx.white_active = (ctx.middle_from - 2) % slots + 1
+    else:
+        ctx.middle_tap_at = at
+        ctx.middle_from = ctx.white_active
+        ctx.white_active = ctx.white_active % slots + 1
+    update_white_leds(ctx)
+    load_selected_wave_sample(ctx)
+    print("white LED {}{}".format(ctx.white_active, "" if ctx.middle_tap_at is not None
+                                  else " (double tap: back one)"))
+
+
+def turn_page(ctx, at):
+    0
+
+
+
+
+
+
+
+    if double_tap(ctx.middle_tap_at, at):
+        ctx.middle_tap_at = None
+        spot, page = ctx.middle_from
+        if PAGES == 1:
+            return
+        ctx.page = (page - 1) % PAGES if spot else PAGES - 1
+        print("MIDDLE double tap: back a page")
+        select_preset(ctx, 1)
+        return
+    ctx.middle_tap_at = at
+    ctx.middle_from = (ctx.active, ctx.page)
     if not ctx.active:
         select_preset(ctx, next_spot(ctx))
         return
@@ -1218,7 +1313,7 @@ def next_page(ctx):
         print("one page of presets: add a fifth to get a second page")
         return
     ctx.page = (ctx.page + 1) % PAGES
-    select_preset(ctx, min(ctx.active, len(page_presets(ctx))))
+    select_preset(ctx, 1)
 
 
 def play_current_wave_sample(ctx, at=0):
@@ -1480,6 +1575,7 @@ print(
 print('handle travel = "$handle" block, 0.0 (out) to 1.0 (in)')
 print("auto-off: after {} min unused on batteries".format(AUTO_OFF_MINUTES)
       if AUTO_OFF_SECONDS else "auto-off: never")
+print("TOP / MIDDLE: two presses within {:.0f} ms = back one".format(DOUBLE_TAP_SECONDS * 1000))
 if not EFFECTS_ONLY:
     print("BOTTOM: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
         TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
@@ -1506,25 +1602,20 @@ try:
                 data_context.top_held = event.pressed
             if event.key_number == MIDDLE:
                 data_context.middle_held = event.pressed
-            if event.pressed and event.key_number == TOP and pressed_while_loading(data_context, event):
-                print("TOP pressed while a preset loaded: ignored")
-            elif event.pressed and event.key_number == TOP:
+
+            if event.pressed and event.key_number != TOP:
+                data_context.top_tap_at = None
+            if event.pressed and event.key_number != MIDDLE:
+                data_context.middle_tap_at = None
+            if event.pressed and event.key_number == TOP:
 
 
 
-
-                select_preset(data_context, next_spot(data_context))
+                press_top(data_context, event_ms(event))
             if event.pressed and event.key_number == MIDDLE and EFFECTS_ONLY:
-                next_page(data_context)
+                turn_page(data_context, event_ms(event))
             elif event.pressed and event.key_number == MIDDLE:
-
-
-                data_context.white_active = (
-                    data_context.white_active % len(white_leds) + 1
-                )
-                update_white_leds(data_context)
-                load_selected_wave_sample(data_context)
-                print("white LED {}".format(data_context.white_active))
+                press_middle(data_context, event_ms(event))
             if event.pressed and event.key_number == BOTTOM and EFFECTS_ONLY:
 
                 if data_context.active:
