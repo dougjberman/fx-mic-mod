@@ -12,7 +12,7 @@ Presets use Adafruit's `config.json` format, plus `autotune`, `harmonizer` and `
 
 > **Status:** firmware 1.0.0, running day to day on a real Ting. The desktop tests use stand-in
 > hardware modules, and [`tools/ting_test.py`](#testing-on-a-real-mic) checks a real mic over USB.
-> See [firmware/NOTES.md](firmware/NOTES.md) for what has been checked on the device and what is still open.
+> See [firmware/NOTES.md](firmware/NOTES.md) for what has been checked on the device, with tuning notes.
 
 ## Controls
 

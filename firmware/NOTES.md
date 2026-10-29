@@ -182,7 +182,3 @@ the numbers to suit their own mic or hands.
   don't), and that TOP + MIDDLE still powers off.
 - **LFO-driven speed/humanize:** only plain numbers and `"$handle"` are verified. A synthio LFO
   only updates while a native effect ticks it.
-
-## Still to check on the device
-- **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for
-  flamming or a comb sound on the harmony; if so, the shifters may need one shared feed.
