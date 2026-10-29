@@ -49,8 +49,10 @@ WHO_AM_I = 0x0F
 KNOWN_IDS = {0x33: "LIS3DH", 0x11: "SC7A20"}
 CTRL_REG1 = 0x20
 CTRL_REG4 = 0x23
-# 100 Hz, x, y and z on.
+# 100 Hz, x, y and z on; and asleep (no data rate), which it stays in
+# until a sample plays, so at rest the shake costs nothing at all.
 REG1_100HZ = 0x57
+REG1_ASLEEP = 0x07
 # Block data update (a read never mixes two samples' bytes), +-4 g.
 REG4_4G = 0x90
 # The six output bytes, x y z low then high; the top bit asks for the
@@ -87,8 +89,19 @@ class Accelerometer:
         if who not in KNOWN_IDS:
             raise ValueError("unknown accelerometer id 0x{:02x}".format(who))
         self.name = KNOWN_IDS[who]
-        self._write(CTRL_REG1, REG1_100HZ)
         self._write(CTRL_REG4, REG4_4G)
+        self.awake = True
+        self.sleep()
+
+    def wake(self):
+        if not self.awake:
+            self._write(CTRL_REG1, REG1_100HZ)
+            self.awake = True
+
+    def sleep(self):
+        if self.awake:
+            self._write(CTRL_REG1, REG1_ASLEEP)
+            self.awake = False
 
     def _lock(self):
         # The codec shares the bus; its driver locks it too.
@@ -141,12 +154,30 @@ class ShakeMeter:
             print("shake: no accelerometer ({})".format(error))
             return None
 
+    @property
+    def awake(self):
+        return self.accelerometer.awake
+
     def reset(self):
+        """Still again, and the accelerometer back to sleep."""
         self.amount = 0.0
         self.read_at = None
+        self.gravity = None
+        try:
+            self.accelerometer.sleep()
+        except OSError:
+            pass
 
     def update(self, now):
-        """Read the accelerometer if it's due, and return ``amount``."""
+        """Read the accelerometer if it's due, and return ``amount``. The
+        first call wakes it, and reads from its first sample, 10 ms on."""
+        if not self.accelerometer.awake:
+            try:
+                self.accelerometer.wake()
+            except OSError:
+                return self.amount
+            self.read_at = now
+            return self.amount
         if self.read_at is not None and now - self.read_at < READ_SECONDS:
             return self.amount
         dt = READ_SECONDS if self.read_at is None else min(now - self.read_at, 0.2)
@@ -276,8 +307,8 @@ class ShakeFX:
         )
         self.on = False
 
-    def play(self, source):
-        self.echo.play(source)
+    def play(self, source, loop=False):
+        self.echo.play(source, loop=loop)
         return self.echo
 
     def stop(self):

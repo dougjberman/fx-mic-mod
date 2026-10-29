@@ -119,7 +119,7 @@ import shake
 # release that adds a config setting, add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number, and add a row for the release to
 # the "What's new" table on the install page, which its update check lists.
-FIRMWARE_VERSION = "1.7"
+FIRMWARE_VERSION = "1.7.1"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -344,10 +344,9 @@ class DataContext:
         self.press_at = 0
         self.press_double = False
         self.tap_at = None
-        # The loaded sample backwards, built on its first double tap (a
-        # RawSample and the array it plays), or None.
-        self.reversed_wave = None
-        self.reversed_data = None
+        # The loaded sample backwards, streamed from the drive (an
+        # autotune.BackwardsStream), built on its first double tap, or None.
+        self.backwards_stream = None
         # The shake effect on samples the native mixer plays (a
         # shake.ShakeFX), and the stutter roll for samples autotune streams
         # (a shake.Roll). None with the shake off or no accelerometer.
@@ -1027,9 +1026,9 @@ def unload_wave_sample(ctx):
         ctx.current_wave.deinit()
         ctx.current_wave = None
     ctx.current_source = None
-    if ctx.reversed_wave is not None:
-        ctx.reversed_wave.deinit()
-    ctx.reversed_wave = ctx.reversed_data = None
+    if ctx.backwards_stream is not None:
+        ctx.backwards_stream.deinit()
+        ctx.backwards_stream = None
     ctx.tap_at = None
     gc.collect()
 
@@ -1066,27 +1065,37 @@ def set_gate(ctx, held):
     ctx.gate_open = held
 
 
-def reversed_wave(ctx):
-    """The loaded sample backwards, as a RawSample, or None if it won't fit
-    in RAM. Built on the first double tap and kept until the sample is
-    unloaded. (Through autotune the sample streams backwards from flash
-    instead, so this isn't needed there.)"""
-    if ctx.reversed_wave is None:
-        began = time.monotonic()
+def backwards_stream(ctx):
+    """The loaded sample backwards, as a BackwardsStream from the drive, or
+    None if it can't be had. Built on the first double tap and kept until
+    the sample is unloaded. (Through autotune the sample streams backwards
+    inside autotune instead, so this isn't needed there.)
+
+    Turning a sample round whole in RAM needs one unbroken block as big as
+    the file, and the heap's biggest is about 120 KB even at power-on, so a
+    3 s take never fit; the copy also stalled the mic for up to half a
+    second and held its RAM while the slot was loaded. The stream starts at
+    once and takes 16 KB whatever the length."""
+    if ctx.backwards_stream is None:
         try:
-            gc.collect()
-            ctx.reversed_data = autotune.load_reversed(ctx.current_path)
-            ctx.reversed_wave = audiocore.RawSample(
-                ctx.reversed_data, channel_count=1, sample_rate=RATE
-            )
+            ctx.backwards_stream = autotune.BackwardsStream(ctx.current_path, RATE)
         except (MemoryError, OSError, ValueError) as error:
-            ctx.reversed_data = None
             print("{} can't play backwards: {}".format(ctx.current_path, error))
-            gc.collect()
             return None
-        print("{} turned round in {:.0f} ms".format(
-            ctx.current_path, (time.monotonic() - began) * 1000))
-    return ctx.reversed_wave
+    return ctx.backwards_stream
+
+
+def shake_echo(ctx):
+    """The shake Echo for samples on the native mixer, built the first time
+    one plays, or None with the shake off (or out of RAM for it)."""
+    global shake_meter
+    if ctx.shake_fx is None and shake_meter is not None:
+        try:
+            ctx.shake_fx = shake.ShakeFX(SHAKE, FORMAT)
+        except (ValueError, MemoryError) as error:
+            print("shake: off ({})".format(error))
+            shake_meter = None
+    return ctx.shake_fx
 
 
 def start_sample(ctx, reverse=False):
@@ -1098,22 +1107,29 @@ def start_sample(ctx, reverse=False):
         except (OSError, ValueError) as error:
             print("{} can't go through autotune: {}".format(ctx.current_path, error))
         return
-    wave = reversed_wave(ctx) if reverse else None
-    if wave is None:
-        wave = ctx.current_wave
+    if ctx.backwards_stream is not None:
+        ctx.backwards_stream.stop()
+    stream = backwards_stream(ctx) if reverse else None
+    wave = ctx.current_wave
+    # The stream is a looped double buffer, refilled by the main loop, that
+    # stops itself at the end; whatever plays it straight loops it.
+    looped = stream is not None
+    if looped:
+        stream.start(time.monotonic())
+        wave = stream.sample
     source = wave
     if ctx.current_effects:
         # Re-hand the wave to the head of the chain so the press restarts it.
-        ctx.current_effects[0].play(wave)
+        ctx.current_effects[0].play(wave, loop=looped)
         source = ctx.current_source
-    if ctx.shake_fx is not None:
+    if shake_echo(ctx) is not None:
         # Last on the sample's way to the mixer: its own effects, or the
         # preset it plays into, take the shaken sound.
-        source = ctx.shake_fx.play(source)
+        source = ctx.shake_fx.play(source, loop=looped and source is wave)
     try:
         voice = sample_voice(ctx)
         voice.level = SAMPLE_LEVEL
-        voice.play(source)
+        voice.play(source, loop=looped and source is wave)
     except (ValueError, RuntimeError) as error:
         print("{} can't play: {}".format(ctx.current_path, error))
 
@@ -1125,6 +1141,8 @@ def stop_current_wave(ctx):
     sample_voice(ctx).stop()
     if ctx.shake_fx is not None:
         ctx.shake_fx.stop()
+    if ctx.backwards_stream is not None:
+        ctx.backwards_stream.stop()
     ctx.wave_playing = False
 
 
@@ -1134,9 +1152,8 @@ TICKS_MASK = (1 << 29) - 1
 
 def event_ms(event):
     """When a button event happened, in ms: keypad's own timestamp, taken
-    when it scanned the button, so a loop pass that ran long (a sample
-    being turned round, or a 16 ms autotune block) doesn't blur a tap
-    into a hold."""
+    when it scanned the button, so a loop pass that ran long (a preset
+    switch, or a 16 ms autotune block) doesn't blur a tap into a hold."""
     stamp = getattr(event, "timestamp", None)
     if stamp is None:
         stamp = int(time.monotonic() * 1000)
@@ -1332,14 +1349,12 @@ def learn_handle_open():
 data_context = DataContext()
 data_context.paddle_held = paddle.value
 if shake_meter is not None:
-    try:
-        data_context.shake_fx = shake.ShakeFX(SHAKE, FORMAT)
-        data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
-        print("shake: {} found; shaking a sample plays it {}".format(
-            shake_meter.name, shake.describe(SHAKE)))
-    except (ValueError, MemoryError) as error:
-        print("shake: off ({})".format(error))
-        shake_meter = None
+    # The shake Echo is built the first time a sample plays on the native
+    # mixer (see shake_echo()), so until then the shake holds no RAM: free
+    # memory at boot, and so how often gc runs, stays as it was before 1.7.
+    data_context.shake_roll = shake.Roll(SHAKE, autotune.BLOCK_SIZE / RATE)
+    print("shake: {} found; shaking a sample plays it {}".format(
+        shake_meter.name, shake.describe(SHAKE)))
 
 # Initialize the first LED and load its wave file.
 update_white_leds(data_context)
@@ -1510,25 +1525,37 @@ try:
                 vocoder.squeeze(not vocoder.squeezed)
                 print("vocoder chord now {}".format(vocoder.chord or "one note"))
 
-        # Shaking the mic while a sample plays. The accelerometer is read
-        # only then. Through autotune the sample streams from the drive, so
-        # the shake rolls it there; elsewhere it mixes in the shake Echo.
-        # (A tap leaves wave_playing set after the sample ends; the Echo's
-        # own playing goes off then, but a shake under way rings out.)
+        # A long sample playing backwards streams from the drive: refill
+        # its buffer, and stop it once it has played through.
+        stream = data_context.backwards_stream
+        if stream is not None and stream.playing and not stream.update(now):
+            stop_current_wave(data_context)
+            print("{} backwards: longest refill {:.1f} ms".format(
+                data_context.current_path, stream.worst_ms))
+
+        # Shaking the mic while a sample plays. The accelerometer is awake
+        # and read only then, and goes back to sleep after. Through autotune
+        # the sample streams from the drive, so the shake rolls it there;
+        # elsewhere it mixes in the shake Echo. (A tap leaves wave_playing
+        # set after the sample ends; the Echo's own playing goes off then,
+        # but a shake under way rings out.) With no sample playing this is
+        # two attribute checks a pass.
         if shake_meter is not None:
             tune = data_context.tune
             shake_fx = data_context.shake_fx
             if THROUGH_PRESET and tune is not None:
                 if tune.sample is not None:
                     data_context.shake_roll.update(tune.sample, shake_meter.update(now), now)
-                elif shake_meter.amount:
+                elif shake_meter.awake:
                     shake_meter.reset()
                     data_context.shake_roll.reset()
-            elif data_context.wave_playing and (shake_fx.echo.playing or shake_fx.on):
+            elif (shake_fx is not None and data_context.wave_playing
+                  and (shake_fx.echo.playing or shake_fx.on)):
                 shake_fx.set_amount(shake_meter.update(now))
-            elif shake_meter.amount or shake_fx.on:
+            elif shake_meter.awake:
                 shake_meter.reset()
-                shake_fx.set_amount(0.0)
+                if shake_fx is not None:
+                    shake_fx.set_amount(0.0)
 
         # Reading .overflow clears it. It trips if the playback side falls
         # behind the mic, which should not happen here. Both run off the
