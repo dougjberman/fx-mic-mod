@@ -65,6 +65,8 @@ Through an autotune preset the sample is streamed by Python, so there the shake 
 the file position, so it adds no audio work to the autotune pass.
 
 ## Checked on a Ting
+Everything below runs well on a Ting. The tuning notes stay with each item, for anyone moving
+the numbers to suit their own mic or hands.
 - **Autotune and effects:** autotune with 2-3 effects runs on a Ting without `overflow`; the
   serial console still prints `overflow` lines if a heavy preset can't keep up.
 - **Harmonizer:** autotune plus harmony voices runs on a Ting. On a busy pass the chain renders
@@ -112,20 +114,15 @@ the file position, so it adds no audio work to the autotune pass.
 - **Record mode:** takes record and save on a Ting. The heap's biggest free block is about 123 KB
   even at power-on, which is why backwards playback streams from the drive instead of turning a
   take round in RAM.
-
-## Still to check on the device
-These run on the mic but haven't had a careful look yet, or their numbers are first guesses.
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
   the dead zone (0.25, or `"handle_dead_zone"` in config.json). The console prints "handle opens the
   mic at 0.xx" on each squeeze; check it settles near the real click, then try dead zones from about
   0.1 to 0.25 and keep whichever lets you sing with a light squeeze without nudging the effect.
-- **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for
-  flamming or a comb sound on the harmony; if so, the shifters may need one shared feed.
 - **Vocoder level:** `VOCODER_GAIN` (0.7) puts the vocoder about level with the voice in the
   browser preview. Check it against the Clean spot on the mic, and that a loud voice doesn't hit
   the synth's soft clip. Band levels step every 32 ms; listen for zipper noise on held vowels.
-- **Vocoder gate:** -50 dB (`VOCODER_GATE`) is a starting guess, tried only in the preview with a
-  synthetic hum. Check that the mic's own noise floor sits well under it, and that quiet singing
+- **Vocoder gate:** -50 dB (`VOCODER_GATE`) started as a guess from the preview's synthetic hum.
+  If it misbehaves, check that the mic's own noise floor sits well under it, and that quiet singing
   still opens it.
 - **Buffer size:** autotune presets build effects with 512-byte buffers (`AUTOTUNE_FORMAT`),
   Adafruit's use 1024. Try both if audio stutters.
@@ -166,7 +163,8 @@ These run on the mic but haven't had a careful look yet, or their numbers are fi
   register set (WHO_AM_I 0x33, also LIS2DH12) and Silan's SC7A20 (0x11), which copies it. The
   console prints `shake: LIS3DH found` or `shake: no accelerometer (...)` with the id it read; an
   unknown id leaves the shake off and everything else as it was.
-- **Shake feel:** `SHAKE_FROM_G` (0.5 g off gravity) and `SHAKE_FULL_G` (1.6 g) are guesses. Check that
+- **Shake feel:** `SHAKE_FROM_G` (0.5 g off gravity) and `SHAKE_FULL_G` (1.6 g) started as guesses. If it
+  misfires, check that
   pressing BOTTOM, squeezing and walking around don't trigger it, and that a firm shake reaches
   full. The amount rises in 30 ms and falls over 250 ms (`ATTACK_SECONDS` / `RELEASE_SECONDS`).
 - **Shake CPU:** a freq_shift Echo writes longest / shortest buffer cells per output sample (7 at
@@ -184,3 +182,7 @@ These run on the mic but haven't had a careful look yet, or their numbers are fi
   don't), and that TOP + MIDDLE still powers off.
 - **LFO-driven speed/humanize:** only plain numbers and `"$handle"` are verified. A synthio LFO
   only updates while a native effect ticks it.
+
+## Still to check on the device
+- **Harmonizer feeds:** several `RawSample`s over one buffer must stay in step. Listen for
+  flamming or a comb sound on the harmony; if so, the shifters may need one shared feed.
