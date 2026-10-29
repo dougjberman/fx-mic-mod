@@ -103,6 +103,17 @@ SCENARIOS = {
     # preset; TOP -> record mode. MIDDLE -> sample 2; twice quickly -> sample
     # 1; twice again -> round to 4; twice again -> 3; three quick presses ->
     # back to 2, then on to 3.
+    # Presets that take 1 s to load (FAKE_LOAD_SECONDS): TOP -> preset 1,
+    # whose load runs to 1.75 s; meanwhile TOP once and then twice quickly
+    # -> on to 2, then back one from there: preset 1 again, so nothing
+    # loads. Then TOP -> 2 (loading to 3.75 s) and TOP twice more meanwhile
+    # -> on to 3 and 4, and only 4 loads.
+    "queued": dict(
+        presses=tap(0.5, TOP) + tap(1.0, TOP) + tap(1.4, TOP) + tap(1.6, TOP)
+        + tap(2.5, TOP) + tap(3.0, TOP) + tap(3.4, TOP),
+        paddle=[],
+        end=6.0,
+    ),
     "back": dict(
         presses=tap(0.5, TOP) + tap(1.0, TOP) + tap(1.2, TOP) + tap(2.0, TOP) + tap(2.2, TOP)
         + tap(3.0, TOP) + tap(3.2, TOP) + tap(4.0, TOP)
@@ -206,10 +217,27 @@ def track_rolls():
     return rolls
 
 
+def slow_loads(script):
+    """FAKE_LOAD_SECONDS: every preset takes that long to build, as a
+    vocoder does on a Ting, so presses queue up meanwhile."""
+    seconds = float(os.environ.get("FAKE_LOAD_SECONDS", "0"))
+    if not seconds:
+        return
+    import config_loader
+    create = config_loader.create_preset
+
+    def slow(*args, **kwargs):
+        script.clock.sleep(seconds)
+        return create(*args, **kwargs)
+
+    config_loader.create_preset = slow
+
+
 def main():
     name, root = sys.argv[1], sys.argv[2]
     script = fakes.Script(**SCENARIOS[name])
     fakes.install(script, root)
+    slow_loads(script)
     vocoders = track_vocoders()
     rolls = track_rolls()
     env = runpy.run_path(os.path.join(FIRMWARE, "code.py"), run_name="__main__")

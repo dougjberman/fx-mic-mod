@@ -191,6 +191,9 @@ the numbers to suit their own mic or hands.
   the hold time plus 0.2 s after the press. The console prints `TOP double tap: back one` /
   `MIDDLE double tap: back a page` / `white LED N (double tap: back one)`. Check relaxed double taps
   register, that two deliberate forward presses don't come out as a back step, and that the delay
-  doesn't feel laggy; try 0.15 to 0.25. TOP + MIDDLE to power off now steps neither.
+  doesn't feel laggy; try 0.15 to 0.25. TOP + MIDDLE to power off now steps neither. Presses
+  made while a preset loads are no longer ignored: keypad's timestamps time them as made, so
+  steps and double taps during a load chain from each other and only where they end up loads
+  (tests: `FAKE_LOAD_SECONDS`).
 - **LFO-driven speed/humanize:** only plain numbers and `"$handle"` are verified. A synthio LFO
   only updates while a native effect ticks it.

@@ -932,6 +932,20 @@ class DeviceScenarioTests(unittest.TestCase):
             "white LED 3",                                    # a third quick press steps on
         ])
 
+    def test_presses_during_a_load_count(self):
+        config = {"name": "SLOW", "presets": [{"name": "P%d" % (i + 1), "list": []} for i in range(4)]}
+        root, out, s = run("queued", config, env={"FAKE_LOAD_SECONDS": "1"})
+        spots = [l.split(" (")[0] for l in out.splitlines() if l.startswith("preset ")]
+        self.assertEqual(spots, [
+            "preset 0 of 4",
+            "preset 1 of 4: P1",
+            # a tap and a double tap while P1 loads: on one and back one, so
+            # P1 stays and nothing else loads
+            "preset 2 of 4: P2",
+            "preset 4 of 4: P4",  # two taps while P2 loads: P3 is skipped
+        ])
+        self.assertNotIn("ignored", out)
+
     def test_double_tap_streams_backwards(self):
         # straight from the drive, looped through a double buffer, and it
         # stops itself at the end
@@ -1175,7 +1189,7 @@ class DeviceScenarioTests(unittest.TestCase):
             "page 2 of 2, preset 0 of 2",      # BOTTOM: clean
             "page 1 of 2, preset 1 of 4: P1",  # MIDDLE from clean: page 1, preset 1
             "page 1 of 2, preset 2 of 4: P2",
-            "page 1 of 2, preset 3 of 4: P3",
+            # TOP to P3, then MIDDLE before P3 loads: P3 is never built
             "page 2 of 2, preset 1 of 2: P5",  # a page turn lands on the first preset
             "page 1 of 2, preset 1 of 4: P1",
             "page 1 of 2, preset 0 of 4",      # BOTTOM: clean (a second press does nothing)
@@ -1206,8 +1220,9 @@ class DeviceScenarioTests(unittest.TestCase):
             "page 2 of 2, preset 1 of 2: P5",
             "page 1 of 2, preset 1 of 4: P1",  # MIDDLE double tap: back a page from page 2
             "page 2 of 2, preset 1 of 2: P5",  # back a page from page 1: round to page 2
-            "page 2 of 2, preset 2 of 2: P6",
-            "page 1 of 2, preset 1 of 4: P1",  # TOP then MIDDLE: no double tap
+            # TOP to P6, then MIDDLE before it loads: no double tap, and only
+            # where they end up is loaded
+            "page 1 of 2, preset 1 of 4: P1",
         ])
         self.assertEqual(out.count("TOP double tap"), 1)
         self.assertEqual(out.count("MIDDLE double tap"), 2)

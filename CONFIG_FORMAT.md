@@ -25,7 +25,8 @@ parameter names and types) and the demo `config.json`.
 - TOP and MIDDLE step when let go, not when pressed, so holding TOP + MIDDLE to power off steps
   neither. The LEDs show the next spot as soon as the button comes up, and the step itself waits
   200 ms (`BUTTON_GAP_SECONDS`): a press in that time is a double tap, and goes back one preset,
-  sample or page at once instead, without loading the next one first.
+  sample or page at once instead, without loading the next one first. Presses made while a preset
+  is loading all count once it has loaded, and only the preset they end up on is loaded.
 - `effects_only` **(new, optional)**: `true` trades the samples and record mode for
   more presets, up to 16 in pages of four. Page 1 is presets 1 to 4, page 2 is 5 to 8, and so on;
   the number of pages is however many the presets fill. TOP steps through the current page's

@@ -384,8 +384,8 @@ class DataContext:
 
 
 
-        self.pending_step = None
 
+        self.pending_step = None
 
 
         self.skip_release = set()
@@ -393,9 +393,6 @@ class DataContext:
 
         self.top_held = False
         self.middle_held = False
-
-
-        self.loaded_at = 0
 
         self.combo_since = None
 
@@ -800,7 +797,6 @@ def select_preset(ctx, index):
 
 
     mic.overflow
-    ctx.loaded_at = now_ms()
 
 
 
@@ -1234,36 +1230,44 @@ def now_ms():
     return int(time.monotonic() * 1000) & TICKS_MASK
 
 
-def pressed_while_loading(ctx, at):
+def moves_samples(key):
+    0
+
+    return key == MIDDLE and not EFFECTS_ONLY
+
+
+def step_here(ctx, key):
+    0
+
+    return ctx.white_active if moves_samples(key) else (ctx.page, ctx.active)
+
+
+def step_target(ctx, key, origin, back=False):
     0
 
 
-    return 0 < ms_between(at, ctx.loaded_at) < TICKS_MASK // 2
-
-
-def step_target(ctx, key, back=False):
-    0
-
-
-    page = ctx.page
-    if key == MIDDLE and not EFFECTS_ONLY:
+    if moves_samples(key):
         slots = len(white_leds)
-        return (ctx.white_active - 2) % slots + 1 if back else ctx.white_active % slots + 1
+        return (origin - 2) % slots + 1 if back else origin % slots + 1
+    here = ctx.page, ctx.active
+    ctx.page, ctx.active = origin
     if key == TOP:
         spot = prev_spot(ctx, ctx.active) if back else next_spot(ctx)
         target = (ctx.page, spot)
     elif not ctx.active:
 
         target = (PAGES - 1 if back else 0, 1)
+    elif PAGES == 1:
+        target = origin
     else:
         target = ((ctx.page + (-1 if back else 1)) % PAGES, 1)
-    ctx.page = page
+    ctx.page, ctx.active = here
     return target
 
 
 def show_step(ctx, key, target):
     0
-    if key == MIDDLE and not EFFECTS_ONLY:
+    if moves_samples(key):
         lit = target
     else:
         page, spot = target
@@ -1279,31 +1283,31 @@ def show_step(ctx, key, target):
 
 def take_step(ctx, key, target, back=False):
     0
-    if key == MIDDLE and not EFFECTS_ONLY:
+    if target == step_here(ctx, key):
+        if key == MIDDLE and EFFECTS_ONLY:
+            print("one page of presets: add a fifth to get a second page")
+        update_red_leds(ctx)
+        update_white_leds(ctx)
+        return
+    if moves_samples(key):
         ctx.white_active = target
         update_white_leds(ctx)
         load_selected_wave_sample(ctx)
         print("white LED {}{}".format(target, " (double tap: back one)" if back else ""))
         return
-    page, spot = target
-    if key == MIDDLE and ctx.active and PAGES == 1:
-        print("one page of presets: add a fifth to get a second page")
-        update_red_leds(ctx)
-        update_white_leds(ctx)
-        return
     if back:
         print("{} double tap: back {}".format("TOP" if key == TOP else "MIDDLE",
                                               "one" if key == TOP else "a page"))
-    ctx.page = page
+    ctx.page, spot = target
     select_preset(ctx, spot)
 
 
 def finish_pending_step(ctx):
     0
     if ctx.pending_step is not None:
-        key, _, target = ctx.pending_step
+        key, _, target, _, back = ctx.pending_step
         ctx.pending_step = None
-        take_step(ctx, key, target)
+        take_step(ctx, key, target, back)
 
 
 def press_step_button(ctx, key, at):
@@ -1314,25 +1318,33 @@ def press_step_button(ctx, key, at):
 
 
 
+
+
+
+
+
     if ctx.top_held and ctx.middle_held:
 
         ctx.skip_release.update((TOP, MIDDLE))
-        ctx.pending_step = None
+        if ctx.pending_step is not None:
+            ctx.pending_step = None
+            update_red_leds(ctx)
+            update_white_leds(ctx)
         return
     pending = ctx.pending_step
-    if pending is not None and pending[0] == key and ms_between(pending[1], at) <= BUTTON_GAP_SECONDS * 1000:
-        ctx.pending_step = None
-        ctx.skip_release.add(key)
-        target = step_target(ctx, key, back=True)
+    if pending is not None and moves_samples(pending[0]) != moves_samples(key):
+        finish_pending_step(ctx)
+    elif pending is not None and pending[0] == key and ms_between(pending[1], at) <= BUTTON_GAP_SECONDS * 1000:
+
+
+        origin = pending[3]
+        target = step_target(ctx, key, origin, back=True)
         show_step(ctx, key, target)
-        take_step(ctx, key, target, back=True)
-        return
-    finish_pending_step(ctx)
-    if pressed_while_loading(ctx, at):
-        print("{} pressed while a preset loaded: ignored".format("TOP" if key == TOP else "MIDDLE"))
+        ctx.pending_step = [key, (at - int(BUTTON_GAP_SECONDS * 1000) - 1) & TICKS_MASK,
+                            target, origin, True]
         ctx.skip_release.add(key)
-    else:
-        ctx.skip_release.discard(key)
+        return
+    ctx.skip_release.discard(key)
 
 
 def release_step_button(ctx, key, at):
@@ -1347,9 +1359,11 @@ def release_step_button(ctx, key, at):
     if key in ctx.skip_release:
         ctx.skip_release.discard(key)
         return
-    target = step_target(ctx, key)
+    pending = ctx.pending_step
+    origin = pending[2] if pending is not None else step_here(ctx, key)
+    target = step_target(ctx, key, origin)
     show_step(ctx, key, target)
-    ctx.pending_step = [key, at, target]
+    ctx.pending_step = [key, at, target, origin, False]
 
 
 def play_current_wave_sample(ctx, at=0):
