@@ -104,7 +104,7 @@ the numbers to suit their own mic or hands.
   samples at a time straight into the buffer (reading whole halves into fresh arrays made the mic
   overflow every second or so). A sample that plays to the end prints `backwards: longest refill
   N ms`; over a few ms there means the drive reads themselves are what stalls the mic. Until
-  1.7.1 it was turned round whole in RAM, which needs one unbroken block as big as the file: the
+  1.7.1 it was turned around whole in RAM, which needs one unbroken block as big as the file: the
   heap's biggest is 123 KB even at power-on, so a 3 s take (140 KB) never fit, and the copy
   stalled the mic 100-430 ms (an overflow each time) and held its RAM while the slot was loaded
   (Night call down to 24 KB free).
@@ -113,7 +113,7 @@ the numbers to suit their own mic or hands.
   shake exists until a sample plays, and boot memory matches 1.6.
 - **Record mode:** takes record and save on a Ting. The heap's biggest free block is about 123 KB
   even at power-on, which is why backwards playback streams from the drive instead of turning a
-  take round in RAM.
+  take around in RAM.
 - **Handle start point:** `"$handle"` reads 0 until the squeeze passes the paddle click plus
   the dead zone (0.25, or `"handle_dead_zone"` in config.json). The console prints "handle opens the
   mic at 0.xx" on each squeeze; check it settles near the real click, then try dead zones from about
