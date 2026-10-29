@@ -21,12 +21,13 @@ switching tears the old chain down and builds the new one.
 
 Controls:
 
-* TOP side button -- steps to the next spot in the preset cycle. The cycle is the
-                     configured presets plus a "clean" spot with no effects at
-                     all, where the mic feeds the output directly. The LEDs
-                     change at once; a press while a preset is still loading
-                     is ignored rather than stepping on again. A double tap
-                     steps back one spot instead.
+* TOP side button -- steps to the next spot in the preset cycle when let go.
+                     The cycle is the configured presets plus a "clean" spot
+                     with no effects at all, where the mic feeds the output
+                     directly. The LEDs change on letting go, and the preset
+                     loads BUTTON_GAP_SECONDS later; a press in that time is a
+                     double tap and steps back one spot instead. A press
+                     while a preset is still loading is ignored.
 * Handle          -- gates the mic output. It starts muted; the DAC un-mutes
                      while the paddle is squeezed and mutes again on release.
 * Volume knob     -- sets the DAC digital volume, continuously. Fully anti-
@@ -38,7 +39,8 @@ Controls:
 
 * MIDDLE side button -- steps to the next spot in the list of wave samples. the
                         current position in the list is indicated by the white
-                        LEDs. A double tap steps back one sample instead.
+                        LEDs. Like TOP, it steps when let go, and a double
+                        tap steps back one sample instead.
 * BOTTOM side button -- plays the current sample wave file with any effects
                         configured for it. A tap plays it once, a hold
                         plays it until let go, and a double tap plays it
@@ -265,12 +267,14 @@ DOUBLE_TAP_SECONDS = 0.3
 
 # --- The preset and sample (or page) buttons ---
 
-# TOP and MIDDLE step forward at once on every press, so a single press never
-# waits to see if a second follows. A second press within DOUBLE_TAP_SECONDS
-# of the first is a double tap: it goes back one from where the first press
-# started, so the first press's step shows for a moment and is undone. The
-# second press often comes in while the first one's preset is still loading;
-# that is still a double tap, not one of the ignored repeat presses.
+# TOP and MIDDLE step forward when let go, not when pressed, so holding one
+# does nothing until it comes up, and TOP + MIDDLE held to power off steps
+# neither. On letting go the LEDs show the next spot at once, and the step
+# itself waits BUTTON_GAP_SECONDS: a press in that time is a double tap, and
+# goes back one at once instead (lights and all), so nothing is loaded twice.
+# A press that came in while a preset was still loading is ignored, and so
+# is its release.
+BUTTON_GAP_SECONDS = 0.2
 
 # --- Record mode ---
 
@@ -377,15 +381,14 @@ class DataContext:
         self.shake_fx = None
         self.shake_roll = None
 
-        # TOP and MIDDLE double taps: when the last single press of each
-        # began (None unless a second press could still make it a double
-        # tap), in ms as `event_ms()` gives them, and where it stepped from:
-        # (cycle position, page) for TOP and for MIDDLE in effects-only mode,
-        # the white LED otherwise.
-        self.top_tap_at = None
-        self.top_from = (0, 0)
-        self.middle_tap_at = None
-        self.middle_from = 1
+        # A TOP or MIDDLE step waiting out BUTTON_GAP_SECONDS after its
+        # release: [button, when it was let go (as `event_ms()` gives it),
+        # where it steps to (see `step_target()`)], or None.
+        self.pending_step = None
+        # The TOP / MIDDLE presses whose release does nothing: the second
+        # press of a double tap, one pressed while a preset loaded, and both
+        # of a TOP + MIDDLE combo.
+        self.skip_release = set()
 
         # Whether TOP / MIDDLE are currently held down, for the shutdown combo.
         self.top_held = False
@@ -1238,82 +1241,115 @@ def pressed_while_loading(ctx, at):
     return 0 < ms_between(at, ctx.loaded_at) < TICKS_MASK // 2
 
 
-def double_tap(tap_at, at):
-    """Whether a press at ``at`` is the second of a double tap on a button
-    whose last single press began at ``tap_at`` (None: there is none)."""
-    return tap_at is not None and ms_between(tap_at, at) <= DOUBLE_TAP_SECONDS * 1000
-
-
-def press_top(ctx, at):
-    """Handle a TOP press: step to the next spot in the cycle, wrapping
-    around, or on a double tap back one from where the first press started.
-
-    :param ctx: The mutable state container.
-    :param at: When the button went down, from `event_ms()`.
-    """
-    if double_tap(ctx.top_tap_at, at):
-        ctx.top_tap_at = None
-        spot, ctx.page = ctx.top_from
-        print("TOP double tap: back one")
-        select_preset(ctx, prev_spot(ctx, spot))
-    elif pressed_while_loading(ctx, at):
-        print("TOP pressed while a preset loaded: ignored")
+def step_target(ctx, key, back=False):
+    """Where a TOP or MIDDLE press steps to from here, on (or ``back`` one
+    for a double tap), without stepping: (page, cycle position) for TOP and
+    for MIDDLE in effects-only mode, else the white LED (sample slot)."""
+    page = ctx.page
+    if key == MIDDLE and not EFFECTS_ONLY:
+        slots = len(white_leds)
+        return (ctx.white_active - 2) % slots + 1 if back else ctx.white_active % slots + 1
+    if key == TOP:
+        spot = prev_spot(ctx, ctx.active) if back else next_spot(ctx)
+        target = (ctx.page, spot)
+    elif not ctx.active:
+        # A page turn from clean: page 1 (or a double tap's last page).
+        target = (PAGES - 1 if back else 0, 1)
     else:
-        ctx.top_tap_at = at
-        ctx.top_from = (ctx.active, ctx.page)
-        select_preset(ctx, next_spot(ctx))
+        target = ((ctx.page + (-1 if back else 1)) % PAGES, 1)
+    ctx.page = page
+    return target
 
 
-def press_middle(ctx, at):
-    """Handle a MIDDLE press outside effects-only mode: step to the next
-    sample slot (1 -> 2 -> 3 -> 4 -> 1 ..., exactly one white LED always lit),
-    or on a double tap back one from where the first press started.
-
-    :param ctx: The mutable state container.
-    :param at: When the button went down, from `event_ms()`.
-    """
-    slots = len(white_leds)
-    if double_tap(ctx.middle_tap_at, at):
-        ctx.middle_tap_at = None
-        ctx.white_active = (ctx.middle_from - 2) % slots + 1
+def show_step(ctx, key, target):
+    """Light the LEDs for ``target`` ahead of the step itself."""
+    if key == MIDDLE and not EFFECTS_ONLY:
+        lit = target
     else:
-        ctx.middle_tap_at = at
-        ctx.middle_from = ctx.white_active
-        ctx.white_active = ctx.white_active % slots + 1
-    update_white_leds(ctx)
-    load_selected_wave_sample(ctx)
-    print("white LED {}{}".format(ctx.white_active, "" if ctx.middle_tap_at is not None
-                                  else " (double tap: back one)"))
-
-
-def turn_page(ctx, at):
-    """Handle a MIDDLE press in effects-only mode: step to the next page, or
-    on a double tap back a page from where the first press started, landing
-    on the page's first preset. From clean, go to page 1's first preset (and
-    a double tap from clean to the last page's).
-
-    :param ctx: The mutable state container.
-    :param at: When the button went down, from `event_ms()`.
-    """
-    if double_tap(ctx.middle_tap_at, at):
-        ctx.middle_tap_at = None
-        spot, page = ctx.middle_from
-        if PAGES == 1:
+        page, spot = target
+        if spot != RECORD_SPOT:
+            for index, _led in enumerate(red_leds):
+                _led.value = index < spot
+        if not EFFECTS_ONLY:
             return
-        ctx.page = (page - 1) % PAGES if spot else PAGES - 1
-        print("MIDDLE double tap: back a page")
-        select_preset(ctx, 1)
+        lit = page + 1 if spot else 0
+    for index, _led in enumerate(white_leds):
+        _led.value = index < lit
+
+
+def take_step(ctx, key, target, back=False):
+    """Step to ``target`` (from `step_target()`)."""
+    if key == MIDDLE and not EFFECTS_ONLY:
+        ctx.white_active = target
+        update_white_leds(ctx)
+        load_selected_wave_sample(ctx)
+        print("white LED {}{}".format(target, " (double tap: back one)" if back else ""))
         return
-    ctx.middle_tap_at = at
-    ctx.middle_from = (ctx.active, ctx.page)
-    if not ctx.active:
-        select_preset(ctx, next_spot(ctx))
-        return
-    if PAGES == 1:
+    page, spot = target
+    if key == MIDDLE and ctx.active and PAGES == 1:
         print("one page of presets: add a fifth to get a second page")
+        update_red_leds(ctx)
+        update_white_leds(ctx)
         return
-    ctx.page = (ctx.page + 1) % PAGES
-    select_preset(ctx, 1)
+    if back:
+        print("{} double tap: back {}".format("TOP" if key == TOP else "MIDDLE",
+                                              "one" if key == TOP else "a page"))
+    ctx.page = page
+    select_preset(ctx, spot)
+
+
+def finish_pending_step(ctx):
+    """Take the step waiting after a TOP or MIDDLE release, if any."""
+    if ctx.pending_step is not None:
+        key, _, target = ctx.pending_step
+        ctx.pending_step = None
+        take_step(ctx, key, target)
+
+
+def press_step_button(ctx, key, at):
+    """Handle a TOP or MIDDLE press: the second press of a double tap goes
+    back one at once; any other press waits for its release.
+
+    :param ctx: The mutable state container.
+    :param key: TOP or MIDDLE.
+    :param at: When the button went down, from `event_ms()`.
+    """
+    if ctx.top_held and ctx.middle_held:
+        # TOP + MIDDLE: the power-off combo steps neither.
+        ctx.skip_release.update((TOP, MIDDLE))
+        ctx.pending_step = None
+        return
+    pending = ctx.pending_step
+    if pending is not None and pending[0] == key and ms_between(pending[1], at) <= BUTTON_GAP_SECONDS * 1000:
+        ctx.pending_step = None
+        ctx.skip_release.add(key)
+        target = step_target(ctx, key, back=True)
+        show_step(ctx, key, target)
+        take_step(ctx, key, target, back=True)
+        return
+    finish_pending_step(ctx)
+    if pressed_while_loading(ctx, at):
+        print("{} pressed while a preset loaded: ignored".format("TOP" if key == TOP else "MIDDLE"))
+        ctx.skip_release.add(key)
+    else:
+        ctx.skip_release.discard(key)
+
+
+def release_step_button(ctx, key, at):
+    """Handle a TOP or MIDDLE release: light the next spot's LEDs, and leave
+    the step to `finish_pending_step()` once BUTTON_GAP_SECONDS pass with no
+    second press.
+
+    :param ctx: The mutable state container.
+    :param key: TOP or MIDDLE.
+    :param at: When the button came up, from `event_ms()`.
+    """
+    if key in ctx.skip_release:
+        ctx.skip_release.discard(key)
+        return
+    target = step_target(ctx, key)
+    show_step(ctx, key, target)
+    ctx.pending_step = [key, at, target]
 
 
 def play_current_wave_sample(ctx, at=0):
@@ -1575,7 +1611,8 @@ print(
 print('handle travel = "$handle" block, 0.0 (out) to 1.0 (in)')
 print("auto-off: after {} min unused on batteries".format(AUTO_OFF_MINUTES)
       if AUTO_OFF_SECONDS else "auto-off: never")
-print("TOP / MIDDLE: two presses within {:.0f} ms = back one".format(DOUBLE_TAP_SECONDS * 1000))
+print("TOP / MIDDLE: step on letting go; pressed again within {:.0f} ms = back one".format(
+    BUTTON_GAP_SECONDS * 1000))
 if not EFFECTS_ONLY:
     print("BOTTOM: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
         TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
@@ -1602,20 +1639,14 @@ try:
                 data_context.top_held = event.pressed
             if event.key_number == MIDDLE:
                 data_context.middle_held = event.pressed
-            # A press of another button between two taps breaks a double tap.
-            if event.pressed and event.key_number != TOP:
-                data_context.top_tap_at = None
-            if event.pressed and event.key_number != MIDDLE:
-                data_context.middle_tap_at = None
-            if event.pressed and event.key_number == TOP:
-                # The cycle is two longer than the page's preset count: spot
-                # 0 is clean and the last spot is record mode (none in
-                # effects-only mode).
-                press_top(data_context, event_ms(event))
-            if event.pressed and event.key_number == MIDDLE and EFFECTS_ONLY:
-                turn_page(data_context, event_ms(event))
-            elif event.pressed and event.key_number == MIDDLE:
-                press_middle(data_context, event_ms(event))
+            if event.key_number in (TOP, MIDDLE):
+                if event.pressed:
+                    press_step_button(data_context, event.key_number, event_ms(event))
+                else:
+                    release_step_button(data_context, event.key_number, event_ms(event))
+            elif event.pressed:
+                # BOTTOM acts on the preset or sample a step just picked.
+                finish_pending_step(data_context)
             if event.pressed and event.key_number == BOTTOM and EFFECTS_ONLY:
                 # The way back to clean, and the only one.
                 if data_context.active:
@@ -1625,6 +1656,10 @@ try:
             if event.released and event.key_number == BOTTOM and not EFFECTS_ONLY:
                 release_current_wave(data_context, event_ms(event))
             event = keys.events.get()
+        # A TOP or MIDDLE release with no second press in time steps on.
+        pending = data_context.pending_step
+        if pending is not None and BUTTON_GAP_SECONDS * 1000 < ms_between(pending[1], now_ms()) < TICKS_MASK // 2:
+            finish_pending_step(data_context)
 
         # TOP + MIDDLE held together for SHUTDOWN_HOLD_SECONDS powers off.
         if data_context.top_held and data_context.middle_held:

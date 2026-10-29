@@ -185,12 +185,12 @@ the numbers to suit their own mic or hands.
   Check it powers off on batteries (try `"auto_off_minutes": 1`), that a press or squeeze in the
   blink keeps it on, and that it never fires plugged into a computer (`supervisor.runtime.usb_connected`).
   On a charger the mic stays powered, so the next use takes POWER_HOLD high again.
-- **Double tap back on TOP / MIDDLE** (1.2.0): a second press within `DOUBLE_TAP_SECONDS` (0.3)
-  of the first goes back one preset, sample or page. The first press still steps on at once, so on a
-  heavy preset (the vocoder) a double tap builds the next preset, then the previous one: the LEDs
-  show the next spot for a moment and the back step lands once the first build is done. The
-  console prints `TOP double tap: back one` / `MIDDLE double tap: back a page` /
-  `white LED N (double tap: back one)`. Check relaxed double taps register, and that two quick
-  deliberate forward presses don't come out as a back step; move the number to suit.
+- **Double tap back on TOP / MIDDLE** (1.2.0): both step when let go. The LEDs change at once,
+  and the step waits `BUTTON_GAP_SECONDS` (0.2) after the release; a press in that time goes back
+  one preset, sample or page instead, at once, with nothing loaded on the way. A single step lands
+  the hold time plus 0.2 s after the press. The console prints `TOP double tap: back one` /
+  `MIDDLE double tap: back a page` / `white LED N (double tap: back one)`. Check relaxed double taps
+  register, that two deliberate forward presses don't come out as a back step, and that the delay
+  doesn't feel laggy; try 0.15 to 0.25. TOP + MIDDLE to power off now steps neither.
 - **LFO-driven speed/humanize:** only plain numbers and `"$handle"` are verified. A synthio LFO
   only updates while a native effect ticks it.

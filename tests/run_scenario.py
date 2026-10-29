@@ -84,8 +84,9 @@ SCENARIOS = {
         paddle=[],
         end=5.8,
     ),
-    # effects_only double taps: TOP -> page 1 preset 1, TOP -> 2, TOP twice
-    # quickly -> back to preset 1; MIDDLE -> page 2 preset 1, MIDDLE twice
+    # effects_only double taps (TOP and MIDDLE step on letting go, and a
+    # press within 200 ms of that is a double tap): TOP -> page 1 preset 1,
+    # TOP -> 2, TOP twice quickly -> back to preset 1; MIDDLE -> page 2 preset 1, MIDDLE twice
     # quickly -> back to page 1 preset 1; MIDDLE twice quickly from page 1
     # -> page 2 (round the back); TOP then MIDDLE quickly is no double tap.
     "pages_back": dict(

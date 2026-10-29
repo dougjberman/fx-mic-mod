@@ -22,10 +22,10 @@ parameter names and types) and the demo `config.json`.
 
 - Up to 4 presets (TOP button, red LEDs; position 0 in the cycle is "clean").
 - Up to 4 samples (MIDDLE selects, white LEDs; BOTTOM plays).
-- A double tap on TOP or MIDDLE (a second press within 300 ms of the first, `DOUBLE_TAP_SECONDS`)
-  goes back one preset or sample instead of on. The first press still steps on straight away, so a
-  single press never waits; the second undoes it and goes back one from where it started. A second
-  press that comes in while the first one's preset is still loading counts too.
+- TOP and MIDDLE step when let go, not when pressed, so holding TOP + MIDDLE to power off steps
+  neither. The LEDs show the next spot as soon as the button comes up, and the step itself waits
+  200 ms (`BUTTON_GAP_SECONDS`): a press in that time is a double tap, and goes back one preset,
+  sample or page at once instead, without loading the next one first.
 - `effects_only` **(new, optional)**: `true` trades the samples and record mode for
   more presets, up to 16 in pages of four. Page 1 is presets 1 to 4, page 2 is 5 to 8, and so on;
   the number of pages is however many the presets fill. TOP steps through the current page's

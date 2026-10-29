@@ -917,21 +917,18 @@ class DeviceScenarioTests(unittest.TestCase):
         self.assertEqual(spots, [
             "preset 0 of 2",                         # boot: clean
             "preset 1 of 2: T-Pain",
-            "preset 2 of 2: Echo",                   # a double tap's first press steps on
-            "preset 0 of 2",                         # and its second goes back one from preset 1
-            "preset 1 of 2: T-Pain",
+            "preset 0 of 2",                         # double tap: back one, nothing loaded on the way
             "record mode",                           # back one from clean: round the cycle
-            "preset 0 of 2",
             "preset 2 of 2: Echo",                   # back one from record mode
             "record mode",
         ])
         lines = [l for l in out.splitlines() if l.startswith("white LED")]
         self.assertEqual(lines, [
             "white LED 2",
-            "white LED 3", "white LED 1 (double tap: back one)",
-            "white LED 2", "white LED 4 (double tap: back one)",
-            "white LED 1", "white LED 3 (double tap: back one)",
-            "white LED 4", "white LED 2 (double tap: back one)",
+            "white LED 1 (double tap: back one)",
+            "white LED 4 (double tap: back one)",
+            "white LED 3 (double tap: back one)",
+            "white LED 2 (double tap: back one)",
             "white LED 3",                                    # a third quick press steps on
         ])
 
@@ -1205,12 +1202,9 @@ class DeviceScenarioTests(unittest.TestCase):
             "page 1 of 2, preset 0 of 4",
             "page 1 of 2, preset 1 of 4: P1",
             "page 1 of 2, preset 2 of 4: P2",
-            "page 1 of 2, preset 3 of 4: P3",  # the double tap's first press steps on
-            "page 1 of 2, preset 1 of 4: P1",  # and its second goes back one from P2
+            "page 1 of 2, preset 1 of 4: P1",  # TOP double tap: back one, nothing loaded on the way
             "page 2 of 2, preset 1 of 2: P5",
-            "page 1 of 2, preset 1 of 4: P1",
             "page 1 of 2, preset 1 of 4: P1",  # MIDDLE double tap: back a page from page 2
-            "page 2 of 2, preset 1 of 2: P5",
             "page 2 of 2, preset 1 of 2: P5",  # back a page from page 1: round to page 2
             "page 2 of 2, preset 2 of 2: P6",
             "page 1 of 2, preset 1 of 4: P1",  # TOP then MIDDLE: no double tap
@@ -1282,6 +1276,9 @@ class DeviceScenarioTests(unittest.TestCase):
         root, out, s = run("shutdown_on_usb")
         self.assertEqual(out.count("shutting down"), 1)
         self.assertIn("Unplug USB and it turns off", out)
+        # TOP and MIDDLE step on letting go, so the combo steps neither
+        self.assertNotIn("white LED", out)
+        self.assertEqual(len([l for l in out.splitlines() if l.startswith("preset ")]), 1)
 
     def test_auto_off_after_unused(self):
         config = dict(TEST_CONFIG, auto_off_minutes=0.5)
@@ -1298,7 +1295,8 @@ class DeviceScenarioTests(unittest.TestCase):
         warning = [lit for t, lit in s["lit_log"] if 25.0 <= t < 35.0]
         self.assertIn(8, [len(lit) for lit in warning])
         self.assertIn(0, [len(lit) for lit in warning])
-        self.assertFalse([t for t, lit in s["lit_log"] if 5.2 < t < 25.0])
+        # (MIDDLE steps on letting go, BUTTON_GAP_SECONDS later)
+        self.assertFalse([t for t, lit in s["lit_log"] if 5.4 < t < 25.0])
         # then the LEDs show where the mic was: clean, sample 2 (before the
         # scenario's end turns them all off)
         self.assertEqual([lit for t, lit in s["lit_log"] if t < 39.9][-1], ["LED_WHITE1", "LED_WHITE2"])

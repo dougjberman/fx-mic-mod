@@ -80,6 +80,8 @@
 
 
 
+
+
 import gc
 import json
 import os
@@ -272,6 +274,8 @@ DOUBLE_TAP_SECONDS = 0.3
 
 
 
+BUTTON_GAP_SECONDS = 0.2
+
 
 
 
@@ -380,12 +384,11 @@ class DataContext:
 
 
 
+        self.pending_step = None
 
 
-        self.top_tap_at = None
-        self.top_from = (0, 0)
-        self.middle_tap_at = None
-        self.middle_from = 1
+
+        self.skip_release = set()
 
 
         self.top_held = False
@@ -1238,82 +1241,115 @@ def pressed_while_loading(ctx, at):
     return 0 < ms_between(at, ctx.loaded_at) < TICKS_MASK // 2
 
 
-def double_tap(tap_at, at):
-    0
-
-    return tap_at is not None and ms_between(tap_at, at) <= DOUBLE_TAP_SECONDS * 1000
-
-
-def press_top(ctx, at):
+def step_target(ctx, key, back=False):
     0
 
 
+    page = ctx.page
+    if key == MIDDLE and not EFFECTS_ONLY:
+        slots = len(white_leds)
+        return (ctx.white_active - 2) % slots + 1 if back else ctx.white_active % slots + 1
+    if key == TOP:
+        spot = prev_spot(ctx, ctx.active) if back else next_spot(ctx)
+        target = (ctx.page, spot)
+    elif not ctx.active:
 
-
-
-    if double_tap(ctx.top_tap_at, at):
-        ctx.top_tap_at = None
-        spot, ctx.page = ctx.top_from
-        print("TOP double tap: back one")
-        select_preset(ctx, prev_spot(ctx, spot))
-    elif pressed_while_loading(ctx, at):
-        print("TOP pressed while a preset loaded: ignored")
+        target = (PAGES - 1 if back else 0, 1)
     else:
-        ctx.top_tap_at = at
-        ctx.top_from = (ctx.active, ctx.page)
-        select_preset(ctx, next_spot(ctx))
+        target = ((ctx.page + (-1 if back else 1)) % PAGES, 1)
+    ctx.page = page
+    return target
 
 
-def press_middle(ctx, at):
+def show_step(ctx, key, target):
     0
-
-
-
-
-
-
-    slots = len(white_leds)
-    if double_tap(ctx.middle_tap_at, at):
-        ctx.middle_tap_at = None
-        ctx.white_active = (ctx.middle_from - 2) % slots + 1
+    if key == MIDDLE and not EFFECTS_ONLY:
+        lit = target
     else:
-        ctx.middle_tap_at = at
-        ctx.middle_from = ctx.white_active
-        ctx.white_active = ctx.white_active % slots + 1
-    update_white_leds(ctx)
-    load_selected_wave_sample(ctx)
-    print("white LED {}{}".format(ctx.white_active, "" if ctx.middle_tap_at is not None
-                                  else " (double tap: back one)"))
-
-
-def turn_page(ctx, at):
-    0
-
-
-
-
-
-
-
-    if double_tap(ctx.middle_tap_at, at):
-        ctx.middle_tap_at = None
-        spot, page = ctx.middle_from
-        if PAGES == 1:
+        page, spot = target
+        if spot != RECORD_SPOT:
+            for index, _led in enumerate(red_leds):
+                _led.value = index < spot
+        if not EFFECTS_ONLY:
             return
-        ctx.page = (page - 1) % PAGES if spot else PAGES - 1
-        print("MIDDLE double tap: back a page")
-        select_preset(ctx, 1)
+        lit = page + 1 if spot else 0
+    for index, _led in enumerate(white_leds):
+        _led.value = index < lit
+
+
+def take_step(ctx, key, target, back=False):
+    0
+    if key == MIDDLE and not EFFECTS_ONLY:
+        ctx.white_active = target
+        update_white_leds(ctx)
+        load_selected_wave_sample(ctx)
+        print("white LED {}{}".format(target, " (double tap: back one)" if back else ""))
         return
-    ctx.middle_tap_at = at
-    ctx.middle_from = (ctx.active, ctx.page)
-    if not ctx.active:
-        select_preset(ctx, next_spot(ctx))
-        return
-    if PAGES == 1:
+    page, spot = target
+    if key == MIDDLE and ctx.active and PAGES == 1:
         print("one page of presets: add a fifth to get a second page")
+        update_red_leds(ctx)
+        update_white_leds(ctx)
         return
-    ctx.page = (ctx.page + 1) % PAGES
-    select_preset(ctx, 1)
+    if back:
+        print("{} double tap: back {}".format("TOP" if key == TOP else "MIDDLE",
+                                              "one" if key == TOP else "a page"))
+    ctx.page = page
+    select_preset(ctx, spot)
+
+
+def finish_pending_step(ctx):
+    0
+    if ctx.pending_step is not None:
+        key, _, target = ctx.pending_step
+        ctx.pending_step = None
+        take_step(ctx, key, target)
+
+
+def press_step_button(ctx, key, at):
+    0
+
+
+
+
+
+
+    if ctx.top_held and ctx.middle_held:
+
+        ctx.skip_release.update((TOP, MIDDLE))
+        ctx.pending_step = None
+        return
+    pending = ctx.pending_step
+    if pending is not None and pending[0] == key and ms_between(pending[1], at) <= BUTTON_GAP_SECONDS * 1000:
+        ctx.pending_step = None
+        ctx.skip_release.add(key)
+        target = step_target(ctx, key, back=True)
+        show_step(ctx, key, target)
+        take_step(ctx, key, target, back=True)
+        return
+    finish_pending_step(ctx)
+    if pressed_while_loading(ctx, at):
+        print("{} pressed while a preset loaded: ignored".format("TOP" if key == TOP else "MIDDLE"))
+        ctx.skip_release.add(key)
+    else:
+        ctx.skip_release.discard(key)
+
+
+def release_step_button(ctx, key, at):
+    0
+
+
+
+
+
+
+
+    if key in ctx.skip_release:
+        ctx.skip_release.discard(key)
+        return
+    target = step_target(ctx, key)
+    show_step(ctx, key, target)
+    ctx.pending_step = [key, at, target]
 
 
 def play_current_wave_sample(ctx, at=0):
@@ -1575,7 +1611,8 @@ print(
 print('handle travel = "$handle" block, 0.0 (out) to 1.0 (in)')
 print("auto-off: after {} min unused on batteries".format(AUTO_OFF_MINUTES)
       if AUTO_OFF_SECONDS else "auto-off: never")
-print("TOP / MIDDLE: two presses within {:.0f} ms = back one".format(DOUBLE_TAP_SECONDS * 1000))
+print("TOP / MIDDLE: step on letting go; pressed again within {:.0f} ms = back one".format(
+    BUTTON_GAP_SECONDS * 1000))
 if not EFFECTS_ONLY:
     print("BOTTOM: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
         TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
@@ -1602,20 +1639,14 @@ try:
                 data_context.top_held = event.pressed
             if event.key_number == MIDDLE:
                 data_context.middle_held = event.pressed
+            if event.key_number in (TOP, MIDDLE):
+                if event.pressed:
+                    press_step_button(data_context, event.key_number, event_ms(event))
+                else:
+                    release_step_button(data_context, event.key_number, event_ms(event))
+            elif event.pressed:
 
-            if event.pressed and event.key_number != TOP:
-                data_context.top_tap_at = None
-            if event.pressed and event.key_number != MIDDLE:
-                data_context.middle_tap_at = None
-            if event.pressed and event.key_number == TOP:
-
-
-
-                press_top(data_context, event_ms(event))
-            if event.pressed and event.key_number == MIDDLE and EFFECTS_ONLY:
-                turn_page(data_context, event_ms(event))
-            elif event.pressed and event.key_number == MIDDLE:
-                press_middle(data_context, event_ms(event))
+                finish_pending_step(data_context)
             if event.pressed and event.key_number == BOTTOM and EFFECTS_ONLY:
 
                 if data_context.active:
@@ -1625,6 +1656,10 @@ try:
             if event.released and event.key_number == BOTTOM and not EFFECTS_ONLY:
                 release_current_wave(data_context, event_ms(event))
             event = keys.events.get()
+
+        pending = data_context.pending_step
+        if pending is not None and BUTTON_GAP_SECONDS * 1000 < ms_between(pending[1], now_ms()) < TICKS_MASK // 2:
+            finish_pending_step(data_context)
 
 
         if data_context.top_held and data_context.middle_held:
