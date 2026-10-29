@@ -44,6 +44,9 @@ Controls:
                         backwards.
 * TOP + MIDDLE, held together for 800ms -- shuts the unit down by driving
                         POWER_HOLD low.
+* Left alone on batteries for ``"auto_off_minutes"`` (10 by default), the mic
+  turns itself off the same way. Every LED blinks for the last 10 seconds;
+  anything done then keeps it on.
 
 Record mode (TOP past the last preset):
 
@@ -119,7 +122,7 @@ import shake
 # release that adds a config setting, add that setting to the editor's
 # FIRMWARE_NEEDS table with the new number, and add a row for the release to
 # the "What's new" table on the install page, which its update check lists.
-FIRMWARE_VERSION = "1.0.0"
+FIRMWARE_VERSION = "1.1.0"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 # Where to look for the preset config
@@ -186,6 +189,18 @@ if not isinstance(EFFECTS_ONLY, bool):
 
 # How long TOP + MIDDLE must be held together, in seconds, to shut down.
 SHUTDOWN_HOLD_SECONDS = 0.8
+
+# --- Auto-off ---
+
+# Minutes the mic may sit unused before it turns itself off, to save the
+# batteries; config.json's "auto_off_minutes" sets it, 0 for never. Unused
+# means no button press, no squeeze (singing needs one), no knob turn, no
+# sample playing and no take recording. Over USB to a computer it stays on.
+AUTO_OFF_MINUTES = 10
+# For the last AUTO_OFF_WARN_SECONDS every LED blinks, toggling every
+# AUTO_OFF_BLINK_SECONDS; anything done then keeps the mic on.
+AUTO_OFF_WARN_SECONDS = 10
+AUTO_OFF_BLINK_SECONDS = 0.25
 
 # --- Hardware effects config ---
 
@@ -361,8 +376,14 @@ class DataContext:
         self.loaded_at = 0
         # the `time.monotonic()` the combo started, or None while it is not both-down.
         self.combo_since = None
-        # board.POWER_HOLD, claimed the first time the combo fires
+        # board.POWER_HOLD, claimed the first time the mic powers off
         self.power_hold = None
+        # Auto-off: the `time.monotonic()` the mic was last in use, whether
+        # the LEDs are blinking the warning, and whether it has powered off
+        # (and is still running, so something else powers it).
+        self.used_at = 0.0
+        self.auto_off_warning = False
+        self.auto_off_done = False
 
         # Wiper position, in ADC counts, that `volume` was last computed from.
         # Starts far enough outside the 16-bit range that the first poll always
@@ -464,6 +485,14 @@ if isinstance(_sample_level, (int, float)) and not isinstance(_sample_level, boo
     SAMPLE_LEVEL = _sample_level
 else:
     print("sample_level must be a number from 0 to 1; using {}".format(SAMPLE_LEVEL))
+
+_auto_off = CONFIG.get("auto_off_minutes", AUTO_OFF_MINUTES)
+if isinstance(_auto_off, (int, float)) and not isinstance(_auto_off, bool) and 0 <= _auto_off <= 240:
+    AUTO_OFF_MINUTES = _auto_off
+else:
+    print("auto_off_minutes must be a number from 0 to 240; using {}".format(AUTO_OFF_MINUTES))
+# None: never.
+AUTO_OFF_SECONDS = AUTO_OFF_MINUTES * 60 if AUTO_OFF_MINUTES else None
 
 # "shake": what shaking the mic does to a sample as it plays (see shake.py).
 # None for off; effects-only mode has no samples to shake.
@@ -1259,6 +1288,7 @@ def apply_volume(ctx, force=False):
     if not force and abs(raw - ctx.knob_applied) < VOLUME_DEADBAND:
         return
     ctx.knob_applied = raw
+    ctx.used_at = time.monotonic()
 
     fraction = raw / 65535
     if fraction <= VOLUME_OFF_FRACTION:
@@ -1275,6 +1305,77 @@ def apply_volume(ctx, force=False):
     ctx.volume = VOLUME_MIN_DB + fraction * (VOLUME_MAX_DB - VOLUME_MIN_DB)
     codec.dac_volume = ctx.volume
     print("volume {:+.1f} dB".format(codec.dac_volume))
+
+
+def power_off(ctx):
+    """Drive POWER_HOLD low. On batteries the mic is off before this returns.
+
+    Over USB it stays powered and code.py carries on, so the pin is claimed
+    only once (claiming it again raised "in use" and stopped code.py).
+    """
+    if ctx.power_hold is None:
+        ctx.power_hold = digitalio.DigitalInOut(board.POWER_HOLD)
+        ctx.power_hold.direction = digitalio.Direction.OUTPUT
+    ctx.power_hold.value = False
+    print("still on: USB is powering the mic. Unplug USB and it turns off.")
+
+
+def in_use(ctx, held):
+    """Whether the mic is in use this pass, for the auto-off: squeezed, a
+    take recording, or a sample playing. (Presses and the knob count where
+    they are read.)"""
+    if held or (ctx.recorder is not None and ctx.recorder.recording):
+        return True
+    if ctx.tune is not None and ctx.tune.sample is not None:
+        return True
+    stream = ctx.backwards_stream
+    if stream is not None and stream.playing:
+        return True
+    return bool(sample_voice(ctx).playing)
+
+
+def check_auto_off(ctx, now, using):
+    """Power off once the mic has gone AUTO_OFF_SECONDS unused, blinking
+    every LED for the last AUTO_OFF_WARN_SECONDS.
+
+    Plugged into a computer it never does, and the wait starts over once it
+    is unplugged. If it is still running after powering off (a USB charger
+    keeps it on), the next use takes POWER_HOLD high again, as CircuitPython
+    set it at boot.
+    """
+    if AUTO_OFF_SECONDS is None:
+        return
+    if using or (supervisor is not None and supervisor.runtime.usb_connected):
+        ctx.used_at = now
+    idle = now - ctx.used_at
+    if idle < AUTO_OFF_SECONDS - AUTO_OFF_WARN_SECONDS:
+        if ctx.auto_off_warning:
+            ctx.auto_off_warning = False
+            update_red_leds(ctx)
+            update_white_leds(ctx)
+            print("auto-off: still in use, staying on")
+        if ctx.auto_off_done:
+            ctx.auto_off_done = False
+            ctx.power_hold.value = True
+        return
+    if ctx.auto_off_done:
+        return
+    if idle >= AUTO_OFF_SECONDS:
+        print("auto-off: unused for {} min, shutting down".format(AUTO_OFF_MINUTES))
+        ctx.auto_off_done = True
+        ctx.auto_off_warning = False
+        update_red_leds(ctx)
+        update_white_leds(ctx)
+        power_off(ctx)
+        return
+    if not ctx.auto_off_warning:
+        ctx.auto_off_warning = True
+        print("auto-off in {:.0f} s: press a button or squeeze to stay on".format(
+            AUTO_OFF_SECONDS - idle))
+    # Written every pass: record mode sets the red LEDs every pass too.
+    lit = int(idle / AUTO_OFF_BLINK_SECONDS) % 2 == 0
+    for led in red_leds + white_leds:
+        led.value = lit
 
 
 # Raw handle travel, 0.0 out to 1.0 in, and the travel at which the paddle
@@ -1377,6 +1478,8 @@ print(
     )
 )
 print('handle travel = "$handle" block, 0.0 (out) to 1.0 (in)')
+print("auto-off: after {} min unused on batteries".format(AUTO_OFF_MINUTES)
+      if AUTO_OFF_SECONDS else "auto-off: never")
 if not EFFECTS_ONLY:
     print("BOTTOM: held {:.0f} ms+ = hold, two presses within {:.0f} ms = backwards".format(
         TAP_HOLD_SECONDS * 1000, DOUBLE_TAP_SECONDS * 1000))
@@ -1398,6 +1501,7 @@ try:
         # Drain every button event that arrived since the last pass.
         event = keys.events.get()
         while event is not None:
+            data_context.used_at = time.monotonic()
             if event.key_number == TOP:
                 data_context.top_held = event.pressed
             if event.key_number == MIDDLE:
@@ -1439,15 +1543,8 @@ try:
                 print(
                     "TOP+MIDDLE held {}s: shutting down".format(SHUTDOWN_HOLD_SECONDS)
                 )
-                # On batteries the mic is off before the next line. Over USB
-                # it stays powered and this loop carries on, so the pin is
-                # claimed only once (claiming it again raised "in use" and
-                # stopped code.py), and the combo waits to be let go.
-                if data_context.power_hold is None:
-                    data_context.power_hold = digitalio.DigitalInOut(board.POWER_HOLD)
-                    data_context.power_hold.direction = digitalio.Direction.OUTPUT
-                data_context.power_hold.value = False
-                print("still on: USB is powering the mic. Unplug USB and it turns off.")
+                # Over USB the mic stays on, and the combo waits to be let go.
+                power_off(data_context)
                 data_context.combo_since = float("inf")
         else:
             data_context.combo_since = None
@@ -1532,6 +1629,8 @@ try:
             stop_current_wave(data_context)
             print("{} backwards: longest refill {:.1f} ms".format(
                 data_context.current_path, stream.worst_ms))
+
+        check_auto_off(data_context, now, in_use(data_context, held))
 
         # Shaking the mic while a sample plays. The accelerometer is awake
         # and read only then, and goes back to sleep after. Through autotune

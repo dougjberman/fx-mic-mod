@@ -1285,6 +1285,15 @@ function renderMoreFx(){
     h("p",{class:"small muted"}, ...(on
       ? ["Your mic has no samples and no Record mode now. Instead it holds up to 16 effect presets, four pages of four, up in ", h("a",{href:"#effects"},"Effects presets"), ". The ", dw("mid"), " button turns the page, the white lights show which page you're on, and the ", dw("bot"), " button takes you to Clean. Your WAV files stay on the mic, and turning this off brings the samples back."]
       : ["Swap the samples and Record mode for more effects: four pages of four presets, sixteen in all. The ", dw("mid"), " button turns the page instead of picking a sample, and the white lights show the page."])));
+  // "auto_off_minutes": how long the mic sits unused on batteries before turning off, 0 never (firmware AUTO_OFF_MINUTES, 10)
+  const off = typeof config.auto_off_minutes==="number" ? config.auto_off_minutes : 10;
+  $("#more-fx").append(
+    h("div",{class:"opt"}, h("div",{class:"field"}, h("label",{}, "Turn off when unused"),
+      h("div",{class:"seg", role:"group", "aria-label":"Turn off when unused"},
+        [[5,"5 min"],[10,"10 min"],[30,"30 min"],[0,"Never"]].map(([v,l])=>h("button",{"aria-pressed":String(off===v), onclick:()=>{ if (v===10) delete config.auto_off_minutes; else config.auto_off_minutes=v; changed(); }}, l)))),
+    h("p",{class:"small muted"}, off
+      ? "Left alone on batteries for "+off+" minutes (no button, no squeeze, no knob, no sample playing), the mic turns itself off to save the batteries. Every light blinks for the last 10 seconds: press a button or squeeze the handle to keep it on. It stays on while plugged into a computer."
+      : "The mic stays on until you turn it off (hold the orange and white buttons together), even if the batteries run flat.")));
   $("#samples-panel").style.display = on ? "none" : "grid";  // hidden loses to the inline display
 }
 function setEffectsOnly(on){
@@ -1503,6 +1512,7 @@ const FIRMWARE_NEEDS = [
   {version:"1.0.0", what:"tap, hold and double-tap sample playback",
    uses: c => (c.samples||[]).some(s => s && String(s.playmode||"").toLowerCase()==="auto")},
   {version:"1.0.0", what:"more effects instead of samples (pages of presets)", uses: c => c.effects_only === true},
+  {version:"1.1.0", what:"a different auto-off time", uses: c => "auto_off_minutes" in c},
 ];
 // Pre-launch builds 1.0 to 1.7.1 count as older than the launch release 1.0.0.
 const PRELAUNCH = new Set(["1.0","1.1","1.2","1.3","1.4","1.5","1.6","1.7","1.7.1"]);

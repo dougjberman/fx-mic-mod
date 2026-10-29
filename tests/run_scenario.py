@@ -113,6 +113,27 @@ SCENARIOS = {
         paddle=[],
         end=1.5,
     ),
+    # Auto-off (auto_off_minutes 0.5 in the tests): MIDDLE at 5 s, then
+    # nothing, so the LEDs blink from 25 s and the mic powers off at 35 s.
+    "auto_off": dict(
+        presses=tap(5.0, MIDDLE),
+        paddle=[],
+        end=40.0,
+    ),
+    # The same, but a squeeze during the warning keeps it on, and so does
+    # a long squeeze after it.
+    "auto_off_saved": dict(
+        presses=tap(5.0, MIDDLE),
+        paddle=[(30.0, 30.3), (40.0, 75.0)],
+        end=93.0,
+    ),
+    # Powered off at 35 s, but still running (a USB charger powers it):
+    # the squeeze at 38 s holds the power on again.
+    "auto_off_charger": dict(
+        presses=tap(5.0, MIDDLE),
+        paddle=[(38.0, 38.5)],
+        end=40.0,
+    ),
     "through": dict(
         presses=tap(0.5, TOP) + tap(1.0, BOTTOM) + tap(3.0, TOP) + tap(3.5, BOTTOM),
         paddle=[],
@@ -221,6 +242,7 @@ def main():
             if type(e.kwargs.get("delay_ms")).__name__ == "LFO"), None),
         "rolls": rolls,
         "accel_power": script.accel_power,
+        "power_log": script.power_log,
         # the vocoder's mixer: the voice on voice 0, the synth on voice 1
         "vocoder_mixer": next((
             {"playing": [type(v.playing).__name__ for v in m.voice],
