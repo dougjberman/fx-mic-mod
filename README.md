@@ -10,8 +10,9 @@ by Tim Cocks (MIT), from the guide
 [Hacking the Teenage Engineering EP-2350 Ting](https://learn.adafruit.com/hacking-the-teenage-engineering-ep-2350-ting).
 Presets use Adafruit's `config.json` format, plus `autotune`, `harmonizer` and `vocoder` effects, so Adafruit's packs load unchanged.
 
-> **Status:** tested on desktop Python with stand-in hardware modules only. Not yet run on a real ting.
-> See [firmware/NOTES.md](firmware/NOTES.md) for what still needs checking on the device.
+> **Status:** firmware 1.0.0, running day to day on a real Ting. The desktop tests use stand-in
+> hardware modules, and [`tools/ting_test.py`](#testing-on-a-real-mic) checks a real mic over USB.
+> See [firmware/NOTES.md](firmware/NOTES.md) for what has been checked on the device, with tuning notes.
 
 ## Controls
 
