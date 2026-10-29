@@ -119,7 +119,7 @@ import shake
 
 
 
-FIRMWARE_VERSION = "1.7.1"
+FIRMWARE_VERSION = "1.0.0"
 print("fx-mic-mod firmware", FIRMWARE_VERSION)
 
 

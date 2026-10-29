@@ -45,7 +45,7 @@ A recording immediately replaces the slot's WAV. BOTTOM plays it back to decide 
 ## Effects-only mode: 16 presets
 
 Can't pick just four? Turn on **Give me more effects instead of samples** in the editor's Samples
-section (`"effects_only": true` in `config.json`, firmware 1.4 or newer). The mic drops the samples
+section (`"effects_only": true` in `config.json`). The mic drops the samples
 and record mode and holds up to **16 effect presets, in four pages of four**. The editor shows them
 as four rows, one per page, and every preset has a copy button so you can paste it into another
 slot and make a variation.

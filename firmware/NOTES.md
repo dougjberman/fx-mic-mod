@@ -1,5 +1,8 @@
 # Firmware notes
 
+Version numbers in these notes (1.1 to 1.7.1) are pre-launch builds. All of it shipped as the
+launch release, 1.0.0.
+
 ## Files
 - `code.py`: Adafruit's demo main loop, extended with autotune presets and record mode.
 - `config_loader.py`: Adafruit's JSON loader plus `create_preset()` / `is_autotune()`.

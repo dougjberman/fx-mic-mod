@@ -22,7 +22,7 @@ parameter names and types) and the demo `config.json`.
 
 - Up to 4 presets (TOP button, red LEDs; position 0 in the cycle is "clean").
 - Up to 4 samples (MIDDLE selects, white LEDs; BOTTOM plays).
-- `effects_only` **(new, optional, firmware 1.4)**: `true` trades the samples and record mode for
+- `effects_only` **(new, optional)**: `true` trades the samples and record mode for
   more presets, up to 16 in pages of four. Page 1 is presets 1 to 4, page 2 is 5 to 8, and so on;
   the number of pages is however many the presets fill. TOP steps through the current page's
   presets (red LEDs), from the last back to the first, with no Clean stop. MIDDLE steps to the
@@ -31,9 +31,7 @@ parameter names and types) and the demo `config.json`.
   BOTTOM goes to Clean, every LED dark, and is the only way there; from Clean, TOP or MIDDLE goes
   to page 1, preset 1. The mic starts on Clean. `samples` and the sample settings are ignored but kept, so turning this off brings them
   back. Only the selected preset's effects are built, so 16 presets cost the mic only their JSON.
-  Firmware before 1.4 reads the first four presets and keeps its samples, so Save to mic won't
-  write `effects_only` to it.
-- `shake` **(new, optional, firmware 1.7)**: what shaking the mic does to a sample while it plays.
+- `shake` **(new, optional)**: what shaking the mic does to a sample while it plays.
   `"zip"` (the default when the key is missing) speeds the echoes up so the sound zips,
   `"warble"` wobbles its pitch like worn tape, `"glitch"` stutters it shorter and shorter, and
   `"off"` (or `false`) does nothing. An object tunes a style:
@@ -41,7 +39,7 @@ parameter names and types) and the demo `config.json`.
   (zip's own numbers)
   (sweeps a second, echo feedback 0 to 0.95, echo mix at a full shake 0 to 1, and the delay's range).
   Played through an autotune preset (`"sample_fx": "preset"`), any style is a stutter roll over the
-  same range. Firmware before 1.7 ignores it.
+  same range.
 - `sample_fx` **(new, optional)**: where samples get their effects.
   - `"own"` (default, Adafruit's behaviour): each sample runs through its own `effects`.
   - `"preset"`: samples play dry into the effect preset currently selected on the mic (TOP button), mixed with the mic ahead of the
@@ -77,15 +75,14 @@ mixer voice can't go above 1.0. The defaults were set from recordings of a Ting 
 {"file": "1.wav", "playmode": "auto", "blocks": {...}, "effects": [EFFECT, ...]}
 ```
 
-The BOTTOM button plays every sample the same way (firmware 1.3; 1.2 did it for `"auto"` only):
+The BOTTOM button plays every sample the same way:
 every press starts the sample at once, so a tap never waits.
 - **Tap** (let go within 250 ms, `TAP_HOLD_SECONDS`): it plays through once.
 - **Hold** (250 ms or longer): letting go stops it. It plays once, it doesn't loop.
 - **Double tap** (a second press within 300 ms of a tap's press, `DOUBLE_TAP_SECONDS`): it cuts the
   first tap off and plays the sample backwards from the end; held, letting go stops it.
 
-`playmode` is what chose this before. The editor writes `"auto"`, so Save to mic stops before writing
-to firmware older than 1.2, which doesn't know it and stops. Firmware 1.3 still reads `"oneshot"`,
+`playmode` is what chose this before. The editor writes `"auto"`. The firmware still reads `"oneshot"`,
 `"hold"` and `"startstop"` (Adafruit's packs use them) but plays those slots the same way.
 Backwards through autotune (`"sample_fx": "preset"` on an autotune preset) streams from flash;
 everywhere else it streams backwards from the drive too, a piece at a time, in 16 KB of RAM whatever
@@ -200,8 +197,6 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
   Source of truth: `firmware/autotune.py` (`CHORDS`, `voicing`, `Autotune`).
 
 ### vocoder rules
-- Needs firmware 1.1. Older firmware doesn't know the effect and plays that preset clean, so the
-  editor's Save to mic won't write a config with a vocoder to a mic on 1.0 or earlier.
 - A channel vocoder whose carrier is a synth playing the note you sing (pitch tracking), so the mic
   needs no second input: your words, played by the synth. With an `autotune` in the preset the
   carrier plays the corrected note (it follows `key`, `scale` and `speed`); without one it follows
@@ -250,14 +245,17 @@ Exact enum values for `distortion.mode` and `filter.mode` come from `config_load
 - Omitted effect params use the CircuitPython constructor defaults.
 
 ## Firmware versions
-The firmware's release number is `FIRMWARE_VERSION` in `code.py` (it prints at boot). Mics
-from before 1.0 have none. To keep configs and firmware working together after release:
+The firmware's release number is `FIRMWARE_VERSION` in `code.py` (it prints at boot). The launch
+release is **1.0.0**, and every release from it on has three parts. Builds numbered 1.0 to 1.7.1
+came before the launch: the install page and the editor count them as older than 1.0.0 (their
+`PRELAUNCH` list), so a mic on one gets offered the update. The earliest builds have no number.
+To keep configs and firmware working together after release:
 - New firmware always reads older configs. A setting the editor drops (like the harmonizer's
   `octave`) stays readable on the mic.
 - A config setting added after a release raises `FIRMWARE_VERSION` and gets a row in the
   editor's `FIRMWARE_NEEDS` table with that number. Save to mic reads the mic's `code.py`
   and refuses to write a config that uses a setting the mic's firmware is too old for.
-- Firmware from 1.0 on skips an effect parameter it doesn't know, with a console line
+- The firmware skips an effect parameter it doesn't know, with a console line
   (`... has no parameter x; ignoring it`), instead of failing the whole preset.
   Unknown top-level keys were always ignored.
 
