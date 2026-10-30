@@ -10,7 +10,9 @@ by Tim Cocks (MIT), from the guide
 [Hacking the Teenage Engineering EP-2350 Ting](https://learn.adafruit.com/hacking-the-teenage-engineering-ep-2350-ting).
 Presets use Adafruit's `config.json` format, plus `autotune`, `harmonizer` and `vocoder` effects, so Adafruit's packs load unchanged.
 
-> **Status:** firmware 1.0.0, running day to day on a real Ting. The desktop tests use stand-in
+> **Status:** firmware 1.2.0, running day to day on a real Ting. 1.1.0 added auto-off on batteries,
+> and 1.2.0 added double tap to go back on TOP and MIDDLE (the install page's "What's new" lists
+> every release). The desktop tests use stand-in
 > hardware modules, and [`tools/ting_test.py`](#testing-on-a-real-mic) checks a real mic over USB.
 > See [firmware/NOTES.md](firmware/NOTES.md) for what has been checked on the device, with tuning notes.
 
@@ -31,13 +33,13 @@ instructions to match your mic.
 
 | Control | Does |
 |---|---|
-| TOP | Next effects preset: clean → preset 1..4 → **record mode** → clean. The red LEDs count up as on the stock firmware: one lit for preset 1, two for preset 2, all four for preset 4, none on clean. In record mode all four flash. A quick double tap goes back one instead. |
-| MIDDLE | Next sample slot 1..4, counted on the white LEDs the same way (one lit for slot 1, all four for slot 4). A quick double tap goes back one slot. |
+| TOP | Next effects preset: clean → preset 1..4 → **record mode** → clean. The red LEDs count up as on the stock firmware: one lit for preset 1, two for preset 2, all four for preset 4, none on clean. In record mode all four flash. It steps when you let go, and a quick double tap goes back one instead. |
+| MIDDLE | Next sample slot 1..4, counted on the white LEDs the same way (one lit for slot 1, all four for slot 4). Like TOP, it steps when you let go, and a quick double tap goes back one slot. |
 | BOTTOM | Play the selected sample: a tap plays it through, a hold plays it until you let go, and a double tap plays it backwards. In config, you can decide if you want samples to play through the currently selected effect preset, (`"sample_fx": "preset"`) or hardcode the sample's own effects. |
 | Squeeze handle | Turns the mic on. Its travel is also `"$handle"` in presets (0 = just squeezed enough to open the mic, 1 = fully in). Effects parameters can be mapped to the squeeze, such as an autotune preset that switches key on a full squeeze (`squeeze_key` / `squeeze_scale`). |
 | Shake | While a sample plays, shaking the mic zips it up (the default), warbles it or glitches it: `"shake": "zip"`, `"warble"`, `"glitch"` or `"off"`. Played through an autotune preset, the sample stutters instead. |
 | Volume knob | Output level. |
-| TOP + MIDDLE 0.8 s | Power off. |
+| TOP + MIDDLE 0.8 s | Power off. Because TOP and MIDDLE step on release, this doesn't change the preset or sample. |
 | (nothing for 10 min) | On batteries the mic turns itself off, with every light blinking for the last 10 seconds (press anything or squeeze to keep it on). `"auto_off_minutes"` sets the time, 0 for never; it stays on over USB to a computer. |
 
 **Record mode:** all four red LEDs flash together and the white LEDs show the slot to record into. MIDDLE picks the slot,
@@ -54,11 +56,12 @@ slot and make a variation.
 
 | Control | Does |
 |---|---|
-| TOP | Next preset on the current page, 1..4 and round again. The red LEDs count the preset as usual. |
-| MIDDLE | Next page, 1..4 and back to 1, keeping the same preset number. The white LEDs count the page: two lit is page 2. |
+| TOP | Next preset on the current page, 1..4 and round again. The red LEDs count the preset as usual. A quick double tap goes back one. |
+| MIDDLE | Next page, 1..4 and back to 1, landing on the page's first preset. The white LEDs count the page: two lit is page 2. A quick double tap goes back a page. |
 | BOTTOM | Clean (no effects), with every LED off. It's the only way to clean; from there, TOP or MIDDLE goes to page 1, preset 1. |
 
-Pages fill in order, so page 2 starts at the fifth preset. Your WAV files stay on the mic and your
+Pages fill in order, so page 2 starts at the fifth preset. Presses made while a preset is still
+loading all count, and the mic loads only the preset they end up on. Your WAV files stay on the mic and your
 sample settings stay in `config.json`, so turning the mode off brings the samples back. Presets are
 small: the mic keeps all 16 as JSON and only builds the effects of the one playing.
 
@@ -85,6 +88,8 @@ skips it.
 One static site, deployed by Cloudflare from `docs/` (see `wrangler.jsonc`):
 
 - `index.html`: how it works, the button guide and record mode.
+- `site-stats.js`: cookie-free visit and button counts through GoatCounter. Nothing loads until its
+  `CODE` is set, and the part of a URL after `#` (shared presets) is never sent.
 - `site-device.js` / `site-device.css`: the FX Mic / Ting switch in the nav. It sets `<html data-device>`,
   swaps button color words (`<span data-dw="mid">`), the site palette and the mic drawings.
   `?device=ting` or `?device=fxmic` in a link picks one.
@@ -94,7 +99,8 @@ One static site, deployed by Cloudflare from `docs/` (see `wrangler.jsonc`):
   "What's new" table (one row per version; a test checks the current one is there) and copies only the
   firmware files, keeping `config.json`. Adapted from this project's Ting Flash Bench.
 - `editor.html`: the Effects & Samples Editor. Simple mode uses sliders and switches, Advanced mode shows every
-  raw parameter. **Try it on your computer** plays the selected preset live through your computer's
+  raw parameter. The Power section sets **Turn off when inactive** (`auto_off_minutes`).
+  **Try it on your computer** plays the selected preset live through your computer's
   mic (or a sample singer) using `ting-dsp.js`, a Web Audio approximation of the firmware. Saves
   `config.json` straight to CIRCUITPY in Chrome and Edge, or downloads it elsewhere.
 
@@ -113,8 +119,11 @@ presets and two from Adafruit's demo). `examples/adafruit-demo.json` is Adafruit
 python3 -m unittest discover tests
 ```
 
-Needs `numpy`. The tests run `firmware/code.py` against fake hardware (`tests/fakes.py`): an
-autotune preset, two recorded takes, the LED countdown and edit mode.
+Needs `numpy`. The tests load the presets, check the effects' maths, and run `firmware/code.py`
+against fake hardware (`tests/fakes.py`): autotune, the harmonizer and vocoder, recording takes,
+the LED countdown, edit mode, sample taps, holds and backwards double taps, TOP / MIDDLE double
+taps and presses made during a preset load. Others check that `docs/firmware/` matches
+`firmware/` and that the install page lists the current version.
 
 ## Testing on a real mic
 
